@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main, rebuild]
+
+jobs:
+  contracts:
+    name: Contracts & layout check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install optional deps
+        run: pip install jsonschema 2>/dev/null || true
+
+      - name: Check contracts (signals, schema, fixtures)
+        run: python3 contracts/check_contracts.py
+
+      - name: Check partition layout matches docs
+        run: python3 tools/gen_layout.py --check --no-idf
+
+  host-rules:
+    name: Host unit tests – rules engine
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install CMake + ninja (cJSON fetched by CMake when IDF absent)
+        run: sudo apt-get install -y cmake ninja-build git
+
+      - name: Configure
+        run: |
+          cmake -S test/host/rules -B build/host/rules \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build/host/rules
+
+      - name: Run
+        run: ctest --test-dir build/host/rules --output-on-failure
+
+  host-vehicle:
+    name: Host unit tests – vehicle core
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install CMake + ninja (cJSON fetched by CMake when IDF absent)
+        run: sudo apt-get install -y cmake ninja-build git
+
+      - name: Configure
+        run: |
+          cmake -S test/host/vehicle -B build/host/vehicle \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build/host/vehicle
+
+      - name: Run
+        run: ctest --test-dir build/host/vehicle --output-on-failure
