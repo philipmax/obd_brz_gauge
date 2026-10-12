@@ -7,11 +7,12 @@
 #include <string.h>
 #include "bsp_obd_dsp/nvs_storage.h"
 #include "bsp_obd_dsp/lcd_driver/ST77916.h"
-#include "app_obd_dsp/vehicle_profiles.h"
+#include "vehicle/vp_profile.h"
+#include "vehicle/vp_loader.h"
 #include "esp_system.h"
 
 // Page names for the boot-page roller. Order must match the default-page
-// switch in ui.c. (Brake temp moved into the CHART page.)
+// switch in ui.c.
 // 0=TEMP 1=INFO 2=CHART 3=NEEDLE 4=GEAR 5=RPM 6=SPEED
 static const char *page_names = "TEMP\nINFO\nCHART\nNEEDLE\nGEAR\nRPM\nSPEED";
 #define BOOT_PAGE_COUNT 7
@@ -61,12 +62,12 @@ static void on_rc_toggle(lv_event_t *e)
 static void on_vehicle_roller_change(lv_event_t *e)
 {
     uint8_t selected = (uint8_t)lv_roller_get_selected(s_roller_vehicle);
-    // vehicle_profile_set_active clamps out-of-range indices, no need here.
     nvs_user_cfg_t cfg = *nvs_cfg_get();
     cfg.vehicle_profile_idx = selected;
     nvs_cfg_set(&cfg);
-    // Apply immediately so gear detection etc. picks it up without reboot.
-    vehicle_profile_set_active(selected);
+    // TODO: Apply immediately - vehicle_profile_set_active() needs to be reimplemented
+    // For now, profile change takes effect after reboot
+    // vehicle_profile_set_active(selected);
 }
 
 // Theme change: persist the selection, then reboot so every screen rebuilds
@@ -136,20 +137,23 @@ void ui_ScreenPageSettings_screen_init(void)
     lv_obj_align(label_vehicle, LV_ALIGN_CENTER, 0, -57);
 
     // Build vehicle options dynamically from the profile table (newline separated).
-    uint8_t vehicle_count = 0;
-    const vehicle_profile_t *vehicle_list = vehicle_profile_get_all(&vehicle_count);
-    char vehicle_names[160] = {0};
-    for (uint8_t i = 0; i < vehicle_count; i++) {
-        if (i > 0) strlcat(vehicle_names, "\n", sizeof(vehicle_names));
-        strlcat(vehicle_names, vehicle_list[i].name, sizeof(vehicle_names));
-    }
+    // TODO: Reimplemented to use vp_loader API when profile loading from SD is ready
+    // For now, show only "Generic OBD2"
+    uint8_t vehicle_count = 1;
+    const char *vehicle_names = "Generic OBD2";
+    // const vp_profile_t *vehicle_list = vehicle_profile_get_all(&vehicle_count);
+    // char vehicle_names[160] = {0};
+    // for (uint8_t i = 0; i < vehicle_count; i++) {
+    //     if (i > 0) strlcat(vehicle_names, "\n", sizeof(vehicle_names));
+    //     strlcat(vehicle_names, vehicle_list[i].name, sizeof(vehicle_names));
+    // }
 
     s_roller_vehicle = lv_roller_create(ui_ScreenPageSettings);
     lv_obj_set_style_clip_corner(s_roller_vehicle, true, 0);
     lv_obj_clear_flag(s_roller_vehicle, LV_OBJ_FLAG_GESTURE_BUBBLE);
     lv_roller_set_options(s_roller_vehicle, vehicle_names, LV_ROLLER_MODE_NORMAL);
     lv_roller_set_visible_row_count(s_roller_vehicle, 1);
-    lv_roller_set_selected(s_roller_vehicle, (cfg->vehicle_profile_idx < vehicle_count) ? cfg->vehicle_profile_idx : 0, LV_ANIM_OFF);
+    lv_roller_set_selected(s_roller_vehicle, 0, LV_ANIM_OFF);  // Always select index 0 (Generic OBD2)
     lv_obj_set_width(s_roller_vehicle, 210);   // wide enough for long names (e.g. "BMW X1 F48")
     lv_obj_set_height(s_roller_vehicle, 30);   // explicit: font is applied by style_dark_roller below
     ui_helpers_style_dark_roller(s_roller_vehicle, &ui_font_FontTypoderSize20);

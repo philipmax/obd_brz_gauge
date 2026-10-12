@@ -19,9 +19,11 @@
 #include "bsp_obd_dsp/espnow_link.h"
 #include "bsp_obd_dsp/lcd_driver/ST77916.h"
 #include "app_obd_dsp/obd_data_cache.h"
-#include "app_obd_dsp/vehicle_profiles.h"
+#include "vehicle/vp_profile.h"
+#include "vehicle/vp_loader.h"
 #include "app_obd_dsp/boot_block_player.h"
 #include "app_obd_dsp/boot_media_mount.h"
+#include "app_obd_dsp/boot_video_integration.h"
 #include "theme_engine/theme_interface.h"
 #include "esp_timer.h"
 #include "esp_random.h"
@@ -197,7 +199,6 @@ static void showroom_fake_data(void) {
     obd_data_set_tps((int16_t)fake_tps);
     obd_data_set_boost_x10((int16_t)(fake_boost * 10));
     obd_data_set_oil_pressure_x10((int16_t)(30 + (esp_random() % 40)));
-    obd_data_set_brake_temp_x10((int16_t)(200 + (esp_random() % 300)));
     obd_data_set_afr_x100((int16_t)(fake_afr * 100));
 }
 
@@ -221,7 +222,7 @@ static void boot_video_timer_cb(lv_timer_t *t)
 
         if (s_showroom_active) {
             // showroom mode: don't switch pages, keep the last frame, let the carousel move on
-            // Keep bootmedia mounted for OTA (unmount would require 400ms+ remount during BLE callback)
+            // Keep bootmedia mounted for OTA
         } else {
             // normal boot: go straight to the default page
             s_boot_video_done = true;

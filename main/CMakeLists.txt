@@ -88,20 +88,22 @@ idf_component_register(SRC_DIRS
                     "bsp_obd_dsp/i2c_driver"
                     "bsp_obd_dsp/touch_driver"
                     "theme_engine"
+                    "theme_engine/rules"
+                    "vehicle"
                     INCLUDE_DIRS
                     "."
                     REQUIRES
                     esp_http_server
                     esp_wifi
                     bt
-                    spiffs
                     mbedtls
                     nvs_flash
                     app_update
-                    json)
-
-# Auto-generate the bootmedia SPIFFS image; flashed together via idf.py flash
-spiffs_create_partition_image(bootmedia ${CMAKE_CURRENT_SOURCE_DIR}/../bootmedia/slot_a FLASH_IN_PROJECT)
+                    json
+                    sdmmc
+                    fatfs
+                    esp_vfs_fat
+                    joltwallet__littlefs)
 
 target_compile_definitions(${COMPONENT_LIB} PRIVATE
     OBD_GAUGE_GIT_HASH="${OBD_GAUGE_GIT_HASH}"

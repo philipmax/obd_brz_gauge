@@ -1,0 +1,5098 @@
+[
+ {
+  "name": "X01_legacy_compare_source",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "none",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "source": "obd.rpm",
+    "op": ">",
+    "value": 0,
+    "compareSource": "obd.speed"
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 100,
+     "obd.speed": 50
+    },
+    "expect": {
+     "active": true
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 30,
+     "obd.speed": 50
+    },
+    "expect": {
+     "active": false
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 50,
+     "obd.speed": 50
+    },
+    "expect": {
+     "active": false
+    }
+   }
+  ]
+ },
+ {
+  "name": "X02_legacy_value_null_relational",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "none",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "source": "obd.rpm",
+    "op": ">",
+    "value": null
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 5
+    },
+    "expect": {
+     "active": true
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 0
+    },
+    "expect": {
+     "active": false
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": -1
+    },
+    "expect": {
+     "active": false
+    }
+   }
+  ]
+ },
+ {
+  "name": "X03a_legacy_value_null_eq",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "none",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "source": "obd.rpm",
+    "op": "==",
+    "value": null
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 0
+    },
+    "expect": {
+     "active": false
+    }
+   }
+  ]
+ },
+ {
+  "name": "X03b_legacy_value_null_ne",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "none",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "source": "obd.rpm",
+    "op": "!=",
+    "value": null
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 0
+    },
+    "expect": {
+     "active": true
+    }
+   }
+  ]
+ },
+ {
+  "name": "X04_legacy_missing_value",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "none",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "source": "obd.rpm",
+    "op": ">"
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 5
+    },
+    "expect": {
+     "active": false
+    }
+   }
+  ]
+ },
+ {
+  "name": "X05_legacy_empty_op",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "none",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "source": "obd.rpm",
+    "op": "",
+    "value": 1
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 5
+    },
+    "expect": {
+     "active": false
+    }
+   }
+  ]
+ },
+ {
+  "name": "X06_unknown_op_with_band",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "shared",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "conditions": [
+     {
+      "source": "obd.rpm",
+      "op": "=>",
+      "value": 1
+     }
+    ],
+    "hysteresis": 10
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 5
+    },
+    "expect": {
+     "active": false
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 0
+    },
+    "expect": {
+     "active": false
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 50
+    },
+    "expect": {
+     "active": false
+    }
+   }
+  ]
+ },
+ {
+  "name": "X07a_unknown_source_missing_value_eq",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "none",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "conditions": [
+     {
+      "source": "obd.fuel_level",
+      "op": "=="
+     }
+    ]
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {},
+    "expect": {
+     "active": true
+    }
+   }
+  ]
+ },
+ {
+  "name": "X07b_unknown_source_missing_value_ne",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "none",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "conditions": [
+     {
+      "source": "obd.fuel_level",
+      "op": "!="
+     }
+    ]
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {},
+    "expect": {
+     "active": false
+    }
+   }
+  ]
+ },
+ {
+  "name": "X07c_known_source_missing_value",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "none",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "combine": "any",
+    "conditions": [
+     {
+      "source": "obd.rpm",
+      "op": ">="
+     },
+     {
+      "source": "obd.rpm",
+      "op": "=="
+     }
+    ]
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 0
+    },
+    "expect": {
+     "active": false
+    }
+   }
+  ]
+ },
+ {
+  "name": "X07d_known_source_missing_value_ne",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "none",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "conditions": [
+     {
+      "source": "obd.rpm",
+      "op": "!="
+     }
+    ]
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 0
+    },
+    "expect": {
+     "active": true
+    }
+   }
+  ]
+ },
+ {
+  "name": "X08a_compare_source_unknown_rel",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "none",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "conditions": [
+     {
+      "source": "obd.rpm",
+      "op": ">",
+      "value": 0,
+      "compareSource": "obd.nope"
+     }
+    ]
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 5
+    },
+    "expect": {
+     "active": false
+    }
+   }
+  ]
+ },
+ {
+  "name": "X08b_compare_source_unknown_ne",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "none",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "conditions": [
+     {
+      "source": "obd.rpm",
+      "op": "!=",
+      "value": 5,
+      "compareSource": "obd.nope"
+     }
+    ]
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 5
+    },
+    "expect": {
+     "active": true
+    }
+   }
+  ]
+ },
+ {
+  "name": "X08c_unknown_vs_unknown_compare_eq",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "none",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "conditions": [
+     {
+      "source": "obd.nope",
+      "op": "==",
+      "value": 5,
+      "compareSource": "obd.nada"
+     }
+    ]
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {},
+    "expect": {
+     "active": true
+    }
+   }
+  ]
+ },
+ {
+  "name": "X09_compare_source_empty_string",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "none",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "conditions": [
+     {
+      "source": "obd.rpm",
+      "op": ">",
+      "value": 10,
+      "compareSource": ""
+     }
+    ]
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 20
+    },
+    "expect": {
+     "active": true
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 5
+    },
+    "expect": {
+     "active": false
+    }
+   }
+  ]
+ },
+ {
+  "name": "X10a_value_bool_relational",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "none",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "conditions": [
+     {
+      "source": "obd.rpm",
+      "op": ">=",
+      "value": true
+     }
+    ]
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 1
+    },
+    "expect": {
+     "active": true
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 0
+    },
+    "expect": {
+     "active": false
+    }
+   }
+  ]
+ },
+ {
+  "name": "X10b_value_bool_eq",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "none",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "conditions": [
+     {
+      "source": "obd.rpm",
+      "op": "==",
+      "value": true
+     }
+    ]
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 1
+    },
+    "expect": {
+     "active": false
+    }
+   }
+  ]
+ },
+ {
+  "name": "X11a_value_numeric_string",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "none",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "conditions": [
+     {
+      "source": "obd.rpm",
+      "op": ">",
+      "value": "4000"
+     }
+    ]
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 5000
+    },
+    "expect": {
+     "active": true
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 3000
+    },
+    "expect": {
+     "active": false
+    }
+   }
+  ]
+ },
+ {
+  "name": "X11b_value_numeric_string_eq",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "none",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "conditions": [
+     {
+      "source": "obd.rpm",
+      "op": "==",
+      "value": "5000"
+     }
+    ]
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 5000
+    },
+    "expect": {
+     "active": false
+    }
+   }
+  ]
+ },
+ {
+  "name": "X11c_value_blank_string",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "none",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "conditions": [
+     {
+      "source": "obd.rpm",
+      "op": ">",
+      "value": " "
+     }
+    ]
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 1
+    },
+    "expect": {
+     "active": true
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 0
+    },
+    "expect": {
+     "active": false
+    }
+   }
+  ]
+ },
+ {
+  "name": "X11d_value_hex_string",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "none",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "conditions": [
+     {
+      "source": "obd.rpm",
+      "op": ">=",
+      "value": "0x10"
+     }
+    ]
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 16
+    },
+    "expect": {
+     "active": true
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 15
+    },
+    "expect": {
+     "active": false
+    }
+   }
+  ]
+ },
+ {
+  "name": "X11e_value_garbage_string",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "none",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "combine": "any",
+    "conditions": [
+     {
+      "source": "obd.rpm",
+      "op": ">",
+      "value": "12abc"
+     },
+     {
+      "source": "obd.rpm",
+      "op": "<",
+      "value": "12abc"
+     }
+    ]
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 5
+    },
+    "expect": {
+     "active": false
+    }
+   }
+  ]
+ },
+ {
+  "name": "X11f_value_object",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "none",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "combine": "any",
+    "conditions": [
+     {
+      "source": "obd.rpm",
+      "op": ">",
+      "value": {
+       "a": 1
+      }
+     },
+     {
+      "source": "obd.rpm",
+      "op": "!=",
+      "value": {
+       "a": 1
+      }
+     }
+    ]
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 5
+    },
+    "expect": {
+     "active": true
+    }
+   }
+  ]
+ },
+ {
+  "name": "X12_enabled_only_false_disables",
+  "origin": "extra-gen",
+  "api": "evaluatePageRules",
+  "runtime": "none",
+  "page": {
+   "id": "p1",
+   "elements": [],
+   "rules": [
+    {
+     "id": "s",
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [],
+     "enabled": "false"
+    },
+    {
+     "id": "n",
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [],
+     "enabled": null
+    },
+    {
+     "id": "z",
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [],
+     "enabled": 0
+    },
+    {
+     "id": "f",
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [],
+     "enabled": false
+    },
+    {
+     "id": "t",
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [],
+     "enabled": true
+    }
+   ]
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 5
+    },
+    "expect": {
+     "activeRules": [
+      "s",
+      "n",
+      "z",
+      "t"
+     ],
+     "overrides": {}
+    }
+   }
+  ]
+ },
+ {
+  "name": "X13_trigger_type_variants",
+  "origin": "extra-gen",
+  "api": "evaluatePageRules",
+  "runtime": "none",
+  "page": {
+   "id": "p1",
+   "elements": [],
+   "rules": [
+    {
+     "id": "cap",
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [],
+     "trigger": {
+      "type": "Timer",
+      "intervalMs": 1000
+     }
+    },
+    {
+     "id": "nul",
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [],
+     "trigger": null
+    },
+    {
+     "id": "str",
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [],
+     "trigger": "timer"
+    },
+    {
+     "id": "cond",
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [],
+     "trigger": {
+      "type": "condition",
+      "source": "obd.speed"
+     }
+    },
+    {
+     "id": "arr",
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [],
+     "trigger": [
+      "timer"
+     ]
+    }
+   ]
+  },
+  "steps": [
+   {
+    "elapsedMs": 1000,
+    "values": {
+     "obd.rpm": 5
+    },
+    "expect": {
+     "activeRules": [
+      "cap",
+      "nul",
+      "str",
+      "cond",
+      "arr"
+     ],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 1000,
+    "values": {
+     "obd.rpm": 0
+    },
+    "expect": {
+     "activeRules": [],
+     "overrides": {}
+    }
+   }
+  ]
+ },
+ {
+  "name": "X14_change_trigger_source_empty_string",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "none",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "source": "obd.rpm",
+    "op": ">",
+    "value": 0
+   },
+   "apply": [],
+   "trigger": {
+    "type": "change",
+    "source": ""
+   }
+  },
+  "steps": [
+   {
+    "changed": [
+     "obd.rpm"
+    ],
+    "expect": {
+     "active": false
+    }
+   },
+   {
+    "changed": [],
+    "expect": {
+     "active": false
+    }
+   }
+  ]
+ },
+ {
+  "name": "X15_change_trigger_null_source_uses_when",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "none",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "source": "obd.speed",
+    "op": ">",
+    "value": 0
+   },
+   "apply": [],
+   "trigger": {
+    "type": "change",
+    "source": null
+   }
+  },
+  "steps": [
+   {
+    "changed": [
+     "obd.speed"
+    ],
+    "expect": {
+     "active": true
+    }
+   },
+   {
+    "changed": [
+     "obd.rpm"
+    ],
+    "expect": {
+     "active": false
+    }
+   }
+  ]
+ },
+ {
+  "name": "X15b_change_trigger_when_source_null_defaults_rpm",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "none",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "source": null
+   },
+   "apply": [],
+   "trigger": {
+    "type": "change"
+   }
+  },
+  "steps": [
+   {
+    "changed": [
+     "obd.rpm"
+    ],
+    "expect": {
+     "active": true
+    }
+   },
+   {
+    "changed": [
+     "obd.speed"
+    ],
+    "expect": {
+     "active": false
+    }
+   }
+  ]
+ },
+ {
+  "name": "X15c_change_trigger_numeric_source",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "none",
+  "rule": {
+   "id": "r1",
+   "when": {},
+   "apply": [],
+   "trigger": {
+    "type": "change",
+    "source": 5
+   }
+  },
+  "steps": [
+   {
+    "changed": [
+     "obd.rpm"
+    ],
+    "expect": {
+     "active": false
+    }
+   }
+  ]
+ },
+ {
+  "name": "X15d_change_ignores_enabled_true_and_conditions",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "none",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "conditions": [
+     {
+      "source": "obd.rpm",
+      "op": ">",
+      "value": 100000
+     }
+    ]
+   },
+   "apply": [],
+   "enabled": true,
+   "trigger": {
+    "type": "change",
+    "source": "obd.gear"
+   }
+  },
+  "steps": [
+   {
+    "changed": [
+     "obd.gear",
+     "obd.rpm"
+    ],
+    "values": {
+     "obd.rpm": 5
+    },
+    "expect": {
+     "active": true
+    }
+   }
+  ]
+ },
+ {
+  "name": "X16_timer_interval_variants",
+  "origin": "extra-gen",
+  "api": "evaluatePageRules",
+  "runtime": "none",
+  "page": {
+   "id": "p1",
+   "elements": [],
+   "rules": [
+    {
+     "id": "t_null",
+     "trigger": {
+      "type": "timer",
+      "intervalMs": null
+     },
+     "when": {},
+     "apply": []
+    },
+    {
+     "id": "t_zero",
+     "trigger": {
+      "type": "timer",
+      "intervalMs": 0
+     },
+     "when": {},
+     "apply": []
+    },
+    {
+     "id": "t_250",
+     "trigger": {
+      "type": "timer",
+      "intervalMs": 250
+     },
+     "when": {},
+     "apply": []
+    },
+    {
+     "id": "t_neg",
+     "trigger": {
+      "type": "timer",
+      "intervalMs": -5
+     },
+     "when": {},
+     "apply": []
+    },
+    {
+     "id": "t_str",
+     "trigger": {
+      "type": "timer",
+      "intervalMs": "500"
+     },
+     "when": {},
+     "apply": []
+    },
+    {
+     "id": "t_frac",
+     "trigger": {
+      "type": "timer",
+      "intervalMs": 333.3
+     },
+     "when": {},
+     "apply": []
+    }
+   ]
+  },
+  "steps": [
+   {
+    "elapsedMs": 50,
+    "expect": {
+     "activeRules": [
+      "t_null",
+      "t_zero",
+      "t_250",
+      "t_neg",
+      "t_str",
+      "t_frac"
+     ],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 260,
+    "expect": {
+     "activeRules": [
+      "t_zero",
+      "t_250",
+      "t_neg"
+     ],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 370,
+    "expect": {
+     "activeRules": [
+      "t_zero",
+      "t_neg",
+      "t_frac"
+     ],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 510,
+    "expect": {
+     "activeRules": [
+      "t_zero",
+      "t_250",
+      "t_neg",
+      "t_str"
+     ],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 1000.5,
+    "expect": {
+     "activeRules": [
+      "t_null",
+      "t_zero",
+      "t_250",
+      "t_neg",
+      "t_str",
+      "t_frac"
+     ],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 1119.9,
+    "expect": {
+     "activeRules": [
+      "t_null",
+      "t_zero",
+      "t_250",
+      "t_neg",
+      "t_str"
+     ],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 1120,
+    "expect": {
+     "activeRules": [
+      "t_zero",
+      "t_neg"
+     ],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 666.6,
+    "expect": {
+     "activeRules": [
+      "t_zero",
+      "t_neg",
+      "t_frac"
+     ],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 1000000000050,
+    "expect": {
+     "activeRules": [
+      "t_null",
+      "t_zero",
+      "t_250",
+      "t_neg",
+      "t_str",
+      "t_frac"
+     ],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 123456789.5,
+    "expect": {
+     "activeRules": [
+      "t_zero",
+      "t_250",
+      "t_neg"
+     ],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": -100,
+    "expect": {
+     "activeRules": [],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 0,
+    "expect": {
+     "activeRules": [],
+     "overrides": {}
+    }
+   }
+  ]
+ },
+ {
+  "name": "X17_combine_is_case_sensitive",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "none",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "combine": "ANY",
+    "conditions": [
+     {
+      "source": "obd.rpm",
+      "op": ">",
+      "value": 1
+     },
+     {
+      "source": "obd.speed",
+      "op": ">",
+      "value": 1
+     }
+    ]
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 5,
+     "obd.speed": 0
+    },
+    "expect": {
+     "active": false
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 5,
+     "obd.speed": 5
+    },
+    "expect": {
+     "active": true
+    }
+   }
+  ]
+ },
+ {
+  "name": "X18_hysteresis_null_is_raw",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "shared",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "conditions": [
+     {
+      "source": "obd.rpm",
+      "op": ">=",
+      "value": 4000
+     }
+    ],
+    "hysteresis": null
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 5000
+    },
+    "expect": {
+     "active": true
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 3999
+    },
+    "expect": {
+     "active": false
+    }
+   }
+  ]
+ },
+ {
+  "name": "X18b_hysteresis_bool_true_is_one",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "shared",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "conditions": [
+     {
+      "source": "obd.rpm",
+      "op": ">=",
+      "value": 10
+     }
+    ],
+    "hysteresis": true
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 11
+    },
+    "expect": {
+     "active": true
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 9.5
+    },
+    "expect": {
+     "active": true
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 8.9
+    },
+    "expect": {
+     "active": false
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 10.5
+    },
+    "expect": {
+     "active": false
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 11.5
+    },
+    "expect": {
+     "active": true
+    }
+   }
+  ]
+ },
+ {
+  "name": "X18c_hysteresis_garbage_freezes_latch",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "shared",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "conditions": [
+     {
+      "source": "obd.rpm",
+      "op": ">=",
+      "value": 10
+     }
+    ],
+    "hysteresis": "abc"
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 20
+    },
+    "expect": {
+     "active": true
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 0
+    },
+    "expect": {
+     "active": true
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 20
+    },
+    "expect": {
+     "active": true
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 0
+    },
+    "expect": {
+     "active": true
+    }
+   }
+  ]
+ },
+ {
+  "name": "X19_debounce_negative_null_string",
+  "origin": "extra-gen",
+  "api": "evaluatePageRules",
+  "runtime": "shared",
+  "page": {
+   "id": "p1",
+   "elements": [],
+   "rules": [
+    {
+     "id": "neg",
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [],
+     "debounceMs": -100
+    },
+    {
+     "id": "nul",
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [],
+     "debounceMs": null
+    },
+    {
+     "id": "str",
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [],
+     "debounceMs": "100"
+    },
+    {
+     "id": "bad",
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [],
+     "debounceMs": "x"
+    }
+   ]
+  },
+  "steps": [
+   {
+    "elapsedMs": 0,
+    "values": {
+     "obd.rpm": 5
+    },
+    "expect": {
+     "activeRules": [
+      "neg",
+      "nul"
+     ],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 50,
+    "values": {
+     "obd.rpm": 5
+    },
+    "expect": {
+     "activeRules": [
+      "neg",
+      "nul"
+     ],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 100,
+    "values": {
+     "obd.rpm": 5
+    },
+    "expect": {
+     "activeRules": [
+      "neg",
+      "nul",
+      "str"
+     ],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 5000,
+    "values": {
+     "obd.rpm": 5
+    },
+    "expect": {
+     "activeRules": [
+      "neg",
+      "nul",
+      "str"
+     ],
+     "overrides": {}
+    }
+   }
+  ]
+ },
+ {
+  "name": "X20_debounce_elapsed_backwards",
+  "origin": "extra-gen",
+  "api": "evaluatePageRules",
+  "runtime": "shared",
+  "page": {
+   "id": "p1",
+   "elements": [],
+   "rules": [
+    {
+     "id": "r1",
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [],
+     "debounceMs": 100
+    }
+   ]
+  },
+  "steps": [
+   {
+    "elapsedMs": 500,
+    "values": {
+     "obd.rpm": 5
+    },
+    "expect": {
+     "activeRules": [],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 300,
+    "values": {
+     "obd.rpm": 5
+    },
+    "expect": {
+     "activeRules": [],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 599,
+    "values": {
+     "obd.rpm": 5
+    },
+    "expect": {
+     "activeRules": [],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 600,
+    "values": {
+     "obd.rpm": 5
+    },
+    "expect": {
+     "activeRules": [
+      "r1"
+     ],
+     "overrides": {}
+    }
+   }
+  ]
+ },
+ {
+  "name": "X21a_priority_mixed",
+  "origin": "extra-gen",
+  "api": "evaluatePageRules",
+  "runtime": "none",
+  "page": {
+   "id": "p1",
+   "elements": [
+    {
+     "id": "lbl1",
+     "kind": "label"
+    }
+   ],
+   "rules": [
+    {
+     "id": "r0",
+     "priority": 3,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#000000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r1",
+     "priority": -1,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#010000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r2",
+     "priority": 2.5,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#020000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r3",
+     "priority": null,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#030000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r4",
+     "priority": 3,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#040000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r5",
+     "priority": 0,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#050000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r6",
+     "priority": -1,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#060000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r7",
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#070000"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 5
+    },
+    "expect": {
+     "activeRules": [
+      "r1",
+      "r6",
+      "r3",
+      "r5",
+      "r7",
+      "r2",
+      "r0",
+      "r4"
+     ],
+     "overrides": {
+      "lbl1": {
+       "color": "#040000"
+      }
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "X21b_priority_descending_run",
+  "origin": "extra-gen",
+  "api": "evaluatePageRules",
+  "runtime": "none",
+  "page": {
+   "id": "p1",
+   "elements": [
+    {
+     "id": "lbl1",
+     "kind": "label"
+    }
+   ],
+   "rules": [
+    {
+     "id": "r0",
+     "priority": 5,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#000000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r1",
+     "priority": 4,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#010000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r2",
+     "priority": 3,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#020000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r3",
+     "priority": 2,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#030000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r4",
+     "priority": 1,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#040000"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 5
+    },
+    "expect": {
+     "activeRules": [
+      "r4",
+      "r3",
+      "r2",
+      "r1",
+      "r0"
+     ],
+     "overrides": {
+      "lbl1": {
+       "color": "#000000"
+      }
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "X21c_priority_desc_then_equal",
+  "origin": "extra-gen",
+  "api": "evaluatePageRules",
+  "runtime": "none",
+  "page": {
+   "id": "p1",
+   "elements": [
+    {
+     "id": "lbl1",
+     "kind": "label"
+    }
+   ],
+   "rules": [
+    {
+     "id": "r0",
+     "priority": 5,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#000000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r1",
+     "priority": 4,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#010000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r2",
+     "priority": 4,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#020000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r3",
+     "priority": 3,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#030000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r4",
+     "priority": 9,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#040000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r5",
+     "priority": 0,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#050000"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 5
+    },
+    "expect": {
+     "activeRules": [
+      "r5",
+      "r3",
+      "r1",
+      "r2",
+      "r0",
+      "r4"
+     ],
+     "overrides": {
+      "lbl1": {
+       "color": "#040000"
+      }
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "X21d_priority_sixteen",
+  "origin": "extra-gen",
+  "api": "evaluatePageRules",
+  "runtime": "none",
+  "page": {
+   "id": "p1",
+   "elements": [
+    {
+     "id": "lbl1",
+     "kind": "label"
+    }
+   ],
+   "rules": [
+    {
+     "id": "r0",
+     "priority": 7,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#000000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r1",
+     "priority": 3,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#010000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r2",
+     "priority": 3,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#020000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r3",
+     "priority": 9,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#030000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r4",
+     "priority": -2,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#040000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r5",
+     "priority": 0,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#050000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r6",
+     "priority": 5,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#060000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r7",
+     "priority": 5,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#070000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r8",
+     "priority": 1,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#080000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r9",
+     "priority": 8,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#090000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r10",
+     "priority": -2,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#100000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r11",
+     "priority": 4,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#110000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r12",
+     "priority": 6,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#120000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r13",
+     "priority": 0,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#130000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r14",
+     "priority": 2,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#140000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r15",
+     "priority": 3,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#150000"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 5
+    },
+    "expect": {
+     "activeRules": [
+      "r4",
+      "r10",
+      "r5",
+      "r13",
+      "r8",
+      "r14",
+      "r1",
+      "r2",
+      "r15",
+      "r11",
+      "r6",
+      "r7",
+      "r12",
+      "r0",
+      "r9",
+      "r3"
+     ],
+     "overrides": {
+      "lbl1": {
+       "color": "#030000"
+      }
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "X21e_priority_strings_bools",
+  "origin": "extra-gen",
+  "api": "evaluatePageRules",
+  "runtime": "none",
+  "page": {
+   "id": "p1",
+   "elements": [
+    {
+     "id": "lbl1",
+     "kind": "label"
+    }
+   ],
+   "rules": [
+    {
+     "id": "r0",
+     "priority": "5",
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#000000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r1",
+     "priority": 4,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#010000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r2",
+     "priority": true,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#020000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r3",
+     "priority": "-1",
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#030000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r4",
+     "priority": false,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#040000"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 5
+    },
+    "expect": {
+     "activeRules": [
+      "r3",
+      "r4",
+      "r2",
+      "r1",
+      "r0"
+     ],
+     "overrides": {
+      "lbl1": {
+       "color": "#000000"
+      }
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "X21f_priority_nan_v8_order",
+  "origin": "extra-gen",
+  "api": "evaluatePageRules",
+  "runtime": "none",
+  "page": {
+   "id": "p1",
+   "elements": [
+    {
+     "id": "lbl1",
+     "kind": "label"
+    }
+   ],
+   "rules": [
+    {
+     "id": "r0",
+     "priority": 2,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#000000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r1",
+     "priority": "abc",
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#010000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r2",
+     "priority": 1,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#020000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r3",
+     "priority": 0,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#030000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r4",
+     "priority": "x",
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#040000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r5",
+     "priority": -1,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#050000"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 5
+    },
+    "expect": {
+     "activeRules": [
+      "r0",
+      "r1",
+      "r5",
+      "r3",
+      "r2",
+      "r4"
+     ],
+     "overrides": {
+      "lbl1": {
+       "color": "#040000"
+      }
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "X21g_priority_nan_first",
+  "origin": "extra-gen",
+  "api": "evaluatePageRules",
+  "runtime": "none",
+  "page": {
+   "id": "p1",
+   "elements": [
+    {
+     "id": "lbl1",
+     "kind": "label"
+    }
+   ],
+   "rules": [
+    {
+     "id": "r0",
+     "priority": "abc",
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#000000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r1",
+     "priority": 3,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#010000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r2",
+     "priority": 2,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#020000"
+       }
+      }
+     ]
+    },
+    {
+     "id": "r3",
+     "priority": 1,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#030000"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 5
+    },
+    "expect": {
+     "activeRules": [
+      "r0",
+      "r3",
+      "r2",
+      "r1"
+     ],
+     "overrides": {
+      "lbl1": {
+       "color": "#010000"
+      }
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "X21h_priority_subset_active",
+  "origin": "extra-gen",
+  "api": "evaluatePageRules",
+  "runtime": "none",
+  "page": {
+   "id": "p1",
+   "elements": [],
+   "rules": [
+    {
+     "id": "a",
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [],
+     "priority": 2
+    },
+    {
+     "id": "b",
+     "priority": 1,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.speed",
+        "op": ">",
+        "value": 0
+       }
+      ]
+     },
+     "apply": []
+    },
+    {
+     "id": "c",
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [],
+     "priority": 1
+    },
+    {
+     "id": "d",
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [],
+     "priority": 0
+    }
+   ]
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 5
+    },
+    "expect": {
+     "activeRules": [
+      "d",
+      "c",
+      "a"
+     ],
+     "overrides": {}
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 5,
+     "obd.speed": 1
+    },
+    "expect": {
+     "activeRules": [
+      "d",
+      "b",
+      "c",
+      "a"
+     ],
+     "overrides": {}
+    }
+   }
+  ]
+ },
+ {
+  "name": "X23_set_multiple_keys",
+  "origin": "extra-gen",
+  "api": "evaluatePageRules",
+  "runtime": "none",
+  "page": {
+   "id": "p1",
+   "elements": [
+    {
+     "id": "lbl1",
+     "kind": "label"
+    },
+    {
+     "id": "img1",
+     "kind": "image"
+    },
+    {
+     "id": "bar1",
+     "kind": "bar"
+    }
+   ],
+   "rules": [
+    {
+     "id": "r1",
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "asset": "a1",
+        "visible": false,
+        "text": "HOT",
+        "color": "#ABCDEF"
+       }
+      },
+      {
+       "target": "img1",
+       "set": {
+        "visible": true,
+        "color": "0x00FF00",
+        "asset": "warn"
+       }
+      },
+      {
+       "target": "bar1",
+       "set": {
+        "color": "ff3158",
+        "text": "ignored by bars"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 5
+    },
+    "expect": {
+     "activeRules": [
+      "r1"
+     ],
+     "overrides": {
+      "lbl1": {
+       "color": "#ABCDEF",
+       "text": "HOT",
+       "visible": false,
+       "assetName": "a1"
+      },
+      "img1": {
+       "tintColor": "0x00FF00",
+       "visible": true,
+       "assetName": "warn"
+      },
+      "bar1": {
+       "color": "ff3158",
+       "bgColor": "ff3158",
+       "text": "ignored by bars"
+      }
+     }
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 0
+    },
+    "expect": {
+     "activeRules": [],
+     "overrides": {}
+    }
+   }
+  ]
+ },
+ {
+  "name": "X24_empty_set_touches_target",
+  "origin": "extra-gen",
+  "api": "evaluatePageRules",
+  "runtime": "none",
+  "page": {
+   "id": "p1",
+   "elements": [
+    {
+     "id": "lbl1",
+     "kind": "label"
+    }
+   ],
+   "rules": [
+    {
+     "id": "r1",
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {}
+      },
+      {
+       "target": "ghost",
+       "set": {
+        "foo": 1
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 5
+    },
+    "expect": {
+     "activeRules": [
+      "r1"
+     ],
+     "overrides": {
+      "lbl1": {},
+      "ghost": {}
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "X25_unknown_kind_and_duplicate_element_ids",
+  "origin": "extra-gen",
+  "api": "evaluatePageRules",
+  "runtime": "none",
+  "page": {
+   "id": "p1",
+   "elements": [
+    {
+     "id": "e1",
+     "kind": "text"
+    },
+    {
+     "id": "e2",
+     "kind": "arc"
+    },
+    {
+     "id": "e2",
+     "kind": "image"
+    },
+    {
+     "id": "e3",
+     "kind": "pointer"
+    }
+   ],
+   "rules": [
+    {
+     "id": "r1",
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "e1",
+       "set": {
+        "color": "#123456"
+       }
+      },
+      {
+       "target": "e2",
+       "set": {
+        "color": "#123456"
+       }
+      },
+      {
+       "target": "e3",
+       "set": {
+        "color": "#123456"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 5
+    },
+    "expect": {
+     "activeRules": [
+      "r1"
+     ],
+     "overrides": {
+      "e1": {
+       "color": "#123456"
+      },
+      "e2": {
+       "color": "#123456",
+       "bgColor": "#123456"
+      },
+      "e3": {
+       "tintColor": "#123456"
+      }
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "X26_ne_ignores_band",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "shared",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "conditions": [
+     {
+      "source": "obd.gear",
+      "op": "!=",
+      "value": 3
+     }
+    ],
+    "hysteresis": 5
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.gear": 3
+    },
+    "expect": {
+     "active": false
+    }
+   },
+   {
+    "values": {
+     "obd.gear": 4
+    },
+    "expect": {
+     "active": true
+    }
+   },
+   {
+    "values": {
+     "obd.gear": 3
+    },
+    "expect": {
+     "active": false
+    }
+   },
+   {
+    "values": {
+     "obd.gear": 8
+    },
+    "expect": {
+     "active": true
+    }
+   },
+   {
+    "values": {
+     "obd.gear": 3
+    },
+    "expect": {
+     "active": false
+    }
+   }
+  ]
+ },
+ {
+  "name": "X27_ge_band_edges_strict",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "shared",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "conditions": [
+     {
+      "source": "obd.rpm",
+      "op": ">=",
+      "value": 4000
+     }
+    ],
+    "hysteresis": 100
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 4100
+    },
+    "expect": {
+     "active": true
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 3900
+    },
+    "expect": {
+     "active": true
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 3899
+    },
+    "expect": {
+     "active": false
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 4100
+    },
+    "expect": {
+     "active": false
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 4101
+    },
+    "expect": {
+     "active": true
+    }
+   }
+  ]
+ },
+ {
+  "name": "X28_le_band_edges_strict",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "shared",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "conditions": [
+     {
+      "source": "obd.rpm",
+      "op": "<=",
+      "value": 1000
+     }
+    ],
+    "hysteresis": 100
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 1100
+    },
+    "expect": {
+     "active": false
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 999
+    },
+    "expect": {
+     "active": false
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 899
+    },
+    "expect": {
+     "active": true
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 1100
+    },
+    "expect": {
+     "active": true
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 1101
+    },
+    "expect": {
+     "active": false
+    }
+   }
+  ]
+ },
+ {
+  "name": "X29_gt_band_first_raw_false",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "shared",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "conditions": [
+     {
+      "source": "obd.rpm",
+      "op": ">",
+      "value": 4000
+     }
+    ],
+    "hysteresis": 50
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 4000
+    },
+    "expect": {
+     "active": false
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 4040
+    },
+    "expect": {
+     "active": false
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 4051
+    },
+    "expect": {
+     "active": true
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 3960
+    },
+    "expect": {
+     "active": true
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 3949
+    },
+    "expect": {
+     "active": false
+    }
+   }
+  ]
+ },
+ {
+  "name": "X29b_fractional_band",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "shared",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "conditions": [
+     {
+      "source": "obd.boost",
+      "op": ">",
+      "value": 0.3
+     }
+    ],
+    "hysteresis": 0.1
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.boost": 0.5
+    },
+    "expect": {
+     "active": true
+    }
+   },
+   {
+    "values": {
+     "obd.boost": 0.2
+    },
+    "expect": {
+     "active": true
+    }
+   },
+   {
+    "values": {
+     "obd.boost": 0.19999999999999998
+    },
+    "expect": {
+     "active": true
+    }
+   },
+   {
+    "values": {
+     "obd.boost": 0.4
+    },
+    "expect": {
+     "active": true
+    }
+   },
+   {
+    "values": {
+     "obd.boost": 0.4000000000000001
+    },
+    "expect": {
+     "active": true
+    }
+   }
+  ]
+ },
+ {
+  "name": "X30_timer_with_debounce",
+  "origin": "extra-gen",
+  "api": "evaluatePageRules",
+  "runtime": "shared",
+  "page": {
+   "id": "p1",
+   "elements": [],
+   "rules": [
+    {
+     "id": "t",
+     "trigger": {
+      "type": "timer",
+      "intervalMs": 1000
+     },
+     "debounceMs": 50,
+     "when": {},
+     "apply": []
+    }
+   ]
+  },
+  "steps": [
+   {
+    "elapsedMs": 1000,
+    "expect": {
+     "activeRules": [],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 1060,
+    "expect": {
+     "activeRules": [
+      "t"
+     ],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 1130,
+    "expect": {
+     "activeRules": [],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 2000,
+    "expect": {
+     "activeRules": [],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 2050,
+    "expect": {
+     "activeRules": [
+      "t"
+     ],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 2119,
+    "expect": {
+     "activeRules": [
+      "t"
+     ],
+     "overrides": {}
+    }
+   }
+  ]
+ },
+ {
+  "name": "X31_change_with_debounce",
+  "origin": "extra-gen",
+  "api": "evaluatePageRules",
+  "runtime": "shared",
+  "page": {
+   "id": "p1",
+   "elements": [],
+   "rules": [
+    {
+     "id": "ch",
+     "trigger": {
+      "type": "change",
+      "source": "obd.gear"
+     },
+     "debounceMs": 100,
+     "when": {},
+     "apply": []
+    }
+   ]
+  },
+  "steps": [
+   {
+    "elapsedMs": 0,
+    "changed": [
+     "obd.gear"
+    ],
+    "expect": {
+     "activeRules": [],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 80,
+    "changed": [
+     "obd.gear"
+    ],
+    "expect": {
+     "activeRules": [],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 100,
+    "changed": [
+     "obd.gear"
+    ],
+    "expect": {
+     "activeRules": [
+      "ch"
+     ],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 150,
+    "changed": [],
+    "expect": {
+     "activeRules": [],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 200,
+    "changed": [
+     "obd.gear"
+    ],
+    "expect": {
+     "activeRules": [],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 300,
+    "changed": [
+     "obd.gear"
+    ],
+    "expect": {
+     "activeRules": [
+      "ch"
+     ],
+     "overrides": {}
+    }
+   }
+  ]
+ },
+ {
+  "name": "X32_latch_survives_debounce_reset",
+  "origin": "extra-gen",
+  "api": "evaluatePageRules",
+  "runtime": "shared",
+  "page": {
+   "id": "p1",
+   "elements": [],
+   "rules": [
+    {
+     "id": "r1",
+     "debounceMs": 100,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 4000
+       },
+       {
+        "source": "obd.speed",
+        "op": ">",
+        "value": 10
+       }
+      ],
+      "hysteresis": 200
+     },
+     "apply": []
+    }
+   ]
+  },
+  "steps": [
+   {
+    "elapsedMs": 0,
+    "values": {
+     "obd.rpm": 5000,
+     "obd.speed": 20
+    },
+    "expect": {
+     "activeRules": [],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 50,
+    "values": {
+     "obd.rpm": 3900,
+     "obd.speed": 20
+    },
+    "expect": {
+     "activeRules": [],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 60,
+    "values": {
+     "obd.rpm": 3900,
+     "obd.speed": 0
+    },
+    "expect": {
+     "activeRules": [],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 70,
+    "values": {
+     "obd.rpm": 3900,
+     "obd.speed": 20
+    },
+    "expect": {
+     "activeRules": [],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 170,
+    "values": {
+     "obd.rpm": 3900,
+     "obd.speed": 20
+    },
+    "expect": {
+     "activeRules": [
+      "r1"
+     ],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 180,
+    "values": {
+     "obd.rpm": 3700,
+     "obd.speed": 20
+    },
+    "expect": {
+     "activeRules": [],
+     "overrides": {}
+    }
+   }
+  ]
+ },
+ {
+  "name": "X33_duplicate_ids_share_debounce",
+  "origin": "extra-gen",
+  "api": "evaluatePageRules",
+  "runtime": "shared",
+  "page": {
+   "id": "p1",
+   "elements": [],
+   "rules": [
+    {
+     "id": "x",
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [],
+     "debounceMs": 100
+    },
+    {
+     "id": "x",
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.speed",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": []
+    }
+   ]
+  },
+  "steps": [
+   {
+    "elapsedMs": 0,
+    "values": {
+     "obd.rpm": 5,
+     "obd.speed": 0
+    },
+    "expect": {
+     "activeRules": [],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 100,
+    "values": {
+     "obd.rpm": 5,
+     "obd.speed": 0
+    },
+    "expect": {
+     "activeRules": [],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 200,
+    "values": {
+     "obd.rpm": 5,
+     "obd.speed": 5
+    },
+    "expect": {
+     "activeRules": [
+      "x"
+     ],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 300,
+    "values": {
+     "obd.rpm": 5,
+     "obd.speed": 5
+    },
+    "expect": {
+     "activeRules": [
+      "x",
+      "x"
+     ],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 350,
+    "values": {
+     "obd.rpm": 5,
+     "obd.speed": 0
+    },
+    "expect": {
+     "activeRules": [
+      "x"
+     ],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 400,
+    "values": {
+     "obd.rpm": 5,
+     "obd.speed": 5
+    },
+    "expect": {
+     "activeRules": [
+      "x"
+     ],
+     "overrides": {}
+    }
+   }
+  ]
+ },
+ {
+  "name": "X34_duplicate_ids_share_latch",
+  "origin": "extra-gen",
+  "api": "evaluatePageRules",
+  "runtime": "shared",
+  "page": {
+   "id": "p1",
+   "elements": [],
+   "rules": [
+    {
+     "id": "x",
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1000
+       }
+      ],
+      "hysteresis": 100
+     },
+     "apply": []
+    },
+    {
+     "id": "x",
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": "<=",
+        "value": 500
+       }
+      ],
+      "hysteresis": 100
+     },
+     "apply": []
+    }
+   ]
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 2000
+    },
+    "expect": {
+     "activeRules": [
+      "x"
+     ],
+     "overrides": {}
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 700
+    },
+    "expect": {
+     "activeRules": [],
+     "overrides": {}
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 300
+    },
+    "expect": {
+     "activeRules": [
+      "x"
+     ],
+     "overrides": {}
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 1200
+    },
+    "expect": {
+     "activeRules": [
+      "x"
+     ],
+     "overrides": {}
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 950
+    },
+    "expect": {
+     "activeRules": [],
+     "overrides": {}
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 350
+    },
+    "expect": {
+     "activeRules": [
+      "x"
+     ],
+     "overrides": {}
+    }
+   }
+  ]
+ },
+ {
+  "name": "X36_float_compare_exact",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "none",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "combine": "any",
+    "conditions": [
+     {
+      "source": "obd.boost",
+      "op": "==",
+      "value": 0.3
+     }
+    ]
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.boost": 0.30000000000000004
+    },
+    "expect": {
+     "active": false
+    }
+   },
+   {
+    "values": {
+     "obd.boost": 0.3
+    },
+    "expect": {
+     "active": true
+    }
+   }
+  ]
+ },
+ {
+  "name": "X36b_float_compare_eq_same",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "none",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "conditions": [
+     {
+      "source": "obd.boost",
+      "op": "==",
+      "value": 0.30000000000000004
+     }
+    ]
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.boost": 0.30000000000000004
+    },
+    "expect": {
+     "active": true
+    }
+   }
+  ]
+ },
+ {
+  "name": "X37_override_merge_across_rules",
+  "origin": "extra-gen",
+  "api": "evaluatePageRules",
+  "runtime": "none",
+  "page": {
+   "id": "p1",
+   "elements": [
+    {
+     "id": "arc1",
+     "kind": "arc"
+    },
+    {
+     "id": "ptr1",
+     "kind": "pointer"
+    }
+   ],
+   "rules": [
+    {
+     "id": "a",
+     "priority": 0,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "arc1",
+       "set": {
+        "color": "#111111",
+        "visible": false
+       }
+      },
+      {
+       "target": "ptr1",
+       "set": {
+        "asset": "n1"
+       }
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "priority": 1,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "arc1",
+       "set": {
+        "visible": true
+       }
+      },
+      {
+       "target": "ghost",
+       "set": {
+        "text": "T"
+       }
+      }
+     ]
+    },
+    {
+     "id": "c",
+     "priority": 1,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 100
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "ptr1",
+       "set": {
+        "color": "#222222",
+        "asset": "n2"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 5
+    },
+    "expect": {
+     "activeRules": [
+      "a",
+      "b"
+     ],
+     "overrides": {
+      "arc1": {
+       "color": "#111111",
+       "bgColor": "#111111",
+       "visible": true
+      },
+      "ptr1": {
+       "assetName": "n1"
+      },
+      "ghost": {
+       "text": "T"
+      }
+     }
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 500
+    },
+    "expect": {
+     "activeRules": [
+      "a",
+      "b",
+      "c"
+     ],
+     "overrides": {
+      "arc1": {
+       "color": "#111111",
+       "bgColor": "#111111",
+       "visible": true
+      },
+      "ptr1": {
+       "assetName": "n2",
+       "tintColor": "#222222"
+      },
+      "ghost": {
+       "text": "T"
+      }
+     }
+    }
+   }
+  ]
+ },
+ {
+  "name": "X38a_invalid_relational_false",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "none",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "combine": "any",
+    "conditions": [
+     {
+      "source": "obd.rpm",
+      "op": ">",
+      "value": -1
+     },
+     {
+      "source": "obd.rpm",
+      "op": "<=",
+      "value": 1000000000
+     },
+     {
+      "source": "obd.rpm",
+      "op": "==",
+      "value": 0
+     }
+    ]
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {},
+    "invalid": [
+     "obd.rpm"
+    ],
+    "expect": {
+     "active": false
+    }
+   }
+  ]
+ },
+ {
+  "name": "X38b_invalid_ne_true",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "none",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "conditions": [
+     {
+      "source": "obd.rpm",
+      "op": "!=",
+      "value": 0
+     }
+    ]
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {},
+    "invalid": [
+     "obd.rpm"
+    ],
+    "expect": {
+     "active": true
+    }
+   }
+  ]
+ },
+ {
+  "name": "X38c_invalid_compare_source",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "none",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "combine": "any",
+    "conditions": [
+     {
+      "source": "obd.rpm",
+      "op": "<",
+      "value": 0,
+      "compareSource": "obd.speed"
+     },
+     {
+      "source": "obd.rpm",
+      "op": ">=",
+      "value": 0,
+      "compareSource": "obd.speed"
+     }
+    ]
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 5
+    },
+    "invalid": [
+     "obd.speed"
+    ],
+    "expect": {
+     "active": false
+    }
+   }
+  ]
+ },
+ {
+  "name": "X38d_invalid_ne_compare_source",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "none",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "conditions": [
+     {
+      "source": "obd.rpm",
+      "op": "!=",
+      "value": 0,
+      "compareSource": "obd.speed"
+     }
+    ]
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 5
+    },
+    "invalid": [
+     "obd.rpm",
+     "obd.speed"
+    ],
+    "expect": {
+     "active": true
+    }
+   }
+  ]
+ },
+ {
+  "name": "X39_invalid_holds_directional_latch",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "shared",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "conditions": [
+     {
+      "source": "obd.rpm",
+      "op": ">=",
+      "value": 4000
+     }
+    ],
+    "hysteresis": 100
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 5000
+    },
+    "expect": {
+     "active": true
+    }
+   },
+   {
+    "values": {},
+    "invalid": [
+     "obd.rpm"
+    ],
+    "expect": {
+     "active": true
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 3000
+    },
+    "expect": {
+     "active": false
+    }
+   },
+   {
+    "values": {},
+    "invalid": [
+     "obd.rpm"
+    ],
+    "expect": {
+     "active": false
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 4050
+    },
+    "expect": {
+     "active": false
+    }
+   }
+  ]
+ },
+ {
+  "name": "X40_invalid_releases_eq_latch",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "shared",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "conditions": [
+     {
+      "source": "obd.gear",
+      "op": "==",
+      "value": 3
+     }
+    ],
+    "hysteresis": 1
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.gear": 3
+    },
+    "expect": {
+     "active": true
+    }
+   },
+   {
+    "values": {},
+    "invalid": [
+     "obd.gear"
+    ],
+    "expect": {
+     "active": false
+    }
+   },
+   {
+    "values": {
+     "obd.gear": 3
+    },
+    "expect": {
+     "active": true
+    }
+   }
+  ]
+ },
+ {
+  "name": "X41_invalid_first_eval_sets_latch_false",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "shared",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "conditions": [
+     {
+      "source": "obd.rpm",
+      "op": "<",
+      "value": 4000
+     }
+    ],
+    "hysteresis": 100
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {},
+    "invalid": [
+     "obd.rpm"
+    ],
+    "expect": {
+     "active": false
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 3950
+    },
+    "expect": {
+     "active": false
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 3899
+    },
+    "expect": {
+     "active": true
+    }
+   }
+  ]
+ },
+ {
+  "name": "X45a_conditions_object_uses_legacy",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "none",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "conditions": {},
+    "source": "obd.rpm",
+    "op": ">",
+    "value": 1
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 5
+    },
+    "expect": {
+     "active": true
+    }
+   }
+  ]
+ },
+ {
+  "name": "X45b_conditions_null_uses_legacy",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "none",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "conditions": null,
+    "source": "obd.rpm",
+    "op": ">",
+    "value": 1
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 5
+    },
+    "expect": {
+     "active": true
+    }
+   }
+  ]
+ },
+ {
+  "name": "X46_condition_index_latches_independent",
+  "origin": "extra-gen",
+  "api": "isRuleActive",
+  "runtime": "shared",
+  "rule": {
+   "id": "r1",
+   "when": {
+    "combine": "any",
+    "conditions": [
+     {
+      "source": "obd.rpm",
+      "op": ">=",
+      "value": 1000
+     },
+     {
+      "source": "obd.rpm",
+      "op": "<=",
+      "value": 500
+     },
+     {
+      "source": "obd.speed",
+      "op": ">",
+      "value": 50
+     },
+     {
+      "source": "obd.gear",
+      "op": "==",
+      "value": 2
+     }
+    ],
+    "hysteresis": 100
+   },
+   "apply": []
+  },
+  "steps": [
+   {
+    "values": {
+     "obd.rpm": 2000,
+     "obd.speed": 0,
+     "obd.gear": 0
+    },
+    "expect": {
+     "active": true
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 950,
+     "obd.speed": 0,
+     "obd.gear": 0
+    },
+    "expect": {
+     "active": true
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 800,
+     "obd.speed": 0,
+     "obd.gear": 0
+    },
+    "expect": {
+     "active": false
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 450,
+     "obd.speed": 0,
+     "obd.gear": 0
+    },
+    "expect": {
+     "active": false
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 550,
+     "obd.speed": 60,
+     "obd.gear": 0
+    },
+    "expect": {
+     "active": false
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 800,
+     "obd.speed": 0,
+     "obd.gear": 2
+    },
+    "expect": {
+     "active": true
+    }
+   },
+   {
+    "values": {
+     "obd.rpm": 800,
+     "obd.speed": 0,
+     "obd.gear": 3
+    },
+    "expect": {
+     "active": false
+    }
+   }
+  ]
+ },
+ {
+  "name": "X47_disabled_rule_clears_debounce_keeps_latch",
+  "origin": "extra-gen",
+  "api": "evaluatePageRules",
+  "runtime": "shared",
+  "page": {
+   "id": "p1",
+   "elements": [],
+   "rules": [
+    {
+     "id": "r1",
+     "debounceMs": 50,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 4000
+       }
+      ],
+      "hysteresis": 100
+     },
+     "apply": []
+    }
+   ]
+  },
+  "steps": [
+   {
+    "elapsedMs": 0,
+    "values": {
+     "obd.rpm": 5000
+    },
+    "expect": {
+     "activeRules": [],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 60,
+    "values": {
+     "obd.rpm": 5000
+    },
+    "expect": {
+     "activeRules": [
+      "r1"
+     ],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 70,
+    "values": {
+     "obd.rpm": 3950
+    },
+    "expect": {
+     "activeRules": [
+      "r1"
+     ],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 200,
+    "values": {
+     "obd.rpm": 3950
+    },
+    "expect": {
+     "activeRules": [
+      "r1"
+     ],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 210,
+    "values": {
+     "obd.rpm": 3000
+    },
+    "expect": {
+     "activeRules": [],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 220,
+    "values": {
+     "obd.rpm": 4050
+    },
+    "expect": {
+     "activeRules": [],
+     "overrides": {}
+    }
+   },
+   {
+    "elapsedMs": 400,
+    "values": {
+     "obd.rpm": 4200
+    },
+    "expect": {
+     "activeRules": [],
+     "overrides": {}
+    }
+   }
+  ]
+ },
+ {
+  "name": "X48_duplicate_target_ids_across_rules",
+  "origin": "extra-gen",
+  "api": "evaluatePageRules",
+  "runtime": "shared",
+  "page": {
+   "id": "p1",
+   "elements": [
+    {
+     "id": "lbl1",
+     "kind": "label"
+    }
+   ],
+   "rules": [
+    {
+     "id": "a",
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "text": "A"
+       }
+      },
+      {
+       "target": "lbl1",
+       "set": {
+        "color": "#010101"
+       }
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "debounceMs": 100,
+     "when": {
+      "conditions": [
+       {
+        "source": "obd.rpm",
+        "op": ">=",
+        "value": 1
+       }
+      ]
+     },
+     "apply": [
+      {
+       "target": "lbl1",
+       "set": {
+        "text": "B"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "steps": [
+   {
+    "elapsedMs": 0,
+    "values": {
+     "obd.rpm": 5
+    },
+    "expect": {
+     "activeRules": [
+      "a"
+     ],
+     "overrides": {
+      "lbl1": {
+       "text": "A",
+       "color": "#010101"
+      }
+     }
+    }
+   },
+   {
+    "elapsedMs": 50,
+    "values": {
+     "obd.rpm": 5
+    },
+    "expect": {
+     "activeRules": [
+      "a"
+     ],
+     "overrides": {
+      "lbl1": {
+       "text": "A",
+       "color": "#010101"
+      }
+     }
+    }
+   },
+   {
+    "elapsedMs": 100,
+    "values": {
+     "obd.rpm": 5
+    },
+    "expect": {
+     "activeRules": [
+      "a",
+      "b"
+     ],
+     "overrides": {
+      "lbl1": {
+       "text": "B",
+       "color": "#010101"
+      }
+     }
+    }
+   }
+  ]
+ }
+]

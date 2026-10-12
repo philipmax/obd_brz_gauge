@@ -89,35 +89,15 @@ void elm327_ble_disconnect(void);
 
 // WiFi OTA pause/resume: drop the ELM327 link and suppress auto-reconnect +
 // polling during OTA, so the SoftAP gets the full 2.4GHz radio; re-arm
-// auto-reconnect on exit. Call from the OTA-mode screen, not the BLE OTA path.
+// auto-reconnect on exit. Call from the OTA-mode screen.
 void elm327_ble_pause_for_ota(void);
-void elm327_ble_resume_after_ota(void);
 
 // Get the currently connected / target device name.
 const char *elm327_ble_get_connected_name(void);
 
-// ---- Oil temperature calibration API ----
-// Set the oil-temp offset (calibration compensation), in °C.
-// Example: actual oil temp is 90°C but the reading shows 92°C -> set offset = -2.
-void elm327_oil_temp_set_offset(int8_t offset_c);
-
-// Get the current oil-temp offset.
-int8_t elm327_oil_temp_get_offset(void);
-
-// Get oil-temp diagnostics (for UI display or debugging).
-typedef struct {
-    uint32_t mode0_ok;    // Mode 01 5C success count
-    uint32_t mode1_ok;    // Mode 22 10 17 success count
-    uint32_t mode2_ok;    // Mode 21 01 success count
-    uint32_t mode0_fail;  // failure count
-    uint32_t mode1_fail;
-    uint32_t mode2_fail;
-    int16_t last_raw;     // last raw reading
-    int16_t last_filtered; // last filtered reading
-    uint8_t current_mode; // current query mode (0-2)
-} elm327_oil_diag_t;
-
-void elm327_oil_temp_get_diag(elm327_oil_diag_t *out);
+// REMOVED: Old oil temperature calibration API
+// elm327_oil_temp_set_offset(), elm327_oil_temp_get_offset(), elm327_oil_temp_get_diag()
+// These are replaced by signal_store and vp_scheduler system
 
 #ifdef __cplusplus
 }

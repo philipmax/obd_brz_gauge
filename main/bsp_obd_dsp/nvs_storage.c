@@ -7,18 +7,19 @@
 #include "freertos/semphr.h"
 #include <string.h>
 #include "export_path/ui.h"
-#include "app_obd_dsp/vehicle_profiles.h"
+#include "vehicle/vp_profile.h"
+#include "vehicle/vp_loader.h"
 #include "espnow_link.h"   // ESPNOW_ROLE_* (device_role default / bounds)
 
 #define TAG                   "nvs_storage"
 #define NS_CFG                "cfg"
 #define KEY_CFG               "settings"
 #define KEY_CHART_ALARM       "chartalarm"
-#define CHART_ALARM_N         12   // = DISP_ITEM_COUNT (must stay in sync with disp_item_t in ui.c)
+#define CHART_ALARM_N         12   // = DISP_ITEM_COUNT; indexed by disp_item_t (ui_disp_item.h). Never shrink: a shorter buffer fails to load the stored 24B blob
 #define CHART_ALARM_OFF       32767 // "off" sentinel for alarm thresholds (unreachable, avoids false alarms)
 #define KEY_MG_EXTRA          "mgextra"   // multi-gauge boot animation settings
 #define KEY_CFG_VERSION       "cfgver"    // config version (missing = v0)
-#define CFG_VERSION_CURRENT   3           // current version; bump on field add/semantic change (migration in nvs_storage_init)
+#define CFG_VERSION_CURRENT   4           // current version; bump on field add/semantic change (migration in nvs_storage_init)
 
 static nvs_user_cfg_t s_cfg =   {
                         .protocol = 0, // OBD protocol select: 0=auto, 1~9=fixed, default auto
@@ -26,9 +27,8 @@ static nvs_user_cfg_t s_cfg =   {
                         .theme_cfg.user_theme_domiant_color = COLOR_DOMIANT_PINK,// legacy, unused (kept for struct layout)
                         .theme_cfg.user_theme_secondary_color = COLOR_SECONDARY_PINK,// legacy, unused
                         .ble_device_name = "", // empty = use default "OBDII"
-                        .temp_display_map = {0, 1, 2}, // CLT, IAT, OIL
-                        .info_display_map = {0, 2, 3, 4, 1}, // CLT, OIL, LOAD, TPS, IAT
-                        .brake_temp_warn_c = 600,
+                        .temp_display_map = NVS_TEMP_MAP_DEFAULT, // CLT, IAT, OIL
+                        .info_display_map = NVS_INFO_MAP_DEFAULT, // CLT, OIL, LOAD, TPS, IAT
                         .oil_pressure_warn_x10 = 80,
                         .device_role = ESPNOW_ROLE_STANDALONE, // new devices (no cfg in NVS) default to standalone (no WiFi/ESP-NOW); existing devices are overridden by load_blob
                         .rpm_warn_threshold = 6000,
@@ -38,13 +38,14 @@ static nvs_user_cfg_t s_cfg =   {
 static nvs_stat_t     s_stat = {0};   // runtime-only stats, not persisted (reset every boot to save flash)
 static SemaphoreHandle_t s_mux;
 
-// Per-item alarm thresholds (raw units), index = disp_item_t: CLT,IAT,OIL,LOD,TPS,RPM,SPD,BAT,OIP,BKT,BST
-// By default only oil pressure (8.0bar = x10 80) and brake temp (600°C = x10 6000) keep an alarm; the rest are off.
+// Per-item alarm thresholds (raw units), index = disp_item_t: CLT,IAT,OIL,LOD,TPS,RPM,SPD,BAT,OIP,RESERVED_9,BST,AFR
+// By default only oil pressure (8.0bar = x10 80) keeps an alarm; the rest are off. Slot 9 is retired (never reuse).
 static int16_t s_chart_alarm[CHART_ALARM_N] = {
     CHART_ALARM_OFF, CHART_ALARM_OFF, CHART_ALARM_OFF, CHART_ALARM_OFF,
     CHART_ALARM_OFF, CHART_ALARM_OFF, CHART_ALARM_OFF, CHART_ALARM_OFF,
-    80, 6000, CHART_ALARM_OFF
+    80, CHART_ALARM_OFF, CHART_ALARM_OFF, CHART_ALARM_OFF
 };
+_Static_assert(CHART_ALARM_N == DISP_ITEM_COUNT, "chartalarm blob is indexed by disp_item_t");
 
 // Multi-gauge boot animation settings (separate blob):
 // intro_enable 0=OFF 1=RACE 2=VIDEO (the single boot_block flashed via the phone app; default)
@@ -77,6 +78,9 @@ esp_err_t nvs_storage_init(void)
             nvs_get_blob(h, KEY_CHART_ALARM, s_chart_alarm, &sz);
             nvs_close(h);
         }
+        // Older firmware lacked the AFR initializer and persisted 0 with the whole array. The UI
+        // cannot write below 800 (nmin 8 x div 100), so treat it as unset. Idempotent, RAM only.
+        if (s_chart_alarm[DISP_ITEM_AFR] < 800) s_chart_alarm[DISP_ITEM_AFR] = CHART_ALARM_OFF;
     }
     {   // Multi-gauge boot animation settings: same as above, load if present else keep defaults.
         nvs_handle_t h; size_t sz = sizeof(s_mg);
@@ -133,6 +137,14 @@ esp_err_t nvs_storage_init(void)
                 }
                 save_blob(NS_CFG, KEY_MG_EXTRA, &s_mg, sizeof(s_mg));
             }
+            // v3 → v4: vehicle_profile_idx is no longer clamped here; the compiled-in
+            // vehicle table is replaced by the JSON profile loader (P3). New per-vehicle
+            // settings (profile id, TPMS config) live in nvs_app's "veh" namespace instead
+            // of in nvs_user_cfg_t, to avoid growing the struct (old firmware OTA safety).
+            // No migration action needed here; nvs_app_init() handles its own first-boot.
+            if (stored_ver < 4) {
+                /* placeholder: bump version only */
+            }
             // Future: if (stored_ver < 4) { ... migrate v3→v4 fields ... }
             // Write the new version number
             if (nvs_open(NS_CFG, NVS_READWRITE, &h) == ESP_OK) {
@@ -146,28 +158,30 @@ esp_err_t nvs_storage_init(void)
 
     /* Default-value repair for new fields (old NVS data has rsv[x] all zero) */
     if(s_cfg.brightness_day < 10) s_cfg.brightness_day = 100; // valid range 10-100; 0/unset/out-of-range all become 100
-    if(s_cfg.default_page > 6) s_cfg.default_page = 0; // 0=Temp,1=Info,2=Chart,3=Needle,4=Gear,5=Rpm,6=Speed (brake temp merged into Chart)
-    if(s_cfg.needle_source_idx >= 11) s_cfg.needle_source_idx = 0; // DISP_ITEM_COUNT=11 (CLT..BOOST)
+    if(s_cfg.default_page > 6) s_cfg.default_page = 0; // 0=Temp,1=Info,2=Chart,3=Needle,4=Gear,5=Rpm,6=Speed
     if(s_cfg.device_role > 2) s_cfg.device_role = ESPNOW_ROLE_STANDALONE; // role: 0=master 1=slave 2=standalone; out-of-range -> standalone
-    if(s_cfg.chart_source_idx >= 11) s_cfg.chart_source_idx = 8; // chart item out-of-range -> default OILP (old NVS byte 0=CLT is also fine, unify to OILP)
     // Clamp vehicle profile index to the registered profile count (out-of-range -> index 0)
     uint8_t vehicle_count = 0;
     vehicle_profile_get_all(&vehicle_count);
     if(vehicle_count > 0 && s_cfg.vehicle_profile_idx >= vehicle_count) s_cfg.vehicle_profile_idx = 0;
-    if(s_cfg.brake_temp_warn_c < 10 || s_cfg.brake_temp_warn_c > 1200) s_cfg.brake_temp_warn_c = 600;
     if(s_cfg.oil_pressure_warn_x10 > 100) s_cfg.oil_pressure_warn_x10 = 80;
     // 0=unset/legacy out-of-range -> default 6000; clamped here centrally so callers (ui.c / ui_ScreenPageRpmWarn.c) don't repeat the check
     if(s_cfg.rpm_warn_threshold < 1000) s_cfg.rpm_warn_threshold = 6000;
 
-    // Validate TEMP/INFO custom display-item maps: 0..(DISP_ITEM_COUNT-1)
-    for (int i = 0; i < 3; ++i) {
-        if (s_cfg.temp_display_map[i] > 11) s_cfg.temp_display_map[i] = (uint8_t)i;
-    }
-    for (int i = 0; i < 5; ++i) {
-        if (s_cfg.info_display_map[i] > 11) {
-            static const uint8_t def_map[5] = {0, 2, 3, 4, 1};
-            s_cfg.info_display_map[i] = def_map[i];
+    // Persisted disp_item_t indexes: anything not selectable (out of range or a retired slot such as
+    // DISP_ITEM_RESERVED_9) falls back to its default. Runs every boot, idempotent, RAM only
+    // (written back on the next nvs_cfg_set). The custom pages use the same defaults.
+    {
+        static const uint8_t def_temp[3] = NVS_TEMP_MAP_DEFAULT;
+        static const uint8_t def_info[5] = NVS_INFO_MAP_DEFAULT;
+        for (int i = 0; i < 3; ++i) {
+            if (!ui_disp_item_is_selectable(s_cfg.temp_display_map[i])) s_cfg.temp_display_map[i] = def_temp[i];
         }
+        for (int i = 0; i < 5; ++i) {
+            if (!ui_disp_item_is_selectable(s_cfg.info_display_map[i])) s_cfg.info_display_map[i] = def_info[i];
+        }
+        if (!ui_disp_item_is_selectable(s_cfg.needle_source_idx)) s_cfg.needle_source_idx = NVS_NEEDLE_SRC_DEFAULT;
+        if (!ui_disp_item_is_selectable(s_cfg.chart_source_idx)) s_cfg.chart_source_idx = NVS_CHART_SRC_DEFAULT;
     }
 
     s_mux = xSemaphoreCreateMutex();
@@ -221,63 +235,6 @@ void nvs_boot_mode_set(uint8_t mode){
 
 /* Statistics */
 const nvs_stat_t * nvs_stat_get(void){return &s_stat;}
-/*
- * Update driving statistics.
- * @param speed_kmh speed in km/h
- * @param dt_ms elapsed time in ms
- * @note skipped if speed is 0, or dt_ms < 1000
- */
-void nvs_stat_update_speed(uint8_t speed_kmh, uint32_t dt_ms)
-{
-    if(dt_ms<1000) return;
-    if(speed_kmh == 0) return;
-
-    xSemaphoreTake(s_mux,portMAX_DELAY);
-    /* 1. distance = v(km/h)*dt(ms)/3.6  (m) */
-    double dist_m = ((double)speed_kmh * (double)dt_ms) / 3.6e3;
-    s_stat.odometer_m += (uint64_t)dist_m;
-    s_stat.trip_m     += (uint64_t)dist_m;
-
-    /* 2. time */
-    s_stat.run_time_s += dt_ms/1000;
-    s_stat.trip_run_time_s += dt_ms/1000;
-
-    /* 3. max speed */
-    if(speed_kmh > s_stat.max_speed_kmh) s_stat.max_speed_kmh = speed_kmh;
-
-    /* 4. avg speed = trip distance / trip time (m/s) -> km/h */
-    if(s_stat.trip_run_time_s){
-        double avg_ms = (double)s_stat.trip_m / (double)s_stat.trip_run_time_s; // m/s
-        s_stat.avg_speed_kmh = (uint16_t)(avg_ms * 3.6 + 0.5);
-        if(s_stat.avg_speed_kmh > s_stat.max_speed_kmh) s_stat.avg_speed_kmh = s_stat.max_speed_kmh;
-    }
-
-    xSemaphoreGive(s_mux);
-}
-
-/*
- * Reset current-trip statistics (trip distance, max speed, avg speed, running time).
-*/
-void nvs_stat_reset_trip(void){
-    xSemaphoreTake(s_mux,portMAX_DELAY);
-    s_stat.trip_m=0;
-    s_stat.max_speed_kmh=0;
-    s_stat.avg_speed_kmh=0;
-    s_stat.run_time_s=0;
-    s_stat.trip_run_time_s=0;
-    xSemaphoreGive(s_mux);
-}
-
-/*
- * Get current-trip statistics (distance, max speed, avg speed, running time).
- * @return a snapshot of the statistics struct
-*/
-nvs_stat_t nvs_stat_get_mileage(void){
-    xSemaphoreTake(s_mux,portMAX_DELAY);
-    nvs_stat_t stat = s_stat;
-    xSemaphoreGive(s_mux);
-    return stat;
-}
 
 /* Helpers */
 static esp_err_t load_blob(const char *ns,const char *key,void *out,size_t len)
@@ -303,8 +260,11 @@ static esp_err_t load_blob(const char *ns,const char *key,void *out,size_t len)
         }
         nvs_close(h);
     }
-    memset(out,0,len);
-    return save_blob(ns,key,out,len);
+    // Fresh device: no entry in NVS. Leave `out` at its static-initialiser defaults
+    // (e.g. device_role = ESPNOW_ROLE_STANDALONE). Do NOT memset+save here — that
+    // would zero out fields the caller set at compile time and immediately persist
+    // them before the default-repair pass runs (bug #19).
+    return ESP_ERR_NVS_NOT_FOUND;
 }
 
 static esp_err_t save_blob(const char *ns,const char *key,const void *data,size_t len)

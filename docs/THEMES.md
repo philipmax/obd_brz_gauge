@@ -255,7 +255,7 @@ esptool.py --chip esp32s3 -p PORT write_flash 0x620000 my_theme.bin
 - `POST /ota/theme` — 分块上传（`X-OTA-SHA256` / `X-OTA-Size` / `X-OTA-Offset` / `X-Last` 头）
 - `POST /ota/theme/erase` — 立即擦除整个主题分区，下次开机回退内置默认主题
 
-**BLE 主题传输暂未实现**（BLE OTA 目前只支持固件与开机动画两种目标）。
+主题只能走 WiFi OTA 或 USB 烧录，没有 BLE 传输通道。
 
 ### 运行行为
 
@@ -267,24 +267,6 @@ esptool.py --chip esp32s3 -p PORT write_flash 0x620000 my_theme.bin
 - 素材从 Flash 内存映射（mmap 零拷贝），不占堆
 - 切换 / 更新主题需重启生效（与编译期主题一致）
 - API 见 [main/theme_engine/theme_interface.h](../main/theme_engine/theme_interface.h)
-
-### 主题商店（theme_store/）
-
-[theme_store/](../theme_store/) 存放**打包好、可直接推送**的主题及 App 选择器所需的元信息，
-与 `themes/`（主题源文件）分离：
-
-```
-theme_store/
-├── catalog.json           # 自动生成的索引（App 拉取这份）
-└── <theme_id>/
-    ├── info.json          # id/title/description/author/version
-    ├── preview.png        # 360×360 选择器封面图（不刷进设备）
-    └── theme.bin          # pack_theme.py 产出，恒为 4MB
-```
-
-上架流程：`pack_theme.py` 打包 → 写 `info.json` + `preview.png` →
-`python3 tools/gen_theme_store.py` 重新生成 `catalog.json`（只校验与算哈希，
-不会重打包）。
 
 ### 分区表背景
 

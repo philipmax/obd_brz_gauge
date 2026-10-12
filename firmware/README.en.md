@@ -12,9 +12,7 @@ is [partitions.csv](../partitions.csv).
 | `release/partition_table/partition-table.bin` | Partition table |
 | `release/ota_data_initial.bin` | OTA data initial partition |
 | `release/obd_brz_gauge.bin` | Application firmware |
-| `release/bootmedia.bin` | Boot animation (optional) |
 | `release/latest.json` | Release manifest (build tag + sha256) — what the app checks for updates |
-| `release/flash_address_map.txt` | Flash address quick reference |
 
 ## Flash offsets
 
@@ -24,16 +22,15 @@ is [partitions.csv](../partitions.csv).
 | `0x8000` | `release/partition_table/partition-table.bin` |
 | `0xf000` | `release/ota_data_initial.bin` |
 | `0x20000` | `release/obd_brz_gauge.bin` |
-| `0xA20000` | `release/bootmedia.bin` (optional) |
 | `0x620000` | custom theme theme.bin (optional, see [docs/THEMES.en.md](../docs/THEMES.en.md)) |
+| `0xA20000` | boot animation bootmedia.bin (optional) |
 
 ```bash
 esptool.py --chip esp32s3 -p PORT -b 460800 write_flash \
   0x0      release/bootloader/bootloader.bin \
   0x8000   release/partition_table/partition-table.bin \
   0xf000   release/ota_data_initial.bin \
-  0x20000  release/obd_brz_gauge.bin \
-  0xA20000 release/bootmedia.bin
+  0x20000  release/obd_brz_gauge.bin
 ```
 
 Note: re-run `tools/gen_release.py` (or the one-shot `tools/release.sh`)

@@ -1,8 +1,8 @@
 // ota_wifi_server.c — WiFi OTA server (SoftAP + HTTP)
 //
-// Handles the WiFi side of the BLE-handshake/WiFi-transfer OTA architecture:
-//   phone connects via BLE, gets the SoftAP credentials + session token via BLE
-//   notify, joins the AP and POSTs firmware/bootmedia over HTTP.
+// Started from the OTA mode screen: the phone joins the SoftAP, fetches the
+// session token from GET /ota/discover and POSTs firmware/bootmedia/theme over
+// HTTP.
 //
 // Coexistence with ESP-NOW (master/slave multi-gauge link):
 //   ESP-NOW runs on the STA interface in WIFI_MODE_STA on channel 1. This module
@@ -11,6 +11,7 @@
 //   and on stop merely restores the previous mode — leaving the ESP-NOW driver,
 //   peers and channel untouched.
 #include "ota_wifi_server.h"
+#include "sd_import.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -44,7 +45,6 @@
 #include "app_obd_dsp/boot_media_mount.h"
 #include "app_obd_dsp/theme_mount.h"
 #include "app_obd_dsp/device_identity.h"
-#include "bsp_obd_dsp/rs485_brake_temp.h"
 
 static const char *TAG = "ota_wifi";
 
@@ -53,9 +53,8 @@ static const char *TAG = "ota_wifi";
 #define WIFI_MAX_STA        1
 #define WIFI_CHANNEL        1              // match ESP-NOW channel: single-radio AP+STA must share a channel
 #define WIFI_PASS_LEN       8              // WPA2 PSK minimum
-// The companion app no longer uses BLE handshake.  The phone joins the SoftAP
-// manually (password is fixed) then fetches the per-session token from
-// GET /ota/discover.  Write endpoints still require the token.
+// The phone joins the SoftAP manually (password is fixed) then fetches the
+// per-session token from GET /ota/discover.  Write endpoints require the token.
 #define OTA_WIFI_PASSWORD   "88888888"
 // Socket receive staging buffer.  Kept in *internal* DRAM: httpd_req_recv()
 // copies out of the lwIP pbufs on every call, and a PSRAM destination both
@@ -66,18 +65,17 @@ static const char *TAG = "ota_wifi";
 #define OTA_RECV_CHUNK          262144     // internal-RAM staging buffer (256KB，进一步减少recv调用次数)
 #define OTA_RECV_CHUNK_PSRAM    262144     // PSRAM fallback size
 #define OTA_FLASH_WRITE_CHUNK 4096         // internal scratch buffer used for flash-safe writes
-#define OTA_PROGRESS_STEP   (64 * 1024)    // report to BLE callback every 64KB
+#define OTA_PROGRESS_STEP   (64 * 1024)    // progress status update every 64KB
 #define OTA_IDLE_TIMEOUT_US (10 * 60 * 1000000LL)  // auto-stop when no HTTP activity for 10 minutes
 // HTTPD task stack size is measured in bytes. 4 KB is the default and enough
 // for these handlers; flash operations must run from an internal-RAM task.
 #define OTA_WIFI_STACK_SIZE 8192
 
 static ota_wifi_state_t s_state = OTA_WIFI_STATE_IDLE;
-static ota_wifi_status_cb_t s_status_cb = NULL;
 static httpd_handle_t s_httpd = NULL;
 static esp_netif_t *s_ap_netif = NULL;
 static char s_token[17] = {0};
-static char s_password[17] = {0};   // random per-session WPA2 password, delivered via BLE notify
+static char s_password[17] = {0};   // SoftAP WPA2 passphrase (OTA_WIFI_PASSWORD)
 static char s_ap_ssid[33] = {0};
 static bool s_netif_owned = false;
 static bool s_event_loop_owned = false;
@@ -313,13 +311,14 @@ static void wifi_runtime_cleanup(bool restore_mode)
 /* Status notifications (also updates the idle-activity timestamp)    */
 /* ------------------------------------------------------------------ */
 
+// message/received/expected only describe the call site; /ota/status reads s_recv.
 static void notify_status(ota_wifi_state_t state, const char *message, uint32_t received, uint32_t expected)
 {
+    (void)message;
+    (void)received;
+    (void)expected;
     s_last_activity_us = esp_timer_get_time();   // any state change counts as activity
     s_state = state;
-    if (s_status_cb) {
-        s_status_cb(state, message, received, expected);
-    }
 }
 
 /* ------------------------------------------------------------------ */
@@ -509,7 +508,7 @@ static esp_err_t connectivity_check_handler(httpd_req_t *req)
 // GET /ota/discover
 // No auth: the phone must learn the per-session token before it can call any
 // authenticated endpoint.  Returning it here (after it joined the AP via the
-// fixed bootstrap passphrase) is the BLE-independent bootstrap path.
+// fixed bootstrap passphrase) is the bootstrap path.
 static esp_err_t discover_handler(httpd_req_t *req)
 {
     if (s_state == OTA_WIFI_STATE_IDLE) {
@@ -1183,6 +1182,98 @@ static esp_err_t theme_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+// GET /ota/coredump — download the raw coredump partition as a binary blob.
+// Requires auth token.  Returns 204 when the partition is blank (all 0xFF).
+static esp_err_t coredump_get_handler(httpd_req_t *req)
+{
+    if (!validate_token(req)) {
+        return send_err(req, "unauthorized");
+    }
+
+    const esp_partition_t *part = esp_partition_find_first(
+        ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_COREDUMP, "coredump");
+    if (!part) {
+        return send_err(req, "coredump partition not found");
+    }
+
+    /* Peek at the first 4 bytes; if all 0xFF the partition is blank. */
+    uint32_t magic = 0;
+    esp_err_t err = esp_partition_read(part, 0, &magic, sizeof(magic));
+    if (err != ESP_OK) {
+        return send_err(req, "partition read failed");
+    }
+    if (magic == 0xFFFFFFFFU) {
+        set_cors_headers(req);
+        httpd_resp_set_status(req, "204 No Content");
+        return httpd_resp_send(req, NULL, 0);
+    }
+
+    set_cors_headers(req);
+    httpd_resp_set_type(req, "application/octet-stream");
+    httpd_resp_set_hdr(req, "Content-Disposition", "attachment; filename=\"coredump.bin\"");
+
+    /* Stream in 4KB chunks — keep stack usage low and avoid PSRAM allocation. */
+    static uint8_t s_cd_buf[4096];
+    size_t remaining = part->size;
+    size_t offset = 0;
+
+    while (remaining > 0) {
+        size_t chunk = (remaining < sizeof(s_cd_buf)) ? remaining : sizeof(s_cd_buf);
+        err = esp_partition_read(part, offset, s_cd_buf, chunk);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "coredump partition read at %u failed: %s",
+                     (unsigned)offset, esp_err_to_name(err));
+            /* Can't send an error at this point — headers already sent.
+             * Terminate the chunked stream early. */
+            break;
+        }
+        if (httpd_resp_send_chunk(req, (const char *)s_cd_buf, (ssize_t)chunk) != ESP_OK) {
+            ESP_LOGW(TAG, "coredump send chunk failed at offset %u", (unsigned)offset);
+            break;
+        }
+        offset    += chunk;
+        remaining -= chunk;
+    }
+
+    /* Zero-length final chunk signals end of chunked transfer. */
+    httpd_resp_send_chunk(req, NULL, 0);
+    return ESP_OK;
+}
+
+// POST /ota/coredump/erase — erase the coredump partition.
+// Requires auth token.  Body is ignored.
+static esp_err_t coredump_erase_handler(httpd_req_t *req)
+{
+    if (!validate_token(req)) {
+        return send_err(req, "unauthorized");
+    }
+
+    /* Consume any body bytes so keep-alive sockets stay clean. */
+    char discard[32];
+    int remaining = req->content_len;
+    while (remaining > 0) {
+        int received = httpd_req_recv(req, discard,
+                                     remaining > (int)sizeof(discard) ? (int)sizeof(discard) : remaining);
+        if (received <= 0) break;
+        remaining -= received;
+    }
+
+    const esp_partition_t *part = esp_partition_find_first(
+        ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_COREDUMP, "coredump");
+    if (!part) {
+        return send_err(req, "coredump partition not found");
+    }
+
+    esp_err_t err = esp_partition_erase_range(part, 0, part->size);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "coredump erase failed: %s", esp_err_to_name(err));
+        return send_err(req, "erase failed");
+    }
+
+    ESP_LOGI(TAG, "coredump partition erased");
+    return send_json_response(req, 200, "{\"ok\":true}");
+}
+
 // POST /ota/bootmedia/prepare
 // App 在上传分块之前调用一次，仅验证分区容量和 PSRAM。
 // 这里绝不擦除 Flash，旧动画会保留到新数据完整校验通过。
@@ -1578,39 +1669,25 @@ static void ota_timeout_task(void *arg)
     vTaskDelete(NULL);
 }
 
-static void generate_wifi_password(void)
-{
-    // Unambiguous alphabet (no 0/O/1/l/I): 8 chars, still WPA2-PSK compliant.
-    static const char charset[] = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
-    uint8_t rnd[8];
-    esp_fill_random(rnd, sizeof(rnd));
-    for (int i = 0; i < WIFI_PASS_LEN; i++) {
-        s_password[i] = charset[rnd[i] % (sizeof(charset) - 1)];
-    }
-    s_password[WIFI_PASS_LEN] = '\0';
-}
-
 /* ------------------------------------------------------------------ */
 /* Public API                                                          */
 /* ------------------------------------------------------------------ */
 
-bool ota_wifi_server_start(ota_wifi_info_t *info, ota_wifi_status_cb_t callback)
+bool ota_wifi_server_start(ota_wifi_info_t *info)
 {
     if (s_state != OTA_WIFI_STATE_IDLE) {
         ESP_LOGW(TAG, "WiFi OTA already running");
         return false;
     }
 
-    s_status_cb = callback;
     notify_status(OTA_WIFI_STATE_STARTING, "starting", 0, 0);
-    rs485_brake_temp_pause();
 
     // 生成 SSID (带 MAC 后缀)
     uint8_t mac[6];
     esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
     snprintf(s_ap_ssid, sizeof(s_ap_ssid), "%s%02X%02X", WIFI_SSID_PREFIX, mac[4], mac[5]);
 
-    // 固定密码，App 无需 BLE 即可加入 SoftAP。
+    // 固定密码，用户手动加入 SoftAP。
     strncpy(s_password, OTA_WIFI_PASSWORD, sizeof(s_password) - 1);
     s_password[sizeof(s_password) - 1] = '\0';
 
@@ -1626,7 +1703,6 @@ bool ota_wifi_server_start(ota_wifi_info_t *info, ota_wifi_status_cb_t callback)
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "wifi runtime prepare failed: %s", esp_err_to_name(err));
         notify_status(OTA_WIFI_STATE_ERROR, "wifi runtime prepare failed", 0, 0);
-        rs485_brake_temp_resume();
         wifi_runtime_cleanup(false);
         return false;
     }
@@ -1637,7 +1713,6 @@ bool ota_wifi_server_start(ota_wifi_info_t *info, ota_wifi_status_cb_t callback)
     if (!s_ap_netif) {
         ESP_LOGE(TAG, "ap netif create failed");
         notify_status(OTA_WIFI_STATE_ERROR, "ap netif create failed", 0, 0);
-        rs485_brake_temp_resume();
         wifi_runtime_cleanup(!s_wifi_owned);
         return false;
     }
@@ -1656,7 +1731,6 @@ bool ota_wifi_server_start(ota_wifi_info_t *info, ota_wifi_status_cb_t callback)
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "wifi storage config failed: %s", esp_err_to_name(err));
             notify_status(OTA_WIFI_STATE_ERROR, "wifi storage config failed", 0, 0);
-            rs485_brake_temp_resume();
             wifi_runtime_cleanup(false);
             return false;
         }
@@ -1682,7 +1756,6 @@ bool ota_wifi_server_start(ota_wifi_info_t *info, ota_wifi_status_cb_t callback)
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "wifi mode set failed: %s", esp_err_to_name(err));
         notify_status(OTA_WIFI_STATE_ERROR, "wifi mode set failed", 0, 0);
-        rs485_brake_temp_resume();
         wifi_runtime_cleanup(!s_wifi_owned);
         return false;
     }
@@ -1691,7 +1764,6 @@ bool ota_wifi_server_start(ota_wifi_info_t *info, ota_wifi_status_cb_t callback)
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "wifi config failed: %s", esp_err_to_name(err));
         notify_status(OTA_WIFI_STATE_ERROR, "wifi config failed", 0, 0);
-        rs485_brake_temp_resume();
         wifi_runtime_cleanup(!s_wifi_owned);
         return false;
     }
@@ -1703,7 +1775,6 @@ bool ota_wifi_server_start(ota_wifi_info_t *info, ota_wifi_status_cb_t callback)
         } else {
             ESP_LOGE(TAG, "wifi start failed: %s", esp_err_to_name(err));
             notify_status(OTA_WIFI_STATE_ERROR, "wifi start failed", 0, 0);
-            rs485_brake_temp_resume();
             wifi_runtime_cleanup(!s_wifi_owned);
             return false;
         }
@@ -1733,11 +1804,13 @@ bool ota_wifi_server_start(ota_wifi_info_t *info, ota_wifi_status_cb_t callback)
     config.recv_wait_timeout = 2;                  // 2s per recv call, Content-Length模式下不应该超时
     config.send_wait_timeout = 300;
     // Reduce httpd memory usage
-    config.max_uri_handlers = 20;                    // 18 handlers (incl. OPTIONS preflight for POST routes), +2 headroom
+    config.max_uri_handlers = 20;                    // ~15 handlers after OPTIONS consolidation, +5 headroom for /api/v1
     config.max_resp_headers = 4;                     // minimal headers
     config.max_open_sockets = 7;                     // max allowed by LWIP_MAX_SOCKETS (10 - 3 internal)
     config.backlog_conn = 5;                         // accept队列长度
     config.lru_purge_enable = true;                  // 启用LRU清理，自动关闭空闲连接
+    config.uri_match_fn = httpd_uri_match_wildcard;  // enable wildcard matching for OPTIONS catch-all
+    config.max_req_hdr_len = 1024;                   // enough for OTA custom headers + Accept/Content-Type
 
     err = httpd_start(&s_httpd, &config);
     if (err != ESP_OK) {
@@ -1745,7 +1818,6 @@ bool ota_wifi_server_start(ota_wifi_info_t *info, ota_wifi_status_cb_t callback)
                  esp_err_to_name(err),
                  (unsigned long)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
         notify_status(OTA_WIFI_STATE_ERROR, "httpd start failed", 0, 0);
-        rs485_brake_temp_resume();
         wifi_runtime_cleanup(!s_wifi_owned);
         return false;
     }
@@ -1803,28 +1875,12 @@ bool ota_wifi_server_start(ota_wifi_info_t *info, ota_wifi_status_cb_t callback)
     };
     httpd_register_uri_handler(s_httpd, &firmware_uri);
 
-    // CORS preflight: browsers send OPTIONS before POST when custom headers are used.
-    // Without these, the WebView fetch preflight fails and the upload is blocked.
-    httpd_uri_t firmware_opt_uri = {
-        .uri = "/ota/firmware",
-        .method = HTTP_OPTIONS,
-        .handler = options_handler,
-    };
-    httpd_register_uri_handler(s_httpd, &firmware_opt_uri);
-
     httpd_uri_t bootmedia_prepare_uri = {
         .uri = "/ota/bootmedia/prepare",
         .method = HTTP_POST,
         .handler = bootmedia_prepare_handler,
     };
     httpd_register_uri_handler(s_httpd, &bootmedia_prepare_uri);
-
-    httpd_uri_t bootmedia_prepare_opt_uri = {
-        .uri = "/ota/bootmedia/prepare",
-        .method = HTTP_OPTIONS,
-        .handler = options_handler,
-    };
-    httpd_register_uri_handler(s_httpd, &bootmedia_prepare_opt_uri);
 
     httpd_uri_t bootmedia_uri = {
         .uri = "/ota/bootmedia",
@@ -1833,26 +1889,12 @@ bool ota_wifi_server_start(ota_wifi_info_t *info, ota_wifi_status_cb_t callback)
     };
     httpd_register_uri_handler(s_httpd, &bootmedia_uri);
 
-    httpd_uri_t bootmedia_opt_uri = {
-        .uri = "/ota/bootmedia",
-        .method = HTTP_OPTIONS,
-        .handler = options_handler,
-    };
-    httpd_register_uri_handler(s_httpd, &bootmedia_opt_uri);
-
     httpd_uri_t theme_prepare_uri = {
         .uri = "/ota/theme/prepare",
         .method = HTTP_POST,
         .handler = theme_prepare_handler,
     };
     httpd_register_uri_handler(s_httpd, &theme_prepare_uri);
-
-    httpd_uri_t theme_prepare_opt_uri = {
-        .uri = "/ota/theme/prepare",
-        .method = HTTP_OPTIONS,
-        .handler = options_handler,
-    };
-    httpd_register_uri_handler(s_httpd, &theme_prepare_opt_uri);
 
     httpd_uri_t theme_erase_uri = {
         .uri = "/ota/theme/erase",
@@ -1861,13 +1903,6 @@ bool ota_wifi_server_start(ota_wifi_info_t *info, ota_wifi_status_cb_t callback)
     };
     httpd_register_uri_handler(s_httpd, &theme_erase_uri);
 
-    httpd_uri_t theme_erase_opt_uri = {
-        .uri = "/ota/theme/erase",
-        .method = HTTP_OPTIONS,
-        .handler = options_handler,
-    };
-    httpd_register_uri_handler(s_httpd, &theme_erase_opt_uri);
-
     httpd_uri_t theme_uri = {
         .uri = "/ota/theme",
         .method = HTTP_POST,
@@ -1875,12 +1910,28 @@ bool ota_wifi_server_start(ota_wifi_info_t *info, ota_wifi_status_cb_t callback)
     };
     httpd_register_uri_handler(s_httpd, &theme_uri);
 
-    httpd_uri_t theme_opt_uri = {
-        .uri = "/ota/theme",
+    httpd_uri_t coredump_get_uri = {
+        .uri = "/ota/coredump",
+        .method = HTTP_GET,
+        .handler = coredump_get_handler,
+    };
+    httpd_register_uri_handler(s_httpd, &coredump_get_uri);
+
+    httpd_uri_t coredump_erase_uri = {
+        .uri = "/ota/coredump/erase",
+        .method = HTTP_POST,
+        .handler = coredump_erase_handler,
+    };
+    httpd_register_uri_handler(s_httpd, &coredump_erase_uri);
+
+    // CORS preflight: one wildcard OPTIONS handler covers all routes.
+    // httpd_uri_match_wildcard is enabled in config above.
+    httpd_uri_t options_wildcard_uri = {
+        .uri = "/*",
         .method = HTTP_OPTIONS,
         .handler = options_handler,
     };
-    httpd_register_uri_handler(s_httpd, &theme_opt_uri);
+    httpd_register_uri_handler(s_httpd, &options_wildcard_uri);
 
     // 填充 info
     strncpy(info->ssid, s_ap_ssid, sizeof(info->ssid) - 1);
@@ -1889,12 +1940,9 @@ bool ota_wifi_server_start(ota_wifi_info_t *info, ota_wifi_status_cb_t callback)
     strncpy(info->token, s_token, sizeof(info->token) - 1);
     info->port = WIFI_PORT;
 
-    // The caller sends the single final wifi-ready BLE notification after
-    // receiving these generated credentials.  Do not emit an intermediate
-    // READY callback here; it cannot contain the SSID/password and wastes a
-    // BLE controller notification buffer.
     s_state = OTA_WIFI_STATE_READY;
     s_last_activity_us = esp_timer_get_time();
+    sd_import_set_ota_active(true);   /* suppress SD import scanning while OTA is running */
     ESP_LOGI(TAG, "WiFi OTA started: SSID=%s IP=%s", s_ap_ssid, info->ip);
 
     // 启动空闲超时 watchdog
@@ -1938,17 +1986,15 @@ void ota_wifi_server_stop(void)
         }
     }
 
-    rs485_brake_temp_resume();
-
     // netif / event loop belong to other subsystems too (ESP-NOW) — do not delete.
 
     memset(s_token, 0, sizeof(s_token));
     memset(s_password, 0, sizeof(s_password));
     memset(s_ap_ssid, 0, sizeof(s_ap_ssid));
-    s_status_cb = NULL;
     s_wifi_owned = false;
     s_prev_wifi_mode = WIFI_MODE_NULL;
     s_state = OTA_WIFI_STATE_IDLE;
+    sd_import_set_ota_active(false);  /* resume SD import scanning */
     ESP_LOGI(TAG, "WiFi OTA stopped");
 }
 

@@ -13,6 +13,13 @@ typedef struct {
     uint8_t rsv[4];         // reserved for future use
 } theme_cfg_t;
 
+// Factory display-item defaults (disp_item_t values). Also the fallback for a stored
+// index that is not ui_disp_item_is_selectable() (nvs_storage_init + custom pages).
+#define NVS_TEMP_MAP_DEFAULT    {0, 1, 2}         // CLT, IAT, OIL
+#define NVS_INFO_MAP_DEFAULT    {0, 2, 3, 4, 1}   // CLT, OIL, LOAD, TPS, IAT
+#define NVS_NEEDLE_SRC_DEFAULT  0                 // CLT
+#define NVS_CHART_SRC_DEFAULT   8                 // OILP
+
 /*------------------ User configuration (written only when changed) ------------------*/
 typedef struct {
     uint8_t protocol;      // OBD protocol: 0=auto, 1~9=fixed
@@ -21,7 +28,7 @@ typedef struct {
     uint8_t default_page;   // default boot page: 0=Temp, 1=Info, 2=Chart, 3=Needle, 4=Gear, 5=RPM, 6=Speed
     uint8_t brightness_day; // brightness 10-100, 0=unset (use 100)
     uint8_t vehicle_profile_idx; // vehicle profile index, 0=OBD2 Generic (full list in vehicle_profiles.c)
-    uint16_t brake_temp_warn_c; // brake temp warning threshold, °C (x1)
+    uint16_t rsv_brake_temp_warn_c; // retired, layout only (offset 60, never reuse)
     uint16_t oil_pressure_warn_x10; // oil pressure warning threshold, 0.1bar
     uint8_t temp_display_map[3]; // TEMP page, 3 rows display-item mapping
     uint8_t info_display_map[5]; // INFO page, 5-cell display-item mapping
@@ -36,7 +43,7 @@ typedef struct {
                                  // see the load_blob grow logic comment in nvs_storage.c.
     uint8_t rpm_warn_linked_en;  // multi-gauge linked flash: 0=off 1=on (gauges turn red in sequence by
                                  // position, then all flash at threshold; logic in ui.c)
-    uint8_t rc_enabled;          // RaceChrono BLE service: 0=off (minimal mode), 1=on (full RC+Pair+Info+OTA)
+    uint8_t rc_enabled;          // RaceChrono BLE service: 0=off (minimal mode: Pair on MASTER only), 1=on (RC+Pair)
                                  // NOTE: new fields MUST be appended at the END of this struct;
                                  // see the load_blob grow logic comment in nvs_storage.c.
 } nvs_user_cfg_t;
@@ -74,6 +81,3 @@ void    nvs_boot_mode_set(uint8_t mode);
 
 /* Runtime statistics accessors */
 const nvs_stat_t * nvs_stat_get(void);
-void nvs_stat_reset_trip(void);
-void nvs_stat_update_speed(uint8_t speed_kmh,uint32_t dt_ms);
-nvs_stat_t nvs_stat_get_mileage(void);

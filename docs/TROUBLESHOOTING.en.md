@@ -154,7 +154,7 @@ the **CHART page**; the log tag is `brake_temp`.
    path follow the profile) Is the BLE device name the intended adapter?
 3. Repeated init failures or NVS errors in the log: reflash over USB (a full
    first flash erases NVS anyway); for WiFi OOM crashes in master/slave mode,
-   run `python3 fix_nvs.py` to reset the role to standalone
+   set Settings → MULTI-GAUGE back to standalone (takes effect after reboot)
 
 ## Log keywords
 

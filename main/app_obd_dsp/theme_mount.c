@@ -11,17 +11,13 @@
 #include <string.h>
 #include "esp_log.h"
 #include "esp_partition.h"
+#include "app_obd_dsp/flash_partition_utils.h"
 
 static const char *TAG = "theme_mount";
 
 #define THEME_PARTITION_LABEL  "theme_0"
-#define THEME_WRITE_SCRATCH    16384  // 16 KB internal-RAM scratch buffer.
-                                       // PSRAM sources are not safe during
-                                       // flash operations; copy into this
-                                       // buffer first.
 
 static const esp_partition_t *s_part = NULL;
-static uint8_t s_flash_write_buf[THEME_WRITE_SCRATCH];
 
 static const esp_partition_t *get_partition(void)
 {
@@ -76,20 +72,5 @@ esp_err_t theme_raw_write(uint32_t offset, const uint8_t *data, size_t len)
         return ESP_ERR_INVALID_SIZE;
     }
 
-    size_t copied = 0;
-    while (copied < len) {
-        size_t copy_len = len - copied;
-        if (copy_len > sizeof(s_flash_write_buf)) {
-            copy_len = sizeof(s_flash_write_buf);
-        }
-        memcpy(s_flash_write_buf, data + copied, copy_len);
-        esp_err_t err = esp_partition_write(p, offset + copied, s_flash_write_buf, copy_len);
-        if (err != ESP_OK) {
-            ESP_LOGE(TAG, "write failed at offset=%lu: %s",
-                     (unsigned long)(offset + copied), esp_err_to_name(err));
-            return err;
-        }
-        copied += copy_len;
-    }
-    return ESP_OK;
+    return flash_part_write_safe(p, offset, data, len);
 }

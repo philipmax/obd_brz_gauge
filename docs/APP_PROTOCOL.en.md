@@ -2,23 +2,25 @@
 
 English | [简体中文](APP_PROTOCOL.md)
 
-The BLE services and WiFi HTTP API the device exposes in OTA mode. For the
-user-facing flashing and update flow see [FLASH.en.md](FLASH.en.md).
+The WiFi HTTP API the device exposes in OTA mode. For the user-facing
+flashing and update flow see [FLASH.en.md](FLASH.en.md).
 
 ## What the device exposes in OTA mode
 
 After entering OTA mode via **version page → OTA button**:
 
-- The OTA BLE service (`0x1FFB`)
 - A WiFi SoftAP: SSID `OBD-Gauge-OTA-XXXX` (last two MAC bytes), password
-  `obd2024`, IP `192.168.4.1`, port 80
+  `88888888`, IP `192.168.4.1`, port 80
 - A fresh random 16-hex-char token per session, used for HTTP authentication
 
-## BLE device-manifest service (read-only 0x1FFA)
+Entering OTA mode releases Bluetooth entirely; the device offers no BLE OTA /
+manifest service. Leaving OTA mode reboots the device.
+
+## Device manifest (`GET /ota/info`)
 
 Used by the app for hardware compatibility checks before flashing:
 
-- Service UUID: `0x1FFA`, characteristic UUID: `0x0001`
+- No authentication; available in OTA mode
 - Payload: UTF-8 JSON (512-byte cap; only fields the app actually uses)
 
 ```json
@@ -47,34 +49,22 @@ Used by the app for hardware compatibility checks before flashing:
 against `latest.json` to decide whether an update exists. If any hardware
 field differs from the selected release, the app must refuse to flash.
 
-## BLE OTA service (0x1FFB)
-
-- Service UUID `0x1FFB`; control characteristic `0x0001`, data `0x0002`,
-  status `0x0003`
-- Control packets: magic `OTA1`; commands `begin` / `end` / `cancel`;
-  target `firmware` or `bootmedia`; little-endian u32 size; raw 32-byte
-  SHA256; length-prefixed UTF-8 filename
-- Control command `4` = start WiFi OTA mode (faster for large payloads); the
-  device replies on the status characteristic with JSON:
-
-```json
-{"ssid":"OBD-Gauge-OTA-ABCD","password":"obd2024","ip":"192.168.4.1","token":"a1b2c3d4e5f6a7b8","port":80}
-```
-
-The BLE status characteristic mirrors WiFi OTA progress: `wifi-starting` /
-`wifi-ready` / `wifi-receiving` / `wifi-done` / `wifi-error`.
-
 ## WiFi OTA HTTP API
 
 Once the app has joined the device SoftAP, transfers go over HTTP (every
-endpoint also answers OPTIONS preflight).
+endpoint also answers OPTIONS preflight). First call the unauthenticated
+`GET /ota/discover` to get this session's token:
 
-**Common header**: `X-OTA-Token: <16-hex token from the BLE handshake>`
+```json
+{"ssid":"OBD-Gauge-OTA-ABCD","password":"88888888","ip":"192.168.4.1","token":"a1b2c3d4e5f6a7b8","port":80}
+```
+
+**Common header**: `X-OTA-Token: <16-hex token returned by GET /ota/discover>` (`/ota/discover` and `/ota/info` need no token)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/ota/discover` | GET | LAN discovery |
-| `/ota/info` | GET | Device manifest JSON (same as BLE `0x1FFA`)|
+| `/ota/discover` | GET | LAN discovery; returns SoftAP info and the token |
+| `/ota/info` | GET | Device manifest JSON (format above)|
 | `/ota/status` | GET | `{"state":"ready\|receiving\|done\|error","received":N,"expected":M}` |
 | `/ota/firmware` | POST | Firmware upload |
 | `/ota/bootmedia/prepare` | POST | Boot-animation preflight |
@@ -82,6 +72,8 @@ endpoint also answers OPTIONS preflight).
 | `/ota/theme/prepare` | POST | Theme preflight (returns mount status, no erase)|
 | `/ota/theme` | POST | Chunked theme upload |
 | `/ota/theme/erase` | POST | Erase the theme partition; falls back to the default theme on next boot |
+| `/ota/coredump` | GET | Download the raw coredump partition as a binary blob; returns 204 when blank |
+| `/ota/coredump/erase` | POST | Erase the coredump partition |
 
 Per-endpoint upload headers:
 

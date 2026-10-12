@@ -6,12 +6,15 @@
 #include "../ui.h"
 #include <string.h>
 #include "bsp_obd_dsp/nvs_storage.h"
-#include "app_obd_dsp/vehicle_profiles.h"
+#include "vehicle/vp_profile.h"
+#include "vehicle/vp_loader.h"
 
-// Selectable chart data sources (disp_item_t values). DISP_ITEM_BOOST=10 is appended only for turbo profiles, DISP_ITEM_AFR=11 for all profiles.
-#define CHART_ITEM_BOOST 10
-#define CHART_ITEM_AFR   11
-static const uint8_t k_chart_sources_base[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, CHART_ITEM_AFR}; // CLT,IAT,OIL,LOD,TPS,RPM,SPD,BAT,OIP,BKT,AFR
+// Selectable chart data sources (disp_item_t values). DISP_ITEM_BOOST is appended only for turbo profiles;
+// DISP_ITEM_RESERVED_9 is retired and never listed.
+static const uint8_t k_chart_sources_base[] = {
+    DISP_ITEM_CLT, DISP_ITEM_IAT, DISP_ITEM_OIL, DISP_ITEM_LOAD, DISP_ITEM_TPS, DISP_ITEM_RPM,
+    DISP_ITEM_SPEED, DISP_ITEM_BAT, DISP_ITEM_OILP, DISP_ITEM_AFR,
+};
 #define CHART_BASE_COUNT (sizeof(k_chart_sources_base) / sizeof(k_chart_sources_base[0]))
 
 static uint8_t s_chart_sources[CHART_BASE_COUNT + 1];
@@ -24,9 +27,9 @@ static void build_chart_sources(void)
     for (uint8_t i = 0; i < CHART_BASE_COUNT; i++) {
         s_chart_sources[s_chart_source_count++] = k_chart_sources_base[i];
     }
-    const vehicle_profile_t *vp = vehicle_profile_get_active();
+    const vp_profile_t *vp = vp_loader_get_active();
     if (vp && vp->has_boost) {
-        s_chart_sources[s_chart_source_count++] = CHART_ITEM_BOOST;
+        s_chart_sources[s_chart_source_count++] = DISP_ITEM_BOOST;
     }
 }
 

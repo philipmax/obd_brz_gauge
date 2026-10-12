@@ -60,7 +60,7 @@
 | VEHICLE | 17 个车型配置，切换立即生效（影响挡位识别、油温策略、协议锁定等）|
 | THEME | 编译期内置主题（default / amber / ocean 及社区主题），选中后**自动重启生效** |
 | 亮度 | 10–100% |
-| RACECHRONO | ON=完整 BLE 服务（RaceChrono + 配对 + OTA）；OFF=最小模式（仅 Info + OTA 服务，不广播），省内存 |
+| RACECHRONO | ON=完整 BLE 服务（RaceChrono + 配对）；OFF=最小模式（主表只保留配对服务并广播，其他角色不开 BLE 服务、不广播），省内存 |
 | 下滑 → MULTI-GAUGE | 三连表角色设置（见下）|
 
 所有设置存 NVS 断电不丢。里程 / 行程统计只在本轮通电内累计，重启清零。
@@ -102,12 +102,12 @@
 配套 App（`android_app/app-debug.apk`）支持三种推送，都需要先在仪表
 **版本页 → OTA 按钮** 进入 OTA 模式：
 
-- **固件升级**：BLE 握手 → WiFi 热点（`OBD-Gauge-OTA-XXXX`，密码 `obd2024`）高速传输，
+- **固件升级**：手机连仪表 WiFi 热点（`OBD-Gauge-OTA-XXXX`，密码 `88888888`）高速传输，
   写入备用 OTA 槽；新固件启动 15 秒自检通过才标记有效，失败自动回滚
 - **开机动画**：App 内裁切视频、编码后上传
 - **主题包**：推送运行时主题到 theme_0 分区（见 [THEMES.md](THEMES.md)）
 
-设备会通过 BLE 只读清单服务（`0x1FFA`）暴露硬件 / 构建信息，App 刷写前自动做兼容校验，
+设备通过 `GET /ota/info` 暴露硬件 / 构建信息，App 刷写前自动做兼容校验，
 硬件不匹配会拒绝刷写。协议细节见 [APP_PROTOCOL.md](APP_PROTOCOL.md)。
 
 ## 外接传感器（可选）

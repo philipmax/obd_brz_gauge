@@ -8,7 +8,6 @@
 #include "../ui_ext.h"
 #include "app_obd_dsp/device_identity.h"
 #include "app_obd_dsp/ota_wifi_server.h"
-#include "bsp_obd_dsp/rs485_brake_temp.h"
 #include "bsp_obd_dsp/elm327_ble_client.h"
 #include "bsp_obd_dsp/espnow_link.h"
 #include "freertos/FreeRTOS.h"
@@ -26,6 +25,9 @@ static const char *TAG = "ota_mode";
 lv_obj_t *ui_ScreenPageOTAMode = NULL;
 lv_obj_t *ui_LabelOTAModeStatus = NULL;
 lv_obj_t *ui_LabelOTAModeVersion = NULL;
+
+// Internal reference to WiFi SSID label for dynamic updates
+static lv_obj_t *s_label_wifi_ssid = NULL;
 
 static void ui_event_ota_mode_background(lv_event_t *e);
 
@@ -64,13 +66,13 @@ void ui_ScreenPageOTAMode_screen_init(void)
     lv_obj_set_style_text_align(ui_LabelOTAModeVersion, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_align(ui_LabelOTAModeVersion, LV_ALIGN_TOP_MID, 0, 120);
 
-    // WiFi AP info
-    lv_obj_t *label_name = lv_label_create(ui_ScreenPageOTAMode);
-    lv_label_set_text(label_name, "WiFi: OBD-Gauge-OTA-xxxx");
-    lv_obj_set_style_text_font(label_name, &ui_font_FontTypoderSize16, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_color(label_name, lv_color_hex(0x00CC66), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_align(label_name, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_align(label_name, LV_ALIGN_CENTER, 0, 40);
+    // WiFi AP info (will be updated with real SSID when OTA server starts)
+    s_label_wifi_ssid = lv_label_create(ui_ScreenPageOTAMode);
+    lv_label_set_text(s_label_wifi_ssid, "WiFi: Starting...");
+    lv_obj_set_style_text_font(s_label_wifi_ssid, &ui_font_FontTypoderSize16, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_color(s_label_wifi_ssid, lv_color_hex(0x00CC66), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_align(s_label_wifi_ssid, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_align(s_label_wifi_ssid, LV_ALIGN_CENTER, 0, 40);
 
     // Password hint
     lv_obj_t *label_pass = lv_label_create(ui_ScreenPageOTAMode);
@@ -99,8 +101,6 @@ void ui_ScreenPageOTAMode_screen_init(void)
     lv_obj_move_foreground(spinner_ring);
     lv_obj_add_event_cb(ui_ScreenPageOTAMode, ui_event_ota_mode_background, LV_EVENT_ALL, NULL);
 
-    rs485_brake_temp_pause();
-
     // Drop the ELM327 BLE link for the duration of the OTA: the GATT client keeps
     // re-scanning/reconnecting in the background and steals the single 2.4GHz
     // radio from the SoftAP, stalling the upload mid-transfer.
@@ -116,16 +116,27 @@ void ui_ScreenPageOTAMode_screen_init(void)
     // OTA mode does not need BLE, and all exit paths reboot, so release it fully.
     ota_wifi_server_release_bt();
 
-    // Start WiFi SoftAP + HTTP server immediately (no BLE handshake needed)
+    // Start WiFi SoftAP + HTTP server immediately
     ESP_LOGI(TAG, "Starting WiFi OTA server from OTA mode screen");
     ota_wifi_info_t info = {0};
-    if (!ota_wifi_server_start(&info, NULL)) {
+    if (!ota_wifi_server_start(&info)) {
         ESP_LOGE(TAG, "Failed to start WiFi OTA server");
-        rs485_brake_temp_resume();
         if (ui_LabelOTAModeStatus) {
             lv_label_set_text(ui_LabelOTAModeStatus, "WiFi start failed");
             lv_obj_set_style_text_color(ui_LabelOTAModeStatus, lv_color_hex(0xFF0000), LV_PART_MAIN | LV_STATE_DEFAULT);
         }
+        if (s_label_wifi_ssid) {
+            lv_label_set_text(s_label_wifi_ssid, "WiFi: Failed to start");
+            lv_obj_set_style_text_color(s_label_wifi_ssid, lv_color_hex(0xFF0000), LV_PART_MAIN | LV_STATE_DEFAULT);
+        }
+    } else {
+        // Update SSID label with real WiFi AP name (REFACTOR_PLAN.md P3 #235)
+        if (s_label_wifi_ssid) {
+            char ssid_text[64];
+            snprintf(ssid_text, sizeof(ssid_text), "WiFi: %s", info.ssid);
+            lv_label_set_text(s_label_wifi_ssid, ssid_text);
+        }
+        ESP_LOGI(TAG, "WiFi OTA server started: SSID=%s, IP=%s:%d", info.ssid, info.ip, info.port);
     }
 }
 
@@ -139,7 +150,6 @@ static void exit_ota_mode(void)
 {
     ESP_LOGI(TAG, "Exiting OTA mode, stopping WiFi server");
     ota_wifi_server_stop();
-    rs485_brake_temp_resume();
 
     ESP_LOGI(TAG, "Rebooting to restore BLE (BT controller was released for the OTA radio)");
     // Give the WiFi teardown and the log line a moment to drain.

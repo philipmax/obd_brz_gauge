@@ -17,8 +17,6 @@
 #include "esp_mac.h"
 
 #include "app_obd_dsp/obd_data_cache.h"
-#include "app_obd_dsp/device_identity.h"
-#include "app_obd_dsp/ota_update_ble.h"
 #include "bsp_obd_dsp/nvs_storage.h"
 #include "bsp_obd_dsp/espnow_link.h"
 #include "bsp_obd_dsp/gauge_pair_ble_client.h"   // GAUGE_PAIR_SERVICE_UUID / GAUGE_PAIR_CHAR_MAC (shared with the slave-gauge pairing client)
@@ -31,9 +29,6 @@
 #define RC_SERVICE_UUID  0x1FF8
 #define RC_CHAR_CAN_MAIN 0x0001
 #define RC_CHAR_FILTER   0x0002
-
-#define DEVICE_INFO_SERVICE_UUID 0x1FFA
-#define DEVICE_INFO_CHAR_MANIFEST 0x0001
 
 #define RC_CH_MAX 9
 #define RC_PID_RULE_MAX 24
@@ -54,8 +49,7 @@ static uint16_t s_conn_id = 0;
 static bool s_connected = false;
 static bool s_notify_enabled = false;
 static bool s_started = false;
-static bool s_rc_enabled = true;          // when false, skip RC (0x1FF8) + Pair (0x1FF9), only create Info (0x1FFA) + OTA (0x1FFB)
-static bool s_ota_mode = false;           // when true, advertise the OTA advert (Info+OTA UUIDs); entered from the OTA mode screen
+static bool s_rc_enabled = true;          // when false, skip RC (0x1FF8); only a MASTER publishes Pair (0x1FF9)
 static bool s_adv_config_done = false;
 static bool s_attr_ready = false;
 static bool s_adv_start_pending = false;
@@ -86,7 +80,7 @@ static obd_data_snapshot_t s_stream_snapshot;
 #define RC_PID_LOAD_X10     0x0000F106u
 #define RC_PID_TPS_X10      0x0000F107u
 #define RC_PID_BAT_MV       0x0000F108u
-#define RC_PID_BRAKE_X10    0x0000F109u
+#define RC_PID_F109_RETIRED 0x0000F109u   // F109 retired (was brake temp), never reuse
 
 enum {
     IDX_SVC,
@@ -108,13 +102,6 @@ enum {
     IDX_PAIR_NB,
 };
 
-enum {
-    IDX_INFO_SVC,
-    IDX_INFO_CHAR_MANIFEST,
-    IDX_INFO_CHAR_VAL_MANIFEST,
-    IDX_INFO_NB,
-};
-
 static const uint16_t s_attr_uuid_primary_service = ESP_GATT_UUID_PRI_SERVICE;
 static const uint16_t s_attr_uuid_char_declare = ESP_GATT_UUID_CHAR_DECLARE;
 static const uint16_t s_attr_uuid_char_client_cfg = ESP_GATT_UUID_CHAR_CLIENT_CONFIG;
@@ -133,12 +120,6 @@ static uint16_t s_pair_service_uuid = GAUGE_PAIR_SERVICE_UUID;
 static uint16_t s_char_uuid_pair_mac = GAUGE_PAIR_CHAR_MAC;
 static uint8_t s_pair_mac[6] = {0};   // this device's ESP-NOW/WiFi MAC; only meaningful in the MASTER role
 
-static uint16_t s_info_service_uuid = DEVICE_INFO_SERVICE_UUID;
-static uint16_t s_char_uuid_manifest = DEVICE_INFO_CHAR_MANIFEST;
-static uint8_t s_manifest_blob[512] = {0};
-static uint16_t s_manifest_len = 0;
-static uint16_t s_handle_manifest = 0;
-
 // Advertising/GAP device name: the MASTER role advertises "SkyGauge-XXYY" (for slave-gauge pairing discovery), otherwise keeps "SkyGarageRC" (for the RaceChrono phone app).
 static char s_adv_name[20] = RC_DEVICE_NAME;
 
@@ -146,22 +127,12 @@ static uint8_t s_adv_raw[] = {
     0x02, 0x01, 0x06,                    // Flags: LE General Discoverable + BR/EDR not supported
     0x05, 0x03, 0xF8, 0x1F, 0xF9, 0x1F   // Complete List of 16-bit Service UUIDs: 0x1FF8 (RC), 0x1FF9 (Pair)
 };
-// OTA advert is built at runtime (the name varies by role): Flags + Info/OTA UUIDs +
-// Complete Local Name. The name lives in the MAIN advert packet (not only in the scan
-// response) so every phone OS / Web Bluetooth scanner can match namePrefix filters
-// reliably — some stacks never merge scan-response data into the filter.
-static uint8_t s_adv_raw_ota[31];
-static uint8_t s_adv_raw_ota_len = 0;
+// Pair-only advert (MASTER with RaceChrono off), built at runtime because the name varies:
+// Flags + Pair UUID + Complete Local Name. The name is also in the main packet, not only in
+// the scan response.
+static uint8_t s_adv_raw_pair[31];
+static uint8_t s_adv_raw_pair_len = 0;
 static uint8_t s_scan_rsp_raw[31] = {0};
-
-static void prepare_device_info_manifest(void)
-{
-    const char *json = device_identity_manifest_json();
-    size_t len = strnlen(json, sizeof(s_manifest_blob) - 1);
-    memcpy(s_manifest_blob, json, len);
-    s_manifest_blob[len] = '\0';
-    s_manifest_len = (uint16_t)len;
-}
 
 // Decide the advertising name and pairing MAC characteristic content based on the current device_role; called once before the startup flow / role change.
 static void build_adv_identity(void)
@@ -203,22 +174,21 @@ static uint32_t build_scan_rsp_with_name(void)
     return (uint32_t)(2 + name_len);
 }
 
-// Build the OTA advert: Flags + Info/OTA service UUIDs + Complete Local Name.
-static void build_ota_adv_data(void)
+// Build the pair-only advert: Flags + Pair service UUID + Complete Local Name.
+static void build_pair_adv_data(void)
 {
     size_t name_len = strlen(s_adv_name);
-    if (name_len > 20) {
-        name_len = 20;   // keep total <= 31: 3 (flags) + 6 (uuid list) + 2 (name header) + name
+    if (name_len > 22) {
+        name_len = 22;   // keep total <= 31: 3 (flags) + 4 (uuid list) + 2 (name header) + name
     }
-    uint8_t *p = s_adv_raw_ota;
+    uint8_t *p = s_adv_raw_pair;
     *p++ = 0x02; *p++ = 0x01; *p++ = 0x06;          // Flags
-    *p++ = 0x05; *p++ = 0x03;                        // Complete List of 16-bit Service UUIDs
-    *p++ = 0xFA; *p++ = 0x1F;                        // 0x1FFA device info
-    *p++ = 0xFB; *p++ = 0x1F;                        // 0x1FFB OTA
+    *p++ = 0x03; *p++ = 0x03;                        // Complete List of 16-bit Service UUIDs
+    *p++ = 0xF9; *p++ = 0x1F;                        // 0x1FF9 Pair
     *p++ = (uint8_t)(1 + name_len); *p++ = 0x09;     // Complete Local Name
     memcpy(p, s_adv_name, name_len);
     p += name_len;
-    s_adv_raw_ota_len = (uint8_t)(p - s_adv_raw_ota);
+    s_adv_raw_pair_len = (uint8_t)(p - s_adv_raw_pair);
 }
 
 static void request_adv_config(void)
@@ -231,13 +201,13 @@ static void request_adv_config(void)
 
     const uint8_t *adv_data;
     uint32_t adv_len;
-    if (s_ota_mode || !s_rc_enabled) {
-        build_ota_adv_data();
-        adv_data = s_adv_raw_ota;
-        adv_len = s_adv_raw_ota_len;
-    } else {
+    if (s_rc_enabled) {
         adv_data = s_adv_raw;
         adv_len = sizeof(s_adv_raw);
+    } else {
+        build_pair_adv_data();
+        adv_data = s_adv_raw_pair;
+        adv_len = s_adv_raw_pair_len;
     }
 
     esp_err_t err_adv = esp_ble_gap_config_adv_data_raw((uint8_t *)adv_data, adv_len);
@@ -304,24 +274,6 @@ static const esp_gatts_attr_db_t s_gatt_db_pair[IDX_PAIR_NB] = {
       sizeof(s_pair_mac), sizeof(s_pair_mac), s_pair_mac}},
 };
 
-// ---- Device identity manifest (read-only; the app uses this to validate hardware / firmware compatibility before updating) ----
-static const esp_gatts_attr_db_t s_gatt_db_info[IDX_INFO_NB] = {
-    [IDX_INFO_SVC] =
-    {{ESP_GATT_AUTO_RSP},
-     {ESP_UUID_LEN_16, (uint8_t *)&s_attr_uuid_primary_service, ESP_GATT_PERM_READ,
-      sizeof(uint16_t), sizeof(s_info_service_uuid), (uint8_t *)&s_info_service_uuid}},
-
-    [IDX_INFO_CHAR_MANIFEST] =
-    {{ESP_GATT_AUTO_RSP},
-     {ESP_UUID_LEN_16, (uint8_t *)&s_attr_uuid_char_declare, ESP_GATT_PERM_READ,
-      sizeof(uint8_t), sizeof(uint8_t), (uint8_t *)&s_char_prop_read}},
-
-    [IDX_INFO_CHAR_VAL_MANIFEST] =
-    {{ESP_GATT_RSP_BY_APP},
-     {ESP_UUID_LEN_16, (uint8_t *)&s_char_uuid_manifest, ESP_GATT_PERM_READ,
-      sizeof(s_manifest_blob), 0, s_manifest_blob}},
-};
-
 static int32_t read_rpm(bool *valid)
 {
     uint16_t v = s_stream_snapshot.rpm;
@@ -378,11 +330,11 @@ static int32_t read_bat_mv(bool *valid)
     return v;
 }
 
-static int32_t read_brake_x10(bool *valid)
+// Retired channel stub: keeps index 8 / PID F109 known so it is never remapped or reused.
+static int32_t read_retired(bool *valid)
 {
-    int16_t v = s_stream_snapshot.brake_temp_x10;
-    *valid = (v > -1000);
-    return (int32_t)v;
+    *valid = false;
+    return 0;
 }
 
 static const rc_chan_t s_channels[RC_CH_MAX] = {
@@ -394,7 +346,7 @@ static const rc_chan_t s_channels[RC_CH_MAX] = {
     {RC_PID_LOAD_X10, read_load_x10},
     {RC_PID_TPS_X10, read_tps_x10},
     {RC_PID_BAT_MV, read_bat_mv},
-    {RC_PID_BRAKE_X10, read_brake_x10},
+    {RC_PID_F109_RETIRED, read_retired},   // F109 retired, never reuse
 };
 
 static inline void le32_store(uint8_t *p, uint32_t v)
@@ -636,8 +588,6 @@ static void start_advertising_if_ready(void)
 
 static void gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param)
 {
-    ota_update_ble_on_gatts_event(event, gatts_if, param);
-
     switch (event) {
     case ESP_GATTS_REG_EVT:
         s_gatts_if = gatts_if;
@@ -648,23 +598,17 @@ static void gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble
                 ESP_LOGW(RC_TAG, "Set device name failed: %s", esp_err_to_name(err));
             }
         }
-        prepare_device_info_manifest();
-        bool is_master = (nvs_cfg_get()->device_role == ESPNOW_ROLE_MASTER);
         if (s_rc_enabled) {
-            // Full mode: create all 4 services (RC → Pair → Info → OTA)
+            // Full mode: create both services (RC → Pair)
             request_adv_config();
             esp_ble_gatts_create_attr_tab(s_gatt_db, gatts_if, IDX_NB, 0);
             ESP_LOGD(RC_TAG, "GATTS registered (adv name=%s), waiting for adv+attr table", s_adv_name);
-        } else if (is_master) {
-            // Master minimal mode: advertise with Pair service so slaves can discover and pair
+        } else {
+            // Master minimal mode (racechrono_ble_diy_start() only registers a non-RC app on a
+            // MASTER): advertise the Pair service so slaves can discover and pair
             request_adv_config();
             esp_ble_gatts_create_attr_tab(s_gatt_db_pair, gatts_if, IDX_PAIR_NB, 1);
-            ESP_LOGI(RC_TAG, "GATTS registered (Master mode: Pair+Info+OTA, adv on, name=%s)", s_adv_name);
-        } else {
-            // Non-master minimal mode: no RaceChrono/Pair services. Stay invisible until OTA mode is
-            // entered — racechrono_ble_diy_set_ota_mode(true) configures and starts the advert.
-            esp_ble_gatts_create_attr_tab(s_gatt_db_info, gatts_if, IDX_INFO_NB, 2);
-            ESP_LOGI(RC_TAG, "GATTS registered (minimal: Info+OTA only, adv off until OTA mode, name=%s)", s_adv_name);
+            ESP_LOGI(RC_TAG, "GATTS registered (Master mode: Pair only, adv on, name=%s)", s_adv_name);
         }
         break;
 
@@ -688,18 +632,6 @@ static void gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble
             uint16_t *h = param->add_attr_tab.handles;
             esp_ble_gatts_start_service(h[IDX_PAIR_SVC]);
             ESP_LOGD(RC_TAG, "Pair attr table ready, service handle=0x%04X", h[IDX_PAIR_SVC]);
-            esp_ble_gatts_create_attr_tab(s_gatt_db_info, gatts_if, IDX_INFO_NB, 2);
-        } else if (param->add_attr_tab.status == ESP_GATT_OK &&
-                   param->add_attr_tab.num_handle == IDX_INFO_NB &&
-                   param->add_attr_tab.svc_uuid.uuid.uuid16 == DEVICE_INFO_SERVICE_UUID) {
-            uint16_t *h = param->add_attr_tab.handles;
-            s_handle_manifest = h[IDX_INFO_CHAR_VAL_MANIFEST];
-            esp_ble_gatts_start_service(h[IDX_INFO_SVC]);
-            ESP_LOGD(RC_TAG, "Info attr table ready, service handle=0x%04X", h[IDX_INFO_SVC]);
-            ota_update_ble_start(gatts_if);
-        } else if (param->add_attr_tab.svc_uuid.uuid.uuid16 == OBD_OTA_SERVICE_UUID) {
-            // The OTA attribute table is owned by ota_update_ble (it already handled
-            // this event in ota_update_ble_on_gatts_event); nothing to do here.
         } else {
             ESP_LOGE(RC_TAG, "Create attr table failed, status=%d uuid=0x%04X num_handle=%d",
                      param->add_attr_tab.status, param->add_attr_tab.svc_uuid.uuid.uuid16,
@@ -741,30 +673,6 @@ static void gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble
         }
         break;
 
-    case ESP_GATTS_READ_EVT:
-        if (param->read.handle == s_handle_manifest) {
-            esp_gatt_rsp_t rsp = {0};
-            rsp.attr_value.handle = param->read.handle;
-            rsp.attr_value.offset = param->read.offset;
-
-            uint16_t available = (s_manifest_len > param->read.offset) ? (uint16_t)(s_manifest_len - param->read.offset) : 0;
-            uint16_t copy_len = available;
-            if (copy_len > sizeof(rsp.attr_value.value)) {
-                copy_len = sizeof(rsp.attr_value.value);
-            }
-            if (copy_len > 0) {
-                memcpy(rsp.attr_value.value, s_manifest_blob + param->read.offset, copy_len);
-            }
-            rsp.attr_value.len = copy_len;
-
-            ESP_LOGI(RC_TAG, "Manifest read: offset=%u len=%u/%u", param->read.offset, copy_len, s_manifest_len);
-            esp_err_t err = esp_ble_gatts_send_response(gatts_if, param->read.conn_id, param->read.trans_id, ESP_GATT_OK, &rsp);
-            if (err != ESP_OK) {
-                ESP_LOGW(RC_TAG, "Send manifest read response failed: %s", esp_err_to_name(err));
-            }
-        }
-        break;
-
     default:
         break;
     }
@@ -803,7 +711,7 @@ void racechrono_ble_diy_handle_gap_event(esp_gap_ble_cb_event_t event, esp_ble_g
     case ESP_GAP_BLE_ADV_START_COMPLETE_EVT:
         if (param->adv_start_cmpl.status == ESP_BT_STATUS_SUCCESS) {
             s_adv_start_pending = false;
-            ESP_LOGI(RC_TAG, "Advertising started (name=%s, ota_mode=%d)", s_adv_name, s_ota_mode);
+            ESP_LOGI(RC_TAG, "Advertising started (name=%s)", s_adv_name);
         } else {
             ESP_LOGW(RC_TAG, "Advertising start failed status=%d", param->adv_start_cmpl.status);
         }
@@ -820,6 +728,13 @@ void racechrono_ble_diy_start(bool enable_racechrono)
     }
 
     s_rc_enabled = enable_racechrono;
+
+    // RaceChrono off and not MASTER: there is no service to publish (Pair is MASTER-only),
+    // so no GATTS app is registered and the device does not advertise.
+    if (!s_rc_enabled && nvs_cfg_get()->device_role != ESPNOW_ROLE_MASTER) {
+        ESP_LOGI(RC_TAG, "RaceChrono off and not MASTER: no GATTS services, skip start");
+        return;
+    }
 
     if (esp_bt_controller_get_status() != ESP_BT_CONTROLLER_STATUS_ENABLED ||
         esp_bluedroid_get_status() != ESP_BLUEDROID_STATUS_ENABLED) {
@@ -847,54 +762,11 @@ void racechrono_ble_diy_start(bool enable_racechrono)
     s_started = true;
     if (s_rc_enabled) {
         ESP_LOGD(RC_TAG, "RaceChrono BLE DIY started");
-        ESP_LOGD(RC_TAG, "PID map: RPM=0x%08X SPD=0x%08X CLT=0x%08X IAT=0x%08X OIL=0x%08X LOADx10=0x%08X TPSx10=0x%08X BATmV=0x%08X BRKx10=0x%08X",
+        ESP_LOGD(RC_TAG, "PID map: RPM=0x%08X SPD=0x%08X CLT=0x%08X IAT=0x%08X OIL=0x%08X LOADx10=0x%08X TPSx10=0x%08X BATmV=0x%08X",
                  RC_PID_RPM, RC_PID_SPEED_KMH, RC_PID_CLT_C, RC_PID_IAT_C, RC_PID_OIL_C,
-                 RC_PID_LOAD_X10, RC_PID_TPS_X10, RC_PID_BAT_MV, RC_PID_BRAKE_X10);
+                 RC_PID_LOAD_X10, RC_PID_TPS_X10, RC_PID_BAT_MV);
     } else {
-        ESP_LOGI(RC_TAG, "RaceChrono BLE DIY started (minimal: Info+OTA only)");
+        ESP_LOGI(RC_TAG, "RaceChrono BLE DIY started (minimal: Pair only)");
     }
 }
 
-bool racechrono_ble_diy_is_connected(void)
-{
-    return s_connected;
-}
-
-// Enter/leave OTA advertising mode (called from the OTA mode screen):
-//  - enter: publish the OTA advert (Info+OTA UUIDs + device name) and start advertising,
-//    so the phone OTA app can discover this device;
-//  - leave: restore the normal RaceChrono/Pair advert, or stop advertising entirely on
-//    devices without the RaceChrono service (they stay invisible outside OTA mode).
-void racechrono_ble_diy_set_ota_mode(bool enable)
-{
-    if (!s_started) {
-        ESP_LOGW(RC_TAG, "set_ota_mode ignored: GATTS not started yet");
-        return;
-    }
-    if (s_ota_mode == enable) {
-        return;
-    }
-    s_ota_mode = enable;
-    ESP_LOGI(RC_TAG, "OTA advertising %s (name=%s)", enable ? "ON" : "OFF", s_adv_name);
-
-    if (enable || s_rc_enabled) {
-        // Stop first so the new advert is applied via a clean
-        // stop → config → *_SET_COMPLETE → start cycle.
-        esp_ble_gap_stop_advertising();
-        request_adv_config();
-        return;
-    }
-
-    // Leaving OTA mode on a RaceChrono-less device: go silent.
-    s_adv_raw_done = false;
-    s_scan_rsp_raw_done = false;
-    s_adv_config_done = false;
-    s_adv_start_pending = false;
-    s_adv_cfg_pending = false;
-    esp_ble_gap_stop_advertising();
-}
-
-const char *racechrono_ble_diy_get_adv_name(void)
-{
-    return s_adv_name;
-}

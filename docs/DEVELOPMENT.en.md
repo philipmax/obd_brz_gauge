@@ -15,16 +15,15 @@ main/
 │   ├── obd_data_cache    # OBD data cache (the only data plane between UI and acquisition)
 │   ├── vehicle_profiles  # 17 vehicle profiles + gear-range math (see VEHICLES.en.md)
 │   ├── vehicle_custom_config.h  # CAN rules / oil formulas / UDS header override tables
-│   ├── ota_update_ble    # BLE OTA receiver (firmware / boot-media targets)
 │   ├── ota_wifi_server   # WiFi SoftAP HTTP OTA service (all /ota/* endpoints)
-│   ├── device_identity   # BLE manifest JSON (0x1FFA, hardware + build_tag)
+│   ├── device_identity   # Device manifest JSON (GET /ota/info, hardware + build_tag)
 │   ├── boot_media_mount / boot_block_player  # bootmedia partition mount & boot-animation playback
 │   └── theme_mount       # theme_0 partition mount helpers
 │
 ├── bsp_obd_dsp/          # Board support package (porting a new board happens here)
 │   ├── elm327_ble_client # ELM327 BLE client + single-thread poll state machine + protocol auto-detect
 │   ├── espnow_link       # Triple-gauge ESP-NOW link (MASTER/SLAVE/STANDALONE)
-│   ├── racechrono_ble_diy # RaceChrono DIY BLE GATT service + pairing service + OTA advertising
+│   ├── racechrono_ble_diy # RaceChrono DIY BLE GATT service + pairing service
 │   ├── gauge_pair_ble_client # slave FIND MASTER scan (shares the page with the OBD scan)
 │   ├── nvs_storage       # NVS persistence for user config and stats (new fields append at the END only)
 │   ├── ads1115_oil_pressure # ADS1115 I2C oil-pressure ADC (V1 board; unused by cars with an OBD DID)
@@ -116,7 +115,6 @@ on the version page — so commit *before* releasing, see
 |--------|---------|
 | `tools/gen_themes.py` | compiled-theme codegen (runs from CMake; `--check` for CI) |
 | `tools/theme_packer/pack_theme.py` | packs a runtime theme into a 4 MB theme.bin |
-| `tools/gen_theme_store.py` | regenerates the theme-store catalog.json |
 | `tools/gen_release.py` | build/ artifacts → firmware/release/ + latest.json |
 | `tools/release.sh` | one-shot release (commit → build → gen_release → push) |
 | `tools/make_boot_block.py` | encodes video into boot_block.bin/txt (ffmpeg + Pillow; auto _v2 when frames > 65535) |
@@ -126,7 +124,6 @@ on the version page — so commit *before* releasing, see
 | `tools/analyze_proble.py` | correlates injected signals with Car Scanner recordings to recover PID mappings and formulas |
 | `tools/parse_carscanner_backup.py` | parses a CarScanner backup directory into a per-car PID CSV |
 | `main/python_quick_rs485_check.py` | direct RS485/Modbus self-check (troubleshooting) |
-| `fix_nvs.py` | resets the NVS role to standalone (fixes WiFi OOM crashes) |
 
 ### PID-hunting workflow (find private PIDs without a car)
 

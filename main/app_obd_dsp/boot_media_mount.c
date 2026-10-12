@@ -11,6 +11,7 @@
 #include <string.h>
 #include "esp_log.h"
 #include "esp_partition.h"
+#include "app_obd_dsp/flash_partition_utils.h"
 
 static const char *TAG = "boot_media";
 
@@ -18,12 +19,8 @@ static const char *TAG = "boot_media";
 #define BOOTMEDIA_MANIFEST_OFFSET 0x0000
 #define BOOTMEDIA_MANIFEST_MAX    0x1000     // 4 KB
 #define BOOTMEDIA_BIN_OFFSET      0x1000     // after the manifest slot
-#define BOOTMEDIA_WRITE_SCRATCH   16384    // 16 KB: internal-RAM scratch buffer.
-                                            // PSRAM sources are not safe during flash
-                                            // operations; copy into this buffer first.
 
 static const esp_partition_t *s_part = NULL;
-static uint8_t s_flash_write_buf[BOOTMEDIA_WRITE_SCRATCH];
 
 static const esp_partition_t *get_partition(void)
 {
@@ -176,21 +173,13 @@ esp_err_t boot_media_raw_write(uint32_t abs_offset, const uint8_t *data, size_t 
             return ESP_ERR_INVALID_SIZE;
         }
 
-        // esp_partition_write may execute with the flash cache disabled. Copy
-        // the source into internal RAM before each write; upload buffers live
-        // in PSRAM and are not safe as flash-operation sources on all targets.
-        size_t copied = 0;
-        while (copied < segment_len) {
-            size_t copy_len = segment_len - copied;
-            if (copy_len > sizeof(s_flash_write_buf)) copy_len = sizeof(s_flash_write_buf);
-            memcpy(s_flash_write_buf, data + consumed + copied, copy_len);
-            esp_err_t err = esp_partition_write(p, part_off + copied, s_flash_write_buf, copy_len);
-            if (err != ESP_OK) {
-                ESP_LOGE(TAG, "raw write failed at logical=%u: %s", logical_offset + (uint32_t)copied,
-                         esp_err_to_name(err));
-                return err;
-            }
-            copied += copy_len;
+        // flash_part_write_safe copies through an internal-SRAM staging buffer so
+        // PSRAM upload sources are safe as flash-operation inputs on all targets.
+        esp_err_t err = flash_part_write_safe(p, part_off, data + consumed, segment_len);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "raw write failed at logical=%u: %s", logical_offset,
+                     esp_err_to_name(err));
+            return err;
         }
         consumed += segment_len;
     }

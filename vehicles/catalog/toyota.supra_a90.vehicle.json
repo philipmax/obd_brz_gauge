@@ -1,0 +1,156 @@
+{
+  "schema": "skygauge.vehicle/1",
+  "id": "toyota.supra_a90",
+  "rev": 1,
+  "name": "Supra A90",
+  "drivetrain": {
+    "final_drive": 2.813,
+    "tire_radius_m": 0.33,
+    "gear_tolerance": 0.09,
+    "gears": [
+      {
+        "gear": 1,
+        "ratio": 5.25
+      },
+      {
+        "gear": 2,
+        "ratio": 3.36
+      },
+      {
+        "gear": 3,
+        "ratio": 2.172
+      },
+      {
+        "gear": 4,
+        "ratio": 1.72
+      },
+      {
+        "gear": 5,
+        "ratio": 1.316
+      },
+      {
+        "gear": 6,
+        "ratio": 1.0
+      },
+      {
+        "gear": 7,
+        "ratio": 0.822
+      },
+      {
+        "gear": 8,
+        "ratio": 0.64
+      }
+    ]
+  },
+  "bus": {
+    "protocol": 6,
+    "_protocol_note": "ISO 15765-4 CAN 11-bit 500k",
+    "hdr": "7DF",
+    "atst": 10,
+    "poll_gap_ms": 1
+  },
+  "signals": [
+    {
+      "key": "obd.rpm",
+      "src": [
+        {
+          "req": "01 0C",
+          "scale": 0.25,
+          "offset": 0.0
+        }
+      ]
+    },
+    {
+      "key": "obd.speed",
+      "src": [
+        {
+          "req": "01 0D",
+          "scale": 1.0,
+          "offset": 0.0
+        }
+      ]
+    },
+    {
+      "key": "obd.coolant_temp",
+      "src": [
+        {
+          "req": "01 05",
+          "scale": 1.0,
+          "offset": -40.0
+        }
+      ]
+    },
+    {
+      "key": "obd.tps",
+      "src": [
+        {
+          "req": "01 11",
+          "scale": 0.39215686274509803,
+          "offset": 0.0
+        }
+      ]
+    },
+    {
+      "key": "obd.load",
+      "src": [
+        {
+          "req": "01 04",
+          "scale": 0.39215686274509803,
+          "offset": 0.0
+        }
+      ]
+    },
+    {
+      "key": "obd.intake_temp",
+      "src": [
+        {
+          "req": "01 0F",
+          "scale": 1.0,
+          "offset": -40.0
+        }
+      ]
+    },
+    {
+      "key": "obd.battery",
+      "src": [
+        {
+          "req": "01 42",
+          "scale": 0.001,
+          "offset": 0.0
+        }
+      ]
+    },
+    {
+      "key": "obd.boost",
+      "src": [
+        {
+          "req": "01 0B",
+          "scale": 1.0,
+          "offset": -101.3,
+          "_note": "MAP absolute kPa − 101.3 ≈ boost gauge kPa"
+        }
+      ]
+    },
+    {
+      "key": "obd.oil_temp",
+      "src": [
+        {
+          "req": "01 5C",
+          "scale": 1.0,
+          "offset": -40.0
+        }
+      ]
+    },
+    {
+      "key": "obd.oil_pressure",
+      "src": [
+        {
+          "req": "22 44 36",
+          "scale": 1.0,
+          "offset": 0.0,
+          "unit": "hPa"
+        }
+      ]
+    }
+  ]
+}

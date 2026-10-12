@@ -69,7 +69,7 @@ When data times out or BLE drops, gauge pages show a **NO SIGNAL** banner.
 | VEHICLE | The 17 vehicle profiles; switching applies immediately (affects gear detection, oil-temp strategy, protocol lock, …)|
 | THEME | Compiled-in themes (default / amber / ocean plus community themes); selecting **reboots** the device to apply |
 | Brightness | 10–100% |
-| RACECHRONO | ON = full BLE services (RaceChrono + pairing + OTA); OFF = minimal mode (Info + OTA only, no advertising) to save memory |
+| RACECHRONO | ON = full BLE services (RaceChrono + pairing); OFF = minimal mode (a master keeps only the pairing service and advertises it; other roles run no BLE service and do not advertise) to save memory |
 | Swipe down → MULTI-GAUGE | Triple-gauge role setting (see below)|
 
 Everything is persisted in NVS. Trip / mileage statistics accumulate per
@@ -121,16 +121,16 @@ interrupted upload never damages the existing animation.
 The companion app (`android_app/app-debug.apk`) can push three things; each
 requires the gauge to be in OTA mode first (**version page → OTA button**):
 
-- **Firmware**: BLE handshake → WiFi hotspot (`OBD-Gauge-OTA-XXXX`, password
-  `obd2024`) for fast transfer, written to the inactive OTA slot; the new
+- **Firmware**: the phone joins the gauge's WiFi hotspot (`OBD-Gauge-OTA-XXXX`,
+  password `88888888`) for fast transfer, written to the inactive OTA slot; the new
   firmware must pass a 15-second boot self-check before being marked valid,
   otherwise the bootloader rolls back
 - **Boot animation**: trim the video in the app, encode, upload
 - **Theme package**: pushes a runtime theme to the theme_0 partition
   (see [THEMES.en.md](THEMES.en.md))
 
-The device exposes a read-only BLE manifest service (`0x1FFA`) with hardware
-and build info; the app validates compatibility before flashing and refuses
+The device exposes hardware and build info via `GET /ota/info`; the app
+validates compatibility before flashing and refuses
 mismatched hardware. Protocol details in [APP_PROTOCOL.en.md](APP_PROTOCOL.en.md).
 
 ## Optional external sensors

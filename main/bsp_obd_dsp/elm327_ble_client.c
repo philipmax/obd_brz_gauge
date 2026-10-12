@@ -11,8 +11,10 @@
 #include "esp_timer.h"
 #include "nvs_flash.h"
 #include "app_obd_dsp/obd_data_cache.h"
-#include "app_obd_dsp/vehicle_profiles.h"
-#include "app_obd_dsp/vehicle_custom_config.h"
+#include "vehicle/vp_profile.h"
+#include "vehicle/vp_loader.h"
+#include "app_obd_dsp/elm327_integration.h"
+#include "app_obd_dsp/lifecycle_state.h"
 #include "racechrono_ble_diy.h"
 #include "ble_adv_util.h"
 #include "esp_task_wdt.h"
@@ -21,6 +23,10 @@
 #include <ctype.h>
 #include <stdio.h>
 #include "nvs_storage.h"
+
+// REMOVED: Stub types for old CAN system (fully replaced by vp_scheduler)
+// vehicle_override_t, can_rules_have_channel() - no longer needed
+
 
 // UUID constants
 #define UUID16_OBD_SERVICE      0xFFF0  // common ELM327 BLE adapters (FFF1 write / FFF2 notify)
@@ -64,7 +70,9 @@ static TaskHandle_t s_poll_task_handle = NULL; // poll task handle, used for tas
 static volatile bool s_notify_ready = false;   // set only after CCCD notify subscription completes; init/poll proceed based on this (prevents losing handshake responses)
 static volatile int64_t s_last_obd_valid_us = 0; // time of the last valid OBD data; a timeout without data triggers self-heal re-init
 static volatile bool s_got_valid_data = false;   // whether a genuinely valid frame has been parsed since the last poll round; set only by the parse path (not by do_elm_init), lets the poll task clear the self-heal counter
-static uint8_t s_oil_query_mode = 0;     // current query mode index (0-2)
+// REMOVED: old oil temp and CAN state variables (unused with new system)
+// s_oil_query_mode, s_oil_temp_offset, s_can_oil_last_us, s_can_coolant_last_us
+
 
 // Called when valid OBD data is parsed: refreshes the "valid data" timestamp and sets the flag.
 // do_elm_init only sets the timestamp and does NOT go through here — just having initialized does not mean "data is flowing". Otherwise heal_attempts
@@ -85,63 +93,10 @@ static bool send_rpm_request(const char *site)
     return ok;
 }
 
-// ---- Data-driven override state ----
-static const vehicle_override_t *s_ov = NULL;  // override config of the current vehicle profile
-static const oil_formula_t *s_oil_formula_pri = NULL;   // primary oil-temp formula
-static const oil_formula_t *s_oil_formula_sec = NULL;   // secondary oil-temp formula
-static bool s_oil_use_override = false;  // true=use override formulas, false=use the legacy enum
-static uint8_t s_oil_override_idx = 0;   // 0=primary, 1=secondary
-static uint8_t s_oil_override_fail = 0;  // consecutive failure count of the current formula
-#define OIL_OVERRIDE_FAIL_MAX 5
-static int s_mode21_oil_idx = 33;        // Mode21 oil-temp byte index, adaptively updated
-static int16_t s_last_mode21_oil = -100; // oil temp parsed from the last Mode21 response
-static int s_mode21_hold_cnt = 0;        // ZC6 consistency hold count; consecutive noise frames, new value accepted only past a threshold
-static int64_t s_last_mode21_oil_us = 0; // timestamp (us) of the last accepted oil-temp value
+// REMOVED: old oil temp strategy state (replaced by vp_scheduler)
+// s_oil_mode_fail_count[], s_oil_diag, s_vehicle_profile_inited
 
-// ---- Vehicle-profile-based oil-temp query strategy ----
-static oil_temp_query_mode_t s_oil_mode_priority[4] = {
-    OIL_TEMP_MODE_PID_5C,
-    OIL_TEMP_MODE_UDS_22_10_17,
-    OIL_TEMP_MODE_TOYOTA_21_01,
-};  // default priority, updated from the vehicle profile config after boot
-static uint32_t s_oil_mode_fail_count[12] = {0};  // consecutive failure count per mode (poll idx 0~11)
-#define OIL_MODE_FAIL_THRESHOLD 5  // switch to the next mode only after a mode fails this many times
-#define OBD_POLL_SLOT_GAP_MS   30  // idle gap between poll slots (ms); was 100, lowered to raise refresh rate — too small overwhelms clone adapters
-static bool s_vehicle_profile_inited = false;
-
-// Oil-temp diagnostic stats
-static struct {
-    uint32_t mode0_ok;  // 01 5C success count
-    uint32_t mode1_ok;  // 22 10 17 success count
-    uint32_t mode2_ok;  // 21 01 success count
-    uint32_t mode3_ok;  // 22 11 1F (Mazda) success count
-    uint32_t mode4_ok;  // 22 13 10 (Mazda) success count
-    uint32_t mode5_ok;  // reserved
-    uint32_t mode6_ok;  // 22 58 22 (MINI/BMW) success count
-    uint32_t mode7_ok;  // 22 44 02 (BMW F-series) success count
-    uint32_t mode8_ok;  // 22 03 F3 (BMW G-series) success count
-    uint32_t mode9_ok;  // 22 44 02 G formula (BMW G-series) success count
-    uint32_t mode10_ok; // 22 D0 02 (BMW G-series) success count
-    uint32_t mode11_ok; // 22 11 1F (BMW, A-50) success count
-    uint32_t mode0_fail;
-    uint32_t mode1_fail;
-    uint32_t mode2_fail;
-    uint32_t mode3_fail;
-    uint32_t mode4_fail;
-    uint32_t mode5_fail;
-    uint32_t mode6_fail;
-    uint32_t mode7_fail;
-    uint32_t mode8_fail;
-    uint32_t mode9_fail;
-    uint32_t mode10_fail;
-    uint32_t mode11_fail;
-    int16_t last_raw_temp; // raw temperature (unfiltered)
-    int16_t last_filtered_temp; // filtered temperature
-} s_oil_diag = {0};
-
-static int8_t s_oil_temp_offset = 0;  // user calibration offset, in °C
-static volatile int64_t s_can_oil_last_us = 0;      // last CAN oil-temp sample time
-static volatile int64_t s_can_coolant_last_us = 0;  // last CAN coolant-temp sample time
+#define OBD_POLL_SLOT_GAP_MS   30  // idle gap between poll slots (ms); kept for CAN mode timing
 
 // Global ready flag
 static volatile bool s_elm_ready = true; // initially true so the first ATZ can be sent
@@ -161,7 +116,6 @@ static uint32_t s_zc6_can_monitor_obd_cycle = 0;   // OBD query cycle counter wh
 #define ZC6_CAN_TEMP_STALE_US 15000000LL            // CAN temp channels stale after 15s without fresh frames
 static int64_t s_zc6_can_temp_probe_last_us = 0;    // last time we briefly entered ATMA to refresh ZC6 CAN temps
 bool elm327_ble_send_ascii_blocking(const char *ascii_cmd);
-static bool can_rules_have_channel(const vehicle_override_t *ov, uint8_t channel);
 
 // Accumulation buffer for multi-packet responses (21 01 responses span multiple BLE packets)
 #define ACCUM_BUF_SIZE 512
@@ -178,28 +132,11 @@ static volatile int s_protocol_detect_idx = -1;  // -1=not detecting, 0-10=proto
 static volatile bool s_protocol_detect_got_response = false;  // whether a valid response was received
 static volatile int32_t s_protocol_detect_rpm = -1;  // detected RPM value (-1=none)
 
-// ---- Oil-temp query mode conversion ----
-// Convert oil_temp_query_mode_t to poll index (0-2)
-static inline uint8_t oil_mode_to_poll_idx(oil_temp_query_mode_t mode) {
-    switch (mode) {
-        case OIL_TEMP_MODE_PID_5C: return 0;
-        case OIL_TEMP_MODE_UDS_22_10_17: return 1;
-        case OIL_TEMP_MODE_TOYOTA_21_01: return 2;
-        case OIL_TEMP_MODE_MAZDA_22_111F: return 3;
-        case OIL_TEMP_MODE_MAZDA_22_1310: return 4;
-        case OIL_TEMP_MODE_MINI_22_5822: return 5;
-        case OIL_TEMP_MODE_BMW_22_4402: return 6;
-        case OIL_TEMP_MODE_BMW_22_03F3: return 7;
-        case OIL_TEMP_MODE_BMW_G_22_4402: return 8;
-        case OIL_TEMP_MODE_BMW_22_D002: return 9;
-        case OIL_TEMP_MODE_BMW_22_111F: return 10;
-        default: return 0;
-    }
-}
+// REMOVED: old oil temp mode conversion function (replaced by vp_scheduler)
 
 static const char *get_vehicle_fixed_header_cmd(void) {
-    const vehicle_profile_t *vp = vehicle_profile_get_active();
-    if (vp && vp->obd_functional_addr) {
+    const vp_profile_t *vp = vp_loader_get_active();
+    if (vp && vp->hdr_functional) {
         // 29-bit CAN functional broadcast (Honda Integra/Civic 11th gen and similar vehicles)
         if (vp->obd_29bit_functional) {
             return "ATSH18DB33F1\r";
@@ -211,153 +148,12 @@ static const char *get_vehicle_fixed_header_cmd(void) {
 }
 
 // Initialize the oil-temp query strategy (reads the primary/secondary/tertiary priority chain from the vehicle profile config)
-static void init_oil_temp_strategy(void) {
-    // Take the profile's full priority chain: after the primary fails consecutively (threshold times), fall back to secondary, tertiary.
-    const oil_temp_strategy_t *st = vehicle_profile_get_oil_temp_strategy();
-    s_oil_mode_priority[0] = st ? st->primary    : OIL_TEMP_MODE_PID_5C;
-    s_oil_mode_priority[1] = st ? st->secondary  : OIL_TEMP_MODE_NONE;
-    s_oil_mode_priority[2] = st ? st->tertiary   : OIL_TEMP_MODE_NONE;
-    s_oil_mode_priority[3] = st ? st->quaternary : OIL_TEMP_MODE_NONE;
-
-    // ---- Data-driven override init ----
-    s_ov = vehicle_profile_get_override();
-    s_oil_formula_pri = s_ov ? s_ov->oil_primary : NULL;
-    s_oil_formula_sec = s_ov ? s_ov->oil_secondary : NULL;
-    s_oil_use_override = (s_oil_formula_pri != NULL);
-    s_oil_override_idx = 0;
-    s_oil_override_fail = 0;
-
-    if (s_oil_mode_priority[0] == OIL_TEMP_MODE_TOYOTA_21_01) {
-        // ZC/N6 fixed at d[33]
-        s_mode21_oil_idx = 33;
-    }
-    s_last_mode21_oil = -100;
-    s_last_mode21_oil_us = 0;
-    s_mode21_hold_cnt = 0;
-
-    // Reset failure counts
-    memset(s_oil_mode_fail_count, 0, sizeof(s_oil_mode_fail_count));
-    s_oil_query_mode = 0;
-    s_vehicle_profile_inited = true;
-
-    const vehicle_profile_t *profile = vehicle_profile_get_active();
-    ESP_LOGD(TAG, "Oil temp strategy for [%s]: Primary=%d",
-             profile ? profile->name : "UNKNOWN", s_oil_mode_priority[0]);
-}
 
 // Select the next query mode based on the current strategy
-static oil_temp_query_mode_t get_next_oil_query_mode(uint8_t *poll_idx) {
-    if (!s_vehicle_profile_inited) {
-        init_oil_temp_strategy();
-    }
-    
-    // Walk the priority list and find the first valid mode that hasn't failed too much
-    for (int i = 0; i < 4; i++) {
-        oil_temp_query_mode_t mode = s_oil_mode_priority[i];
-        if (mode == OIL_TEMP_MODE_NONE) continue;
-        
-        uint8_t idx = oil_mode_to_poll_idx(mode);
-        // Use this mode if its failure count is below the threshold
-        if (s_oil_mode_fail_count[idx] < OIL_MODE_FAIL_THRESHOLD) {
-            *poll_idx = idx;
-            return mode;
-        }
-    }
-    
-    // All modes have failed too much; reset failure counts and use the primary mode
-    memset(s_oil_mode_fail_count, 0, sizeof(s_oil_mode_fail_count));
-    *poll_idx = oil_mode_to_poll_idx(s_oil_mode_priority[0]);
-    return s_oil_mode_priority[0];
-}
 
 // Record oil-temp query success/failure (internal use)
-static void record_oil_temp_success(oil_temp_query_mode_t mode) {
-    uint8_t idx = oil_mode_to_poll_idx(mode);
-    s_oil_mode_fail_count[idx] = 0;  // success, clear the failure count
-
-    // Update diagnostic stats
-    switch (mode) {
-        case OIL_TEMP_MODE_PID_5C:
-            s_oil_diag.mode0_ok++;
-            break;
-        case OIL_TEMP_MODE_UDS_22_10_17:
-            s_oil_diag.mode1_ok++;
-            break;
-        case OIL_TEMP_MODE_TOYOTA_21_01:
-            s_oil_diag.mode2_ok++;
-            break;
-        case OIL_TEMP_MODE_MAZDA_22_111F:
-            s_oil_diag.mode3_ok++;
-            break;
-        case OIL_TEMP_MODE_MAZDA_22_1310:
-            s_oil_diag.mode4_ok++;
-            break;
-        case OIL_TEMP_MODE_MINI_22_5822:
-            s_oil_diag.mode6_ok++;
-            break;
-        case OIL_TEMP_MODE_BMW_22_4402:
-            s_oil_diag.mode7_ok++;
-            break;
-        case OIL_TEMP_MODE_BMW_22_03F3:
-            s_oil_diag.mode8_ok++;
-            break;
-        case OIL_TEMP_MODE_BMW_G_22_4402:
-            s_oil_diag.mode9_ok++;
-            break;
-        case OIL_TEMP_MODE_BMW_22_D002:
-            s_oil_diag.mode10_ok++;
-            break;
-        case OIL_TEMP_MODE_BMW_22_111F:
-            s_oil_diag.mode11_ok++;
-            break;
-        default:
-            break;
-    }
-}
-
-static void record_oil_temp_failure(oil_temp_query_mode_t mode) {
-    uint8_t idx = oil_mode_to_poll_idx(mode);
-    s_oil_mode_fail_count[idx]++;
-
-    // Update diagnostic stats
-    switch (mode) {
-        case OIL_TEMP_MODE_PID_5C:
-            s_oil_diag.mode0_fail++;
-            break;
-        case OIL_TEMP_MODE_UDS_22_10_17:
-            s_oil_diag.mode1_fail++;
-            break;
-        case OIL_TEMP_MODE_TOYOTA_21_01:
-            s_oil_diag.mode2_fail++;
-            break;
-        case OIL_TEMP_MODE_MAZDA_22_111F:
-            s_oil_diag.mode3_fail++;
-            break;
-        case OIL_TEMP_MODE_MAZDA_22_1310:
-            s_oil_diag.mode4_fail++;
-            break;
-        case OIL_TEMP_MODE_MINI_22_5822:
-            s_oil_diag.mode6_fail++;
-            break;
-        case OIL_TEMP_MODE_BMW_22_4402:
-            s_oil_diag.mode7_fail++;
-            break;
-        case OIL_TEMP_MODE_BMW_22_03F3:
-            s_oil_diag.mode8_fail++;
-            break;
-        case OIL_TEMP_MODE_BMW_G_22_4402:
-            s_oil_diag.mode9_fail++;
-            break;
-        case OIL_TEMP_MODE_BMW_22_D002:
-            s_oil_diag.mode10_fail++;
-            break;
-        case OIL_TEMP_MODE_BMW_22_111F:
-            s_oil_diag.mode11_fail++;
-            break;
-        default:
-            break;
-    }
-}
+// REMOVED: old oil temp strategy functions (replaced by vp_scheduler)
+// record_oil_temp_success(), record_oil_temp_failure()
 
 // Default callbacks and poll task (optional)
 static void default_on_connected(void) { ESP_LOGD(TAG, "OBD BLE connected"); }
@@ -447,21 +243,17 @@ static int elm327_auto_detect_protocol(void) {
 
 static void default_on_parsed_rpm(uint16_t rpm) { obd_data_set_rpm(rpm); }
 static void default_on_parsed_speed(uint8_t kmh) {
-    const vehicle_profile_t *p = vehicle_profile_get_active();
+    const vp_profile_t *p = vp_loader_get_active();
     float sc = (p && p->speed_scale > 0.0f) ? p->speed_scale : 1.0f;
     int32_t v = (int32_t)((float)kmh * sc + 0.5f);
     if (v > 255) v = 255;
-    if (p && p->can_broadcast_mode && obd_data_get_rpm() < 800)
+    if (p && p(->mon_mode != VP_MON_NONE) && obd_data_get_rpm() < 800)
         v = 0;
     if (v <= 2) v = 0;
     obd_data_set_speed((uint8_t)v);
 }
 static void default_on_parsed_coolant_temp(uint32_t coolant_temp) {
-    const vehicle_profile_t *profile = vehicle_profile_get_active();
-    const vehicle_override_t *ov = vehicle_profile_get_override();
-    if (profile && profile->can_broadcast_mode && can_rules_have_channel(ov, CH_COOLANT)) {
-        s_can_coolant_last_us = esp_timer_get_time();
-    }
+    // TODO: CAN direct coolant will be reimplemented when CAN profiles are loaded
     obd_data_set_coolant_temp((int16_t)coolant_temp);
 }
 static void default_on_parsed_intake_temp(uint32_t intake_temp) { obd_data_set_intake_temp((int16_t)intake_temp); }
@@ -482,22 +274,19 @@ static void default_on_parsed_oil_temp(uint32_t oil_temp)
     static float s_oil_filtered = -100.0f;
     static int16_t s_oil_pending = -100;
     static uint8_t s_oil_pending_cnt = 0;
-    const vehicle_profile_t *profile = vehicle_profile_get_active();
-    const vehicle_override_t *ov = vehicle_profile_get_override();
-    bool can_direct_oil = profile && profile->can_broadcast_mode &&
-                          can_rules_have_channel(ov, CH_OIL_TEMP);
+
+    // TODO: CAN direct oil will be reimplemented when CAN profiles are loaded
+    bool can_direct_oil = false;
 
     int16_t in = (int16_t)oil_temp;
-    s_oil_diag.last_raw_temp = in;
 
     if (in < -20 || in > 150) return;
 
     if (can_direct_oil) {
-        s_can_oil_last_us = esp_timer_get_time();
+        // s_can_oil_last_us = esp_timer_get_time();  // Disabled - CAN not yet reimplemented
         s_oil_filtered = (float)in;
         s_oil_pending = in;
         s_oil_pending_cnt = 0;
-        s_oil_diag.last_filtered_temp = in;
         obd_data_set_oil_temp_with_offset(in);
         return;
     }
@@ -506,7 +295,7 @@ static void default_on_parsed_oil_temp(uint32_t oil_temp)
         s_oil_filtered = (float)in;
         s_oil_pending = in;
         s_oil_pending_cnt = 1;
-        s_oil_diag.last_filtered_temp = in;
+        
         obd_data_set_oil_temp_with_offset(in);
         return;
     }
@@ -519,7 +308,7 @@ static void default_on_parsed_oil_temp(uint32_t oil_temp)
         s_oil_pending_cnt = 0;
         s_oil_filtered = 0.65f * s_oil_filtered + 0.35f * (float)in;
         int16_t disp = oil_f2i(s_oil_filtered);
-        s_oil_diag.last_filtered_temp = disp;
+        
         obd_data_set_oil_temp_with_offset(disp);
         return;
     }
@@ -537,7 +326,7 @@ static void default_on_parsed_oil_temp(uint32_t oil_temp)
             s_oil_pending = -100;
             s_oil_pending_cnt = 0;
             int16_t disp = oil_f2i(s_oil_filtered);
-            s_oil_diag.last_filtered_temp = disp;
+            
             obd_data_set_oil_temp_with_offset(disp);
         }
         return;
@@ -555,7 +344,7 @@ static void default_on_parsed_oil_temp(uint32_t oil_temp)
             s_oil_filtered = (float)in;
             s_oil_pending = -100;
             s_oil_pending_cnt = 0;
-            s_oil_diag.last_filtered_temp = in;
+            
             obd_data_set_oil_temp_with_offset(in);
         }
     }
@@ -585,29 +374,9 @@ static void default_on_parsed_manifold_pressure(uint32_t map_kpa) {
 
 static void can_expire_stale_temp_channels(void)
 {
-    const vehicle_profile_t *profile = vehicle_profile_get_active();
-    const vehicle_override_t *ov = vehicle_profile_get_override();
-    int64_t now_us;
-
-    if (!profile || !profile->can_broadcast_mode || !ov || !ov->can_rules || ov->can_rule_count == 0) {
-        return;
-    }
-
-    now_us = esp_timer_get_time();
-
-    if (can_rules_have_channel(ov, CH_OIL_TEMP) && s_can_oil_last_us > 0 &&
-        (now_us - s_can_oil_last_us) > ZC6_CAN_TEMP_STALE_US) {
-        obd_data_set_oil_temp_invalid();
-        s_oil_diag.last_raw_temp = -100;
-        s_oil_diag.last_filtered_temp = -100;
-        s_can_oil_last_us = 0;
-    }
-
-    if (can_rules_have_channel(ov, CH_COOLANT) && s_can_coolant_last_us > 0 &&
-        (now_us - s_can_coolant_last_us) > ZC6_CAN_TEMP_STALE_US) {
-        obd_data_set_coolant_temp(-40);
-        s_can_coolant_last_us = 0;
-    }
+    // TODO: Reimplemented when CAN profiles are loaded
+    // Checks if CAN oil/coolant temps are stale and invalidates them
+    (void)0;  // Disabled
 }
 
 // PID 01 44: Commanded Equivalence Ratio (λ), formula: (A*256+B)/32768, range 0~<2
@@ -768,20 +537,12 @@ out:
     return *data_len_out > 0;
 }
 
-static bool can_rules_have_channel(const vehicle_override_t *ov, uint8_t channel)
-{
-    if (!ov || !ov->can_rules || ov->can_rule_count == 0) return false;
-    for (uint8_t i = 0; i < ov->can_rule_count; ++i) {
-        if (ov->can_rules[i].channel == channel) return true;
-    }
-    return false;
-}
 
 // Line-wise parse: generic rule tables; skipped automatically if the frame is not on the bus
 static bool zc6_can_monitor_parse_line(const char *line)
 {
     // Generic CAN frame parse: extract CAN ID + data from the ATMA line and apply the override rules
-    const vehicle_override_t *ov = vehicle_profile_get_override();
+    
     if (!ov || !ov->can_rules || ov->can_rule_count == 0) {
         return false;
     }
@@ -859,9 +620,9 @@ static void do_elm_init(void) {
     // ---- Protocol selection ----
     uint8_t protocol_to_use = cfg->protocol;
     // Vehicle-forced protocol takes priority (some ECUs/adapters are unstable with auto-detect; skip detection when a profile sets one)
-    const vehicle_profile_t *vp_proto = vehicle_profile_get_active();
-    if (vp_proto && vp_proto->forced_protocol != 0) {
-        protocol_to_use = vp_proto->forced_protocol;
+    const vp_profile_t *vp_proto = vp_loader_get_active();
+    if (vp_proto && vp_proto->proto != 0) {
+        protocol_to_use = vp_proto->proto;
         ESP_LOGD(TAG, "Vehicle '%s' forces protocol %d (skip auto-detect)", vp_proto->name, protocol_to_use);
     } else if (protocol_to_use == 0) {
         // Auto protocol detection — abort immediately if BLE dropped during detection
@@ -886,10 +647,10 @@ static void do_elm_init(void) {
     snprintf(atsp_cmd, sizeof(atsp_cmd), "ATSP%d\r", protocol_to_use);
     const char *fixed_header_cmd = get_vehicle_fixed_header_cmd();
     // Timeout command: prefer the override's obd_timeout first, then the profile's obd_timeout, default 0x19
-    const vehicle_override_t *vp_ov = vehicle_profile_get_override();
+    
     char atst_cmd[12];
-    uint8_t timeout_val = (vp_ov && vp_ov->obd_timeout) ? vp_ov->obd_timeout
-                          : ((vp_proto && vp_proto->obd_timeout) ? vp_proto->obd_timeout : 0x19);
+    uint8_t timeout_val = (vp_ov && vp_ov->atst) ? vp_ov->atst
+                          : ((vp_proto && vp_proto->atst) ? vp_proto->atst : 0x19);
     snprintf(atst_cmd, sizeof(atst_cmd), "ATST %02X\r", timeout_val);
     const char *init_cmds[] = {
         "ATZ\r", "ATE0\r", "ATL0\r", "ATS1\r", "ATH0\r", "ATAT1\r", atst_cmd,
@@ -908,7 +669,7 @@ static void do_elm_init(void) {
     }
 
     // ---- Init the oil-temp query strategy (based on vehicle profile config) ----
-    init_oil_temp_strategy();
+    // init_oil_temp_strategy();  // REMOVED: old oil strategy, replaced by vp_scheduler
     obd_data_reset_temp_cache();
     s_zc_can_obd_phase = false;
     s_zc_can_obd_round_started = false;
@@ -951,8 +712,10 @@ static void obd_poll_task(void *arg) {
             do_elm_init();
             // do_elm_init may have aborted early due to disconnect; don't mark inited in that case
             if (!s_connected) continue;
+            elm327_integration_init();  // NEW: init the scheduler integration
             inited = true;
             tick_count = 0;
+            lifecycle_post_event(LIFECYCLE_EVENT_ELM_CONNECTED);  // Signal that ELM327 is ready
             continue;
         }
         // Real valid data is flowing (any frame parsed since the last round) → clear the self-heal counter.
@@ -981,216 +744,23 @@ static void obd_poll_task(void *arg) {
             continue;
         }
         // ---- Mixed CAN/OBD mode ----
-        //  - OBD-RPM profiles (e.g. ZN/C6 CAN): keep OBD as the main loop and open short ATMA probe windows only
-        //    when we need to refresh CAN temps/TPS.
-        const vehicle_profile_t *vp_poll = vehicle_profile_get_active();
-        const vehicle_override_t *ov_poll = vehicle_profile_get_override();
-        bool can_broadcast = vp_poll && vp_poll->can_broadcast_mode;
-        bool can_has_rpm = can_rules_have_channel(ov_poll, CH_RPM);
-        bool can_has_coolant = can_rules_have_channel(ov_poll, CH_COOLANT);
-        bool can_has_tps = can_rules_have_channel(ov_poll, CH_TPS);
-        bool can_has_oil = can_rules_have_channel(ov_poll, CH_OIL_TEMP);
-        bool can_needs_monitor_probe = can_has_coolant || can_has_tps || can_has_oil;
-        bool can_obd_primary = can_broadcast && !can_has_rpm;
-        uint32_t can_obd_interval = can_has_rpm ? ZC6_CAN_OBD_INTERVAL : 1;
-        uint32_t can_atma_delay_ms = can_has_rpm ? 120u : 30u;
-        can_expire_stale_temp_channels();
+        // TODO: CAN broadcast mode (ATMA) will be reimplemented via vp_profile mon_mode
+        // For now, generic OBD2 profile has mon_mode=VP_MON_NONE, so skip this entire block
+        const vp_profile_t *vp_poll = vp_loader_get_active();
+        bool can_broadcast = false;  // Disabled until CAN profiles are loaded from SD
+        (void)vp_poll;  // Suppress unused warning
 
-        if (!can_obd_primary && can_broadcast && !s_zc_can_obd_phase) {
-            // ---- ATMA phase: receive CAN broadcast frames ----
-            if (!s_zc6_can_monitor_active) {
-                zc6_can_monitor_enter();
-                s_zc6_can_monitor_obd_cycle = 0;
-            }
-            // Self-heal
-            if (s_zc6_can_monitor_entered_us > 0 &&
-                (esp_timer_get_time() - s_last_obd_valid_us) > 10000000) {
-                zc6_can_monitor_exit();
-                zc6_can_monitor_enter();
-                s_zc6_can_monitor_obd_cycle = 0;
-                vTaskDelay(pdMS_TO_TICKS(can_atma_delay_ms));
-                continue;
-            }
-            s_zc6_can_monitor_obd_cycle++;
-            if (s_zc6_can_monitor_obd_cycle >= can_obd_interval) {
-                // Switch to the OBD phase
-                zc6_can_monitor_exit();
-                s_zc_can_obd_phase = true;
-                s_zc_can_obd_round_started = can_has_rpm;
-                tick_count = can_has_rpm ? 1 : 0;
-            }
-            vTaskDelay(pdMS_TO_TICKS(can_atma_delay_ms));
-            continue;
-        }
+        // CAN ATMA mode removed - will be reimplemented via vp_profile mon_mode when CAN profiles are loaded
 
-        // ---- Standard OBD polling (ZC/N6 CAN's OBD phase, or non-CAN profiles) ----
-        // Fully reuses the switch(tick_count) below, identical to regular ZC/N6
-        if (!can_obd_primary && can_broadcast && s_zc_can_obd_phase && tick_count == 0) {
-            if (!s_zc_can_obd_round_started) {
-                s_zc_can_obd_round_started = true;
-            } else {
-                // One standard OBD round done, return to the ATMA phase
-                s_zc_can_obd_phase = false;
-                s_zc_can_obd_round_started = false;
-                zc6_can_monitor_enter();
-                s_zc6_can_monitor_obd_cycle = 0;
-                vTaskDelay(pdMS_TO_TICKS(can_atma_delay_ms));
-                continue;
-            }
-        }
-
+        // ---- Standard OBD polling ----
         bool completed_obd_round = (tick_count == 11);
         {
-        switch(tick_count)
-        {
-            case 0:// Engine RPM
-                send_rpm_request("slot0");
-                break;
-            case 1:// Intake air temp
-                elm327_ble_send_ascii_blocking("01 0F\r");
-                break;
-            case 6: // Auto oil-temp query (based on vehicle strategy) (CAN mode gets it from passive CAN, skip when available)
-                if (can_broadcast && can_has_oil) break;
-                {
-                    const oil_formula_t *oil_f = NULL;
-                    if (s_oil_use_override) {
-                        oil_f = (s_oil_override_idx == 0) ? s_oil_formula_pri : s_oil_formula_sec;
-                    }
+        // ---- NEW SCHEDULER: call the integration layer ----
+        elm327_integration_tick();
 
-                    if (oil_f && oil_f->type != OIL_SPECIAL) {
-                        char cmd_buf[24];
-                        const char *uds_hdr = (s_ov && s_ov->uds_header_cmd) ? s_ov->uds_header_cmd : NULL;
-                        bool need_phys = !uds_hdr && s_ov && s_ov->functional_addr && oil_f->type == OIL_UDS_22;
-                        if (uds_hdr) elm327_ble_send_ascii_blocking(uds_hdr);
-                        else if (need_phys) elm327_ble_send_ascii_blocking("ATSH7E0\r");
-                        if (oil_formula_build_cmd(oil_f, cmd_buf, sizeof(cmd_buf))) {
-                            elm327_ble_send_ascii_blocking(cmd_buf);
-                        }
-                        if (uds_hdr) elm327_ble_send_ascii_blocking(get_vehicle_fixed_header_cmd());
-                        else if (need_phys) elm327_ble_send_ascii_blocking("ATSH7DF\r");
-                        s_expect_mode21 = false;
-                    } else if (oil_f && oil_f->type == OIL_SPECIAL && oil_f->special_id == 0) {
-                        elm327_ble_send_ascii_blocking("21 01\r");
-                        s_expect_mode21 = true;
-                    } else {
-                        uint8_t poll_idx = 0;
-                        oil_temp_query_mode_t mode = get_next_oil_query_mode(&poll_idx);
-                        s_expect_mode21 = (mode == OIL_TEMP_MODE_TOYOTA_21_01);
-                        if (mode == OIL_TEMP_MODE_PID_5C)
-                            elm327_ble_send_ascii_blocking("01 5C\r");
-                        else if (mode == OIL_TEMP_MODE_TOYOTA_21_01)
-                            elm327_ble_send_ascii_blocking("21 01\r");
-                        else {
-                            char cmd_buf[24];
-                            oil_formula_t legacy_f = {0};
-                            legacy_f.type = OIL_UDS_22;
-                            legacy_f.pid_len = 2;
-                            switch (mode) {
-                                case OIL_TEMP_MODE_UDS_22_10_17: legacy_f.pid[0]=0x10; legacy_f.pid[1]=0x17; break;
-                                case OIL_TEMP_MODE_MAZDA_22_111F: legacy_f.pid[0]=0x11; legacy_f.pid[1]=0x1F; break;
-                                case OIL_TEMP_MODE_MAZDA_22_1310: legacy_f.pid[0]=0x13; legacy_f.pid[1]=0x10; break;
-                                case OIL_TEMP_MODE_MINI_22_5822: legacy_f.pid[0]=0x58; legacy_f.pid[1]=0x22; break;
-                                case OIL_TEMP_MODE_BMW_22_4402:
-                                case OIL_TEMP_MODE_BMW_G_22_4402: legacy_f.pid[0]=0x44; legacy_f.pid[1]=0x02; break;
-                                case OIL_TEMP_MODE_BMW_22_03F3: legacy_f.pid[0]=0x03; legacy_f.pid[1]=0xF3; break;
-                                case OIL_TEMP_MODE_BMW_22_D002: legacy_f.pid[0]=0xD0; legacy_f.pid[1]=0x02; break;
-                                case OIL_TEMP_MODE_BMW_22_111F: legacy_f.pid[0]=0x11; legacy_f.pid[1]=0x1F; break;
-                                default: legacy_f.type = OIL_STD_PID; legacy_f.pid[0]=0x5C; legacy_f.pid_len=1; break;
-                            }
-                            bool need_phys = (mode == OIL_TEMP_MODE_BMW_22_03F3 ||
-                                              mode == OIL_TEMP_MODE_BMW_G_22_4402 ||
-                                              mode == OIL_TEMP_MODE_BMW_22_D002 ||
-                                              mode == OIL_TEMP_MODE_BMW_22_111F);
-                            if (need_phys) elm327_ble_send_ascii_blocking("ATSH7E0\r");
-                            if (oil_formula_build_cmd(&legacy_f, cmd_buf, sizeof(cmd_buf)))
-                                elm327_ble_send_ascii_blocking(cmd_buf);
-                            if (need_phys) elm327_ble_send_ascii_blocking("ATSH7DF\r");
-                        }
-                        s_oil_query_mode = poll_idx;
-                    }
-                }
-                break;
-            case 2:// Vehicle speed
-                elm327_ble_send_ascii_blocking("01 0D\r");
-                break;
-            case 3:// Coolant temp (skip when CAN already provides it)
-                if (!(can_broadcast && can_has_coolant)) {
-                    elm327_ble_send_ascii_blocking("01 05\r");
-                }
-                break;
-            case 4:// Engine load (0x04, 0~100%)
-                elm327_ble_send_ascii_blocking("01 04\r");
-                break;
-            case 5:// Throttle position TPS (skip when CAN already provides it)
-                if (!(can_broadcast && can_has_tps)) {
-                    elm327_ble_send_ascii_blocking("01 11\r");
-                }
-                break;
-            case 7:// Battery voltage (0x42)
-                elm327_ble_send_ascii_blocking("01 42\r");
-                break;
-            case 8:// Boost pressure: intake manifold absolute pressure (0x0B, kPa), queried only for turbo profiles
-                {
-                    const vehicle_profile_t *vp = vehicle_profile_get_active();
-                    if (vp && vp->has_boost) {
-                        elm327_ble_send_ascii_blocking("01 0B\r");
-                    }
-                }
-                break;
-            case 9:// Air-fuel ratio AFR (01 44, Commanded Equivalence Ratio)
-                elm327_ble_send_ascii_blocking("01 44\r");
-                break;
-            case 10:// Engine oil pressure (Mode 22 DID, per-profile: 4436=B58, 586F=N55) — physical header, only for OBD-oil-pressure profiles
-                {
-                    const vehicle_profile_t *vp = vehicle_profile_get_active();
-                    if (vp && vp->obd_oil_pressure_did != 0) {
-                        const vehicle_override_t *ov = vehicle_profile_get_override();
-                        const char *phys_hdr = (ov && ov->uds_header_cmd) ? ov->uds_header_cmd : "ATSH7E0\r";
-                        char cmd[16];
-                        elm327_ble_send_ascii_blocking(phys_hdr);
-                        snprintf(cmd, sizeof(cmd), "22 %02X %02X\r",
-                                 (vp->obd_oil_pressure_did >> 8) & 0xFF, vp->obd_oil_pressure_did & 0xFF);
-                        elm327_ble_send_ascii_blocking(cmd);
-                        elm327_ble_send_ascii_blocking(get_vehicle_fixed_header_cmd());
-                    }
-                }
-                break;
-            case 11:// Transmission gear (Mode 22 DID, per-profile: DA2E=BMW EGS) — only for OBD-gear profiles
-                {
-                    const vehicle_profile_t *vp = vehicle_profile_get_active();
-                    if (vp && vp->obd_gear_did != 0) {
-                        const vehicle_override_t *ov = vehicle_profile_get_override();
-                        const char *gear_hdr = (ov && ov->obd_gear_header_cmd) ? ov->obd_gear_header_cmd
-                                             : ((ov && ov->uds_header_cmd) ? ov->uds_header_cmd : "ATSH7E0\r");
-                        const char *rx_filter = ov ? ov->obd_gear_rx_filter_cmd : NULL;
-                        const char *raw_frame = ov ? ov->obd_gear_raw_frame : NULL;
-                        elm327_ble_send_ascii_blocking(gear_hdr);
-                        if (rx_filter) elm327_ble_send_ascii_blocking(rx_filter);
-                        if (raw_frame) {
-                            // CAF0: ELM327 sends the bytes verbatim (no PCI added) and prints the raw reply,
-                            // which still contains "62 HH LL <data>" for the Mode 22 parser.
-                            elm327_ble_send_ascii_blocking("ATCAF0\r");
-                            elm327_ble_send_ascii_blocking(raw_frame);
-                            elm327_ble_send_ascii_blocking("ATCAF1\r");
-                        } else {
-                            char cmd[16];
-                            snprintf(cmd, sizeof(cmd), "22 %02X %02X\r",
-                                     (vp->obd_gear_did >> 8) & 0xFF, vp->obd_gear_did & 0xFF);
-                            elm327_ble_send_ascii_blocking(cmd);
-                        }
-                        if (rx_filter) elm327_ble_send_ascii_blocking("ATCRA\r");
-                        elm327_ble_send_ascii_blocking(get_vehicle_fixed_header_cmd());
-                    }
-                }
-                break;
-            default:
-                break;
-        }
-
-        if ((!can_broadcast || can_obd_primary) && tick_count != 0) {
-            send_rpm_request("dup");
-        }
-
+        // The integration layer drives vp_scheduler which sends commands via elm327_ble_send_ascii_blocking.
+        // Responses are parsed by the existing elm327_parser and fed back via elm327_integration_on_response.
+        // tick_count is kept for compatibility with the CAN probe logic below (needs completed_obd_round).
         tick_count++;
         if(tick_count >= 12)
         {
@@ -1198,25 +768,12 @@ static void obd_poll_task(void *arg) {
         }
         } // end standard OBD poll block
 
-        if (can_obd_primary && can_needs_monitor_probe && completed_obd_round) {
-            int64_t now_us = esp_timer_get_time();
-            if (s_zc6_can_temp_probe_last_us == 0 ||
-                (now_us - s_zc6_can_temp_probe_last_us) >= ZC6_CAN_TEMP_PROBE_INTERVAL_US) {
-                zc6_can_monitor_probe_window(ZC6_CAN_TEMP_PROBE_WINDOW_MS);
-                s_zc6_can_temp_probe_last_us = esp_timer_get_time();
-            }
-        }
+        // CAN temp probe removed - will be reimplemented when CAN profiles are loaded
 
-        // Inter-slot idle gap: prefer the override's poll_gap_ms first, then the profile's poll_gap_ms (e.g. ZC/N6, MX-5 ND use 1ms); fall back to the global default 30ms.
-        // Too small overwhelms cheap BLE adapters; profiles with fast CAN-bus response can safely go smaller.
-        // If the user sets poll_gap_ms = 0, skip vTaskDelay and move on directly.
+        // Inter-slot idle gap: use profile's gap_ms, or default 30ms
         {
-            const vehicle_override_t *ov_gap = vehicle_profile_get_override();
-            const vehicle_profile_t *vp_gap = vehicle_profile_get_active();
-            uint32_t gap = (ov_gap && ov_gap->poll_gap_ms > 0)
-                           ? ov_gap->poll_gap_ms
-                           : ((vp_gap && vp_gap->poll_gap_ms > 0)
-                              ? vp_gap->poll_gap_ms : OBD_POLL_SLOT_GAP_MS);
+            const vp_profile_t *vp_gap = vp_loader_get_active();
+            uint32_t gap = (vp_gap && vp_gap->gap_ms > 0) ? vp_gap->gap_ms : OBD_POLL_SLOT_GAP_MS;
             if (gap > 0) vTaskDelay(pdMS_TO_TICKS(gap));
         }
     }
@@ -1284,17 +841,17 @@ static bool extract_mode21_oil_temp(const uint32_t *d, int count, int32_t *oil_c
     // ---- ZC/N6: locate by tail offset, handling both 38- and 39-byte response lengths ----
     // With 38 bytes oil temp is at d[33]=d[38-5]; with 39 bytes at d[34]=d[39-5]. A fixed d[33] reads the wrong byte on 39-byte frames.
     // Identify by profile name (not index): both the "ZN/C6 CAN" and "ZN/C6 PID" variants take this parse path.
-    const vehicle_profile_t *vp_m21 = vehicle_profile_get_active();
+    const vp_profile_t *vp_m21 = vp_loader_get_active();
     if (vp_m21 && strncmp(vp_m21->name, "ZN/C6", 5) == 0) {
         #define ZC_MODE21_OIL_TAIL_OFFSET 5
         int zc_idx = count - ZC_MODE21_OIL_TAIL_OFFSET;
         if (zc_idx < 0 || zc_idx >= count) {
-            s_oil_diag.mode2_fail++;
+            
             return false;
         }
         int32_t zc_temp = (int32_t)d[zc_idx] - 40;
         if (zc_temp < -10 || zc_temp > 150) {
-            s_oil_diag.mode2_fail++;
+            
             return false;
         }
         // Consistency check: oil temp physically cannot jump more than 8°C between two polls (~270ms).
@@ -1306,20 +863,20 @@ static bool extract_mode21_oil_temp(const uint32_t *d, int count, int32_t *oil_c
             s_last_mode21_oil = (int16_t)zc_temp;
             s_last_mode21_oil_us = now_us;
             s_mode21_hold_cnt = 0;
-            s_oil_diag.mode2_ok++;
+            
             *oil_c = zc_temp;
             return true;
         }
         if (s_mode21_hold_cnt < 30) {
             s_mode21_hold_cnt++;
-            s_oil_diag.mode2_ok++;
+            
             *oil_c = s_last_mode21_oil;
             return true;
         }
         s_last_mode21_oil = (int16_t)zc_temp;
         s_last_mode21_oil_us = esp_timer_get_time();
         s_mode21_hold_cnt = 0;
-        s_oil_diag.mode2_ok++;
+        
         *oil_c = zc_temp;
         return true;
     }
@@ -1332,19 +889,19 @@ static bool extract_mode21_oil_temp(const uint32_t *d, int count, int32_t *oil_c
             s_last_mode21_oil = (int16_t)c;
             s_mode21_hold_cnt = 0;
             *oil_c = c;
-            s_oil_diag.mode2_ok++;
+            
             return true;
         }
         if (in_range && !consistent) {
             if (s_mode21_hold_cnt < 30) {
                 s_mode21_hold_cnt++;
-                s_oil_diag.mode2_ok++;
+                
                 *oil_c = s_last_mode21_oil;
                 return true;
             }
             s_last_mode21_oil = (int16_t)c;
             s_mode21_hold_cnt = 0;
-            s_oil_diag.mode2_ok++;
+            
             *oil_c = c;
             return true;
         }
@@ -1388,12 +945,12 @@ static bool extract_mode21_oil_temp(const uint32_t *d, int count, int32_t *oil_c
         s_mode21_oil_idx = best_idx;
         s_last_mode21_oil = (int16_t)best_temp;
         s_mode21_hold_cnt = 0;
-        s_oil_diag.mode2_ok++;
+        
         *oil_c = best_temp;
         return true;
     }
 
-    s_oil_diag.mode2_fail++;
+    
     return false;
 }
 
@@ -1828,11 +1385,11 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
         char *p41 = strstr(buf, "41 ");
         char *p62 = strstr(buf, "62 ");
         // ---- CAN broadcast frame parsing: data-driven ----
-        const vehicle_profile_t *vp_can = vehicle_profile_get_active();
-        const vehicle_override_t *ov_can = vehicle_profile_get_override();
+        const vp_profile_t *vp_can = vp_loader_get_active();
+        
         bool has_can_rules = ov_can && ov_can->can_rules && ov_can->can_rule_count > 0;
         // Compat with the legacy can_broadcast_mode flag
-        bool ft86_can_mode = (vp_can && vp_can->can_broadcast_mode) || has_can_rules;
+        bool ft86_can_mode = (vp_can && vp_can(->mon_mode != VP_MON_NONE)) || has_can_rules;
 
         // Collect all unique CAN IDs from the override and search for them in buf
         if (ft86_can_mode) {
@@ -1937,10 +1494,10 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
             int count = parse_mode21_data(buf, d, 64);
             int32_t oil_c = 0;
             if (extract_mode21_oil_temp(d, count, &oil_c)) {
-                record_oil_temp_success(OIL_TEMP_MODE_TOYOTA_21_01);
+                // record_oil_temp_success(OIL_TEMP_MODE_TOYOTA_21_01);
                 if (s_cbs.on_parsed_oil_temp) s_cbs.on_parsed_oil_temp((uint32_t)oil_c);
             } else {
-                record_oil_temp_failure(OIL_TEMP_MODE_TOYOTA_21_01);
+                // record_oil_temp_failure(OIL_TEMP_MODE_TOYOTA_21_01);
             }
         } else if (p41 != NULL && !s_expect_mode21) {
             uint32_t d[6] = {0};
@@ -2000,10 +1557,10 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
                             int32_t oil_temp = (int32_t)d[0] - 40;
                             // Validate range: -40 to 215°C
                             if (oil_temp >= -40 && oil_temp <= 215) {
-                                record_oil_temp_success(OIL_TEMP_MODE_PID_5C);
+                                // record_oil_temp_success(OIL_TEMP_MODE_PID_5C);
                                 s_cbs.on_parsed_oil_temp((uint32_t)oil_temp);
                             } else {
-                                record_oil_temp_failure(OIL_TEMP_MODE_PID_5C);
+                                // record_oil_temp_failure(OIL_TEMP_MODE_PID_5C);
                             }
                         }
                         break;
@@ -2031,7 +1588,7 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
             // Mode 22 response: "62 HH LL D0 D1 ..."  (d0=A, d1=B)
             // If Mode21 was expected but Mode22 arrived, clear the expect flag and record a failure
             if (s_expect_mode21) {
-                record_oil_temp_failure(OIL_TEMP_MODE_TOYOTA_21_01);
+                // record_oil_temp_failure(OIL_TEMP_MODE_TOYOTA_21_01);
                 s_expect_mode21 = false;
             }
             uint32_t mode22 = 0, ph = 0, pl = 0, d0 = 0, d1 = 0;
@@ -2041,8 +1598,8 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
 
                 // ---- Engine oil pressure (Mode 22 DID, per-profile: 4436=B58, 586F=N55; absolute hPa, 16-bit) ----
                 {
-                    const vehicle_profile_t *vp = vehicle_profile_get_active();
-                    if (vp && vp->obd_oil_pressure_did != 0 && pid16 == vp->obd_oil_pressure_did) {
+                    const vp_profile_t *vp = vp_loader_get_active();
+                    if (0)  // DISABLED: now handled by vp_scheduler {
                         if (values >= 5 && s_cbs.on_parsed_oil_pressure) {
                             uint32_t hpa = (d0 << 8) | d1;
                             s_cbs.on_parsed_oil_pressure(hpa);
@@ -2053,8 +1610,8 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
 
                 // ---- Transmission gear (Mode 22 DID, per-profile: DA2E=BMW EGS; single byte 0=N,1..8=forward) ----
                 {
-                    const vehicle_profile_t *vp = vehicle_profile_get_active();
-                    if (vp && vp->obd_gear_did != 0 && pid16 == vp->obd_gear_did) {
+                    const vp_profile_t *vp = vp_loader_get_active();
+                    if (0)  // DISABLED: now handled by vp_scheduler {
                         if (values >= 4 && s_cbs.on_parsed_obd_gear) {
                             s_cbs.on_parsed_obd_gear((uint8_t)d0);
                         }
@@ -2072,11 +1629,11 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
                             int16_t temp = oil_formula_parse_resp(oil_f, resp_data, (uint8_t)(values - 3));
                             if (temp != -32768) {
                                 s_oil_override_fail = 0;
-                                record_oil_temp_success(s_oil_mode_priority[0]);
+                                // record_oil_temp_success(s_oil_mode_priority[0]);
                                 s_cbs.on_parsed_oil_temp((uint32_t)temp);
                             } else {
                                 s_oil_override_fail++;
-                                record_oil_temp_failure(s_oil_mode_priority[0]);
+                                // record_oil_temp_failure(s_oil_mode_priority[0]);
                                 if (s_oil_override_fail >= OIL_OVERRIDE_FAIL_MAX && s_oil_formula_sec) {
                                     s_oil_override_idx = 1;
                                     s_oil_override_fail = 0;
@@ -2094,13 +1651,13 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
                     if (values >= 5) {
                         int32_t mazda_oil = (int32_t)(((d0 * 256) + d1) / 100) - 40;
                         if (mazda_oil >= -40 && mazda_oil <= 215) {
-                            record_oil_temp_success(OIL_TEMP_MODE_MAZDA_22_1310);
+                            // record_oil_temp_success(OIL_TEMP_MODE_MAZDA_22_1310);
                             s_cbs.on_parsed_oil_temp((uint32_t)mazda_oil);
                         } else {
-                            record_oil_temp_failure(OIL_TEMP_MODE_MAZDA_22_1310);
+                            // record_oil_temp_failure(OIL_TEMP_MODE_MAZDA_22_1310);
                         }
                     } else {
-                        record_oil_temp_failure(OIL_TEMP_MODE_MAZDA_22_1310);
+                        // record_oil_temp_failure(OIL_TEMP_MODE_MAZDA_22_1310);
                     }
                 } else if (pid16 == 0x111F) {
                     // PID 111F: °C = A - 50 (both Mazda Skyactiv and BMW use this formula)
@@ -2113,19 +1670,19 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
                                                                   : OIL_TEMP_MODE_MAZDA_22_111F;
                     int32_t oil_111f = (int32_t)d0 - 50;
                     if (oil_111f >= -40 && oil_111f <= 215) {
-                        record_oil_temp_success(mode_111f);
+                        // record_oil_temp_success(mode_111f);
                         s_cbs.on_parsed_oil_temp((uint32_t)oil_111f);
                     } else {
-                        record_oil_temp_failure(mode_111f);
+                        // record_oil_temp_failure(mode_111f);
                     }
                 } else if (pid16 == 0x5822) {
                     // MINI/BMW oil temp PID 5822: °C = A - 60 (°F = A*9/5 - 76)
                     int32_t mini_oil = (int32_t)d0 - 60;
                     if (mini_oil >= -40 && mini_oil <= 215) {
-                        record_oil_temp_success(OIL_TEMP_MODE_MINI_22_5822);
+                        // record_oil_temp_success(OIL_TEMP_MODE_MINI_22_5822);
                         s_cbs.on_parsed_oil_temp((uint32_t)mini_oil);
                     } else {
-                        record_oil_temp_failure(OIL_TEMP_MODE_MINI_22_5822);
+                        // record_oil_temp_failure(OIL_TEMP_MODE_MINI_22_5822);
                     }
                 } else if (pid16 == 0x4402) {
                     if (s_oil_mode_priority[0] == OIL_TEMP_MODE_BMW_G_22_4402 ||
@@ -2136,26 +1693,26 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
                             int32_t raw = (int32_t)d0 * 256 + (int32_t)d1;
                             int32_t bmw_g_oil = (int32_t)(raw * 191.25f / 255.0f - 48.0f);
                             if (bmw_g_oil >= -48 && bmw_g_oil <= 143) {
-                                record_oil_temp_success(OIL_TEMP_MODE_BMW_G_22_4402);
+                                // record_oil_temp_success(OIL_TEMP_MODE_BMW_G_22_4402);
                                 s_cbs.on_parsed_oil_temp((uint32_t)bmw_g_oil);
                             } else {
-                                record_oil_temp_failure(OIL_TEMP_MODE_BMW_G_22_4402);
+                                // record_oil_temp_failure(OIL_TEMP_MODE_BMW_G_22_4402);
                             }
                         } else {
-                            record_oil_temp_failure(OIL_TEMP_MODE_BMW_G_22_4402);
+                            // record_oil_temp_failure(OIL_TEMP_MODE_BMW_G_22_4402);
                         }
                     } else {
                         // BMW F-series oil temp PID 4402: °C = B - 64 (second data byte d1 of the response)
                         if (values >= 5) {
                             int32_t bmw_oil = (int32_t)d1 - 64;
                             if (bmw_oil >= -40 && bmw_oil <= 215) {
-                                record_oil_temp_success(OIL_TEMP_MODE_BMW_22_4402);
+                                // record_oil_temp_success(OIL_TEMP_MODE_BMW_22_4402);
                                 s_cbs.on_parsed_oil_temp((uint32_t)bmw_oil);
                             } else {
-                                record_oil_temp_failure(OIL_TEMP_MODE_BMW_22_4402);
+                                // record_oil_temp_failure(OIL_TEMP_MODE_BMW_22_4402);
                             }
                         } else {
-                            record_oil_temp_failure(OIL_TEMP_MODE_BMW_22_4402);
+                            // record_oil_temp_failure(OIL_TEMP_MODE_BMW_22_4402);
                         }
                     }
                 } else if (pid16 == 0xD002) {
@@ -2164,35 +1721,35 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
                         int32_t raw = (int32_t)d0 * 256 + (int32_t)d1;
                         int32_t bmw_g_oil = (int32_t)(raw * 191.25f / 255.0f - 48.0f);
                         if (bmw_g_oil >= -48 && bmw_g_oil <= 143) {
-                            record_oil_temp_success(OIL_TEMP_MODE_BMW_22_D002);
+                            // record_oil_temp_success(OIL_TEMP_MODE_BMW_22_D002);
                             s_cbs.on_parsed_oil_temp((uint32_t)bmw_g_oil);
                         } else {
-                            record_oil_temp_failure(OIL_TEMP_MODE_BMW_22_D002);
+                            // record_oil_temp_failure(OIL_TEMP_MODE_BMW_22_D002);
                         }
                     } else {
-                        record_oil_temp_failure(OIL_TEMP_MODE_BMW_22_D002);
+                        // record_oil_temp_failure(OIL_TEMP_MODE_BMW_22_D002);
                     }
                 } else if (pid16 == 0x03F3) {
                     // BMW G-series oil temp PID 03F3: °C = A - 40 (Header 7E0 physical addressing)
                     int32_t bmw_g_oil = (int32_t)d0 - 40;
                     if (bmw_g_oil >= -40 && bmw_g_oil <= 215) {
-                        record_oil_temp_success(OIL_TEMP_MODE_BMW_22_03F3);
+                        // record_oil_temp_success(OIL_TEMP_MODE_BMW_22_03F3);
                         s_cbs.on_parsed_oil_temp((uint32_t)bmw_g_oil);
                     } else {
-                        record_oil_temp_failure(OIL_TEMP_MODE_BMW_22_03F3);
+                        // record_oil_temp_failure(OIL_TEMP_MODE_BMW_22_03F3);
                     }
                 } else if (pid16 == 0x1017 || pid16 == 0x0011 || pid16 == 0x1C00) {
-                    record_oil_temp_success(OIL_TEMP_MODE_UDS_22_10_17);
+                    // record_oil_temp_success(OIL_TEMP_MODE_UDS_22_10_17);
                     s_cbs.on_parsed_oil_temp((uint32_t)((int32_t)d0 - 40));
                 } else {
-                    record_oil_temp_failure(OIL_TEMP_MODE_UDS_22_10_17);
+                    // record_oil_temp_failure(OIL_TEMP_MODE_UDS_22_10_17);
                 }
             }
             oil_temp_done: ;
         } else {
             // If Mode21 was expected but an unrelated response arrived, record a failure too
             if (s_expect_mode21) {
-                record_oil_temp_failure(OIL_TEMP_MODE_TOYOTA_21_01);
+                // record_oil_temp_failure(OIL_TEMP_MODE_TOYOTA_21_01);
                 s_expect_mode21 = false;
             }
         }
@@ -2213,6 +1770,7 @@ static void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_
         s_connected = false;
         s_notify_ready = false;   // disconnect → notifications invalid; must re-subscribe + re-init after reconnect
         s_elm_ready = true;       // release any blocking send wait immediately (no '>' will ever arrive)
+        lifecycle_post_event(LIFECYCLE_EVENT_ELM_DISCONNECTED);  // Signal ELM327 disconnection
         if (s_poll_task_handle) xTaskNotify(s_poll_task_handle, 0, eNoAction); // wake the poll task so it sees the disconnect without waiting up to 3s
         s_conn_id = 0xFFFF;
         s_have_service = false;
@@ -2399,35 +1957,7 @@ const char *elm327_ble_get_connected_name(void) {
     return s_target_name;
 }
 
-// ---- Oil-temp calibration API implementation ----
-void elm327_oil_temp_set_offset(int8_t offset_c) {
-    s_oil_temp_offset = offset_c;
-    ESP_LOGI(TAG, "OIL temp offset set to %d°C", offset_c);
-}
+// REMOVED: Old oil-temp calibration and diagnostic API
+// elm327_oil_temp_set_offset(), elm327_oil_temp_get_offset(), elm327_oil_temp_get_diag()
+// These are replaced by signal_store and vp_scheduler system
 
-int8_t elm327_oil_temp_get_offset(void) {
-    return s_oil_temp_offset;
-}
-
-void elm327_oil_temp_get_diag(elm327_oil_diag_t *out) {
-    if (!out) return;
-    out->mode0_ok = s_oil_diag.mode0_ok;
-    out->mode1_ok = s_oil_diag.mode1_ok;
-    out->mode2_ok = s_oil_diag.mode2_ok;
-    out->mode0_fail = s_oil_diag.mode0_fail;
-    out->mode1_fail = s_oil_diag.mode1_fail;
-    out->mode2_fail = s_oil_diag.mode2_fail;
-    out->last_raw = s_oil_diag.last_raw_temp;
-    out->last_filtered = s_oil_diag.last_filtered_temp;
-    out->current_mode = s_oil_query_mode;
-    
-    ESP_LOGI(TAG, "OIL DIAG: Mode0(01 5C)=%u/%u, Mode1(22 10 17)=%u/%u, Mode2(21 01)=%u/%u, Mode3(22 11 1F Mz)=%u/%u, Mode4(22 13 10)=%u/%u, Mode6(22 58 22)=%u/%u, Mode7(22 44 02 F)=%u/%u, Mode8(22 03 F3)=%u/%u, Mode9(22 44 02 G)=%u/%u, Mode10(22 D0 02)=%u/%u, Mode11(22 11 1F BM)=%u/%u",
-             out->mode0_ok, out->mode0_fail, out->mode1_ok, out->mode1_fail,
-             out->mode2_ok, out->mode2_fail, s_oil_diag.mode3_ok, s_oil_diag.mode3_fail,
-             s_oil_diag.mode4_ok, s_oil_diag.mode4_fail,
-             s_oil_diag.mode6_ok, s_oil_diag.mode6_fail, s_oil_diag.mode7_ok, s_oil_diag.mode7_fail,
-             s_oil_diag.mode8_ok, s_oil_diag.mode8_fail,
-             s_oil_diag.mode9_ok, s_oil_diag.mode9_fail,
-             s_oil_diag.mode10_ok, s_oil_diag.mode10_fail,
-             s_oil_diag.mode11_ok, s_oil_diag.mode11_fail);
-}

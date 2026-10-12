@@ -19,7 +19,7 @@
 |------|------|
 | [docs/USER_GUIDE.md](docs/USER_GUIDE.md) | **使用指南** —— 页面导航、设置、三连表配对、开机动画、App 升级 |
 | [docs/FLASH.md](docs/FLASH.md) | **烧录与升级** —— 分区表、USB 烧录、App OTA 与回滚 |
-| [docs/APP_PROTOCOL.md](docs/APP_PROTOCOL.md) | **App 对接协议** —— BLE 服务与 WiFi HTTP API |
+| [docs/APP_PROTOCOL.md](docs/APP_PROTOCOL.md) | **App 对接协议** —— OTA 模式的 WiFi HTTP API |
 | [docs/VEHICLES.md](docs/VEHICLES.md) | **车型适配** —— 17 个内置车型、新增车型教程 |
 | [docs/THEMES.md](docs/THEMES.md) | **主题制作** —— 两套主题系统、素材规格、主题商店 |
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | **故障排查** —— 连不上 / 没数据、协议自动检测 |
@@ -56,7 +56,7 @@
 - **三连表（ESP-NOW）**：主表广播、从表零额外 OBD 负载，走真蓝牙配对（主表广播 `SkyGauge-XXYY`），断电记忆
 - **转速报警（含联动模式）**：超阈值全屏红色闪烁；三连表模式按表位依次亮起
 - **两套主题系统**：编译期 TOML 主题（改颜色/素材）与运行时主题分区（自定义表盘页面布局），见 [docs/THEMES.md](docs/THEMES.md)
-- **双路 OTA**：配套手机 App 走 BLE 或 WiFi 热点传输，SHA256 校验 + 15 秒开机自检失败自动回滚
+- **App OTA**：配套手机 App 走 WiFi 热点传输，SHA256 校验 + 15 秒开机自检失败自动回滚
 - **开机动画**：OFF / RACE / VIDEO 三模式，VIDEO 模式可从手机 App 上传自制动画（360×360 圆形安全区）
 - **RaceChrono BLE 输出**：可作为 RaceChrono DIY 设备向手机 App 提供数据
 - **自愈连接**：数据中断自动重初始化重连，上车通电无需手动操作
@@ -107,7 +107,6 @@ main/
 ├── export_path/        # LVGL UI（SquareLine 导出）：20+ 页面、字体、图片
 └── theme_engine/       # 运行时主题加载器（theme_0 分区）
 themes/                 # 编译期主题源文件（TOML 清单 + 素材）
-theme_store/            # 打包好的主题二进制与目录索引（分发用）
 bootmedia/              # 开机动画源文件
 tools/                  # 工具脚本（主题生成、打包、PID 挖掘、发布）
 firmware/release/       # 预编译固件

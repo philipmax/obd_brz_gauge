@@ -25,7 +25,7 @@ python3 tools/theme_packer/pack_theme.py themes/example_boost_oil firmware/theme
 
 This will generate a 4MB binary that can be:
 - Flashed directly to the theme_0 partition (offset 0x620000, the only theme slot)
-- Or sent via BLE OTA to the device
+- Or uploaded over WiFi OTA (`POST /ota/theme`, see docs/THEMES.md)
 
 ## Installing
 
@@ -34,8 +34,8 @@ This will generate a 4MB binary that can be:
 esptool.py --chip esp32s3 --port /dev/ttyUSB0 write_flash 0x620000 firmware/theme_boost_oil.bin
 ```
 
-### Via BLE OTA:
-Use the companion Android app to send the theme binary to the device.
+### Via WiFi OTA:
+Put the gauge in OTA mode (version page -> OTA button), then use the companion Android app to send the theme binary to the device.
 
 ## Theme Features
 

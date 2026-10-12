@@ -15,16 +15,15 @@ main/
 │   ├── obd_data_cache    # OBD 数据缓存（UI 与采集之间的唯一数据面）
 │   ├── vehicle_profiles  # 17 车型配置 + 挡位区间计算（见 VEHICLES.md）
 │   ├── vehicle_custom_config.h  # CAN 规则 / 油温公式 / UDS 头 override 表
-│   ├── ota_update_ble    # BLE OTA 接收（固件 / 开机动画两种目标）
 │   ├── ota_wifi_server   # WiFi SoftAP HTTP OTA 服务（全部 /ota/* 端点）
-│   ├── device_identity   # BLE 设备清单 JSON（0x1FFA，硬件 + build_tag）
+│   ├── device_identity   # 设备清单 JSON（GET /ota/info，硬件 + build_tag）
 │   ├── boot_media_mount / boot_block_player  # bootmedia 分区挂载与开机动画播放
 │   └── theme_mount       # theme_0 分区挂载辅助
 │
 ├── bsp_obd_dsp/          # 板级支持包（换开发板主要改这里）
 │   ├── elm327_ble_client # ELM327 BLE 客户端 + 单线程轮询状态机 + 协议自动检测
 │   ├── espnow_link       # 三连表 ESP-NOW 链路（MASTER/SLAVE/STANDALONE）
-│   ├── racechrono_ble_diy # RaceChrono DIY BLE GATT 服务 + 配对服务 + OTA 广播
+│   ├── racechrono_ble_diy # RaceChrono DIY BLE GATT 服务 + 配对服务
 │   ├── gauge_pair_ble_client # 从表 FIND MASTER 扫描（与 OBD 扫描共用页面）
 │   ├── nvs_storage       # 用户配置与统计的 NVS 持久化（新字段只能追加到结构体末尾）
 │   ├── ads1115_oil_pressure # ADS1115 I2C 油压 ADC（仅 V1 板；有 OBD 油压 DID 的车型不用它）
@@ -108,7 +107,6 @@ build tag 就是它，所以发版前必须先 commit，见[发布流程](#发�
 |------|------|
 | `tools/gen_themes.py` | 编译期主题代码生成（CMake 自动跑；`--check` 供 CI）|
 | `tools/theme_packer/pack_theme.py` | 运行时主题打包成 4MB theme.bin |
-| `tools/gen_theme_store.py` | 重新生成主题商店 catalog.json |
 | `tools/gen_release.py` | build/ 产物 → firmware/release/ + latest.json |
 | `tools/release.sh` | 一键发版（commit → build → gen_release → push）|
 | `tools/make_boot_block.py` | 视频编码成 boot_block.bin/txt（ffmpeg + Pillow；帧数超 65535 自动切 v2 格式）|
@@ -118,7 +116,6 @@ build tag 就是它，所以发版前必须先 commit，见[发布流程](#发�
 | `tools/analyze_proble.py` | 把注入信号与 Car Scanner 录制对上号，反推 PID→仪表映射与解码公式 |
 | `tools/parse_carscanner_backup.py` | 解析 CarScanner 备份目录，导出全车 PID 清单 CSV |
 | `main/python_quick_rs485_check.py` | RS485/Modbus 直连自检（排障用）|
-| `fix_nvs.py` | 把 NVS 角色重置为独立模式（修 WiFi OOM 崩溃）|
 
 ### PID 挖掘工作流（不上车找私有 PID）
 

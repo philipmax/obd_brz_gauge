@@ -96,7 +96,7 @@ typedef struct __attribute__((packed)) {
     int16_t  oil_temp;
     int16_t  oil_pressure_x10;
     int16_t  boost_x10;
-    int16_t  brake_temp_x10;
+    int16_t  brake_temp_x10_legacy; // v5 placeholder, always -1000 (retired brake-temp slot, offset 23; never reuse)
     int16_t  load_pct;
     int16_t  tps;
     int32_t  bat_mv;
@@ -128,6 +128,7 @@ static void wifi_espnow_init(void) {
 static void master_pack(espnow_obd_packet_t *p) {
     obd_data_snapshot_t snap;
 
+    memset(p, 0, sizeof(*p));   // no stale stack bytes on the wire
     p->magic   = ESPNOW_MAGIC;
     p->version = ESPNOW_VER;
     // bit0 = ELM connected; bit1 = linked test in progress; bit2 = rpm_warn_linked_en (slaves mirror this setting from master)
@@ -145,7 +146,7 @@ static void master_pack(espnow_obd_packet_t *p) {
     p->oil_temp         = snap.oil_temp;
     p->oil_pressure_x10 = snap.oil_pressure_x10;
     p->boost_x10        = snap.boost_x10;
-    p->brake_temp_x10   = snap.brake_temp_x10;
+    p->brake_temp_x10_legacy = -1000;   // v5 placeholder, always -1000
     p->load_pct         = snap.load_pct;
     p->tps              = snap.tps;
     p->bat_mv           = snap.bat_mv;
@@ -220,7 +221,6 @@ static void apply_packet(const espnow_obd_packet_t *p) {
     obd_data_set_oil_temp(p->oil_temp);
     obd_data_set_oil_pressure_x10(p->oil_pressure_x10);
     obd_data_set_boost_x10(p->boost_x10);
-    obd_data_set_brake_temp_x10(p->brake_temp_x10);
     obd_data_set_load_pct(p->load_pct);
     obd_data_set_tps(p->tps);
     obd_data_set_bat_mv(p->bat_mv);

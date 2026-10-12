@@ -1,0 +1,142 @@
+{
+  "schema": "skygauge.vehicle/1",
+  "id": "jeep.generic",
+  "rev": 1,
+  "name": "jeep",
+  "drivetrain": {
+    "final_drive": 3.45,
+    "tire_radius_m": 0.373,
+    "gear_tolerance": 0.15,
+    "gears": [
+      {
+        "gear": 1,
+        "ratio": 4.71
+      },
+      {
+        "gear": 2,
+        "ratio": 3.14
+      },
+      {
+        "gear": 3,
+        "ratio": 2.1
+      },
+      {
+        "gear": 4,
+        "ratio": 1.67
+      },
+      {
+        "gear": 5,
+        "ratio": 1.29
+      },
+      {
+        "gear": 6,
+        "ratio": 1.0
+      },
+      {
+        "gear": 7,
+        "ratio": 0.84
+      },
+      {
+        "gear": 8,
+        "ratio": 0.67
+      }
+    ]
+  },
+  "bus": {
+    "protocol": 7,
+    "_protocol_note": "ISO 15765-4 CAN 29-bit 500k",
+    "hdr": "18DB33F1",
+    "atst": 15
+  },
+  "signals": [
+    {
+      "key": "obd.rpm",
+      "src": [
+        {
+          "req": "01 0C",
+          "scale": 0.25,
+          "offset": 0.0
+        }
+      ]
+    },
+    {
+      "key": "obd.speed",
+      "src": [
+        {
+          "req": "01 0D",
+          "scale": 1.0,
+          "offset": 0.0
+        }
+      ]
+    },
+    {
+      "key": "obd.coolant_temp",
+      "src": [
+        {
+          "req": "01 05",
+          "scale": 1.0,
+          "offset": -40.0
+        }
+      ]
+    },
+    {
+      "key": "obd.tps",
+      "src": [
+        {
+          "req": "01 11",
+          "scale": 0.39215686274509803,
+          "offset": 0.0
+        }
+      ]
+    },
+    {
+      "key": "obd.load",
+      "src": [
+        {
+          "req": "01 04",
+          "scale": 0.39215686274509803,
+          "offset": 0.0
+        }
+      ]
+    },
+    {
+      "key": "obd.intake_temp",
+      "src": [
+        {
+          "req": "01 0F",
+          "scale": 1.0,
+          "offset": -40.0
+        }
+      ]
+    },
+    {
+      "key": "obd.battery",
+      "src": [
+        {
+          "req": "01 42",
+          "scale": 0.001,
+          "offset": 0.0
+        }
+      ]
+    },
+    {
+      "key": "obd.oil_temp",
+      "src": [
+        {
+          "req": "01 5C",
+          "scale": 1.0,
+          "offset": -40.0
+        }
+      ]
+    },
+    {
+      "key": "obd.oil_pressure",
+      "src": [
+        {
+          "req": "adc",
+          "_note": "external ADS1115 sensor"
+        }
+      ]
+    }
+  ]
+}

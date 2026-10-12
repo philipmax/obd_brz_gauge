@@ -287,8 +287,8 @@ esptool.py --chip esp32s3 -p PORT write_flash 0x620000 my_theme.bin
 - `POST /ota/theme/erase` — erase the whole theme partition; next boot falls
   back to the built-in default theme
 
-**BLE theme transfer is not implemented yet** (BLE OTA currently supports
-only firmware and boot-media targets).
+Themes go over WiFi OTA or USB flashing only; there is no BLE transfer
+path.
 
 ### Runtime behavior
 
@@ -304,24 +304,6 @@ only firmware and boot-media targets).
 - Switching / updating a theme takes effect after a reboot (same as
   compiled-in themes)
 - API reference: [main/theme_engine/theme_interface.h](../main/theme_engine/theme_interface.h)
-
-### Theme store (theme_store/)
-
-[theme_store/](../theme_store/) holds **packed, ready-to-push** themes plus
-the metadata an app picker needs, kept separate from `themes/` (sources):
-
-```
-theme_store/
-├── catalog.json           # generated index (what the app fetches)
-└── <theme_id>/
-    ├── info.json          # id/title/description/author/version
-    ├── preview.png        # 360×360 picker cover (never flashed)
-    └── theme.bin          # pack_theme.py output, always 4 MB
-```
-
-Publishing: pack with `pack_theme.py` → write `info.json` + `preview.png` →
-`python3 tools/gen_theme_store.py` regenerates `catalog.json` (validation
-and hashing only; it never repacks).
 
 ### Partition background
 

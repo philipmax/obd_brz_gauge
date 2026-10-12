@@ -35,6 +35,7 @@ BLE 连 ELM327 兼容适配器读车况，ESP-NOW 三连表联动，双主题系
 ## 代码红线
 
 - NVS `nvs_user_cfg_t` 和主题结构体**新字段只能追加到末尾**（老设备 NVS 兼容，见 `nvs_storage.c` 的 grow 逻辑）
+- 退役的持久化/上线槽位**永不复用**：`DISP_ITEM_RESERVED_9`、`chartalarm[9]`、`nvs_user_cfg_t.rsv_brake_temp_warn_c`（offset 60）、ESP-NOW v5 offset 23、RaceChrono `RC_PID_F109_RETIRED`（0xF109）；`disp_item_t` 只能追加（数值存进 NVS，见 `ui_disp_item.h`）
 - `themes/registry.txt` 只能在末尾追加、槽位 0 必须 `default`（NVS 存槽位号，改序会静默换肤）
 - `main/export_path/ui_theme_generated.c`、`main/export_path/theme_assets/` 是生成物，永远不要手改
 - `main/export_path/ui_ext.c` 是手写扩展区，SquareLine 重导出不得覆盖

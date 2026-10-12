@@ -1,0 +1,176 @@
+#!/usr/bin/env python3
+"""Generate main/vehicle/vp_builtin_generic.c from vehicles/catalog/obd2.generic.vehicle.json.
+
+Usage:
+    python3 tools/vehicles/gen_builtin.py [--blobgen PATH] [--signals PATH]
+
+  --blobgen PATH   Path to the compiled vp_blobgen binary.
+                   Default: build/host/vehicle/vp_blobgen
+  --signals PATH   Path to contracts/signals.json (passed to vp_blobgen).
+                   Default: contracts/signals.json (auto-detected from repo root)
+
+vp_blobgen is built by:
+    cmake -S test/host/vehicle -B build/host/vehicle -G Ninja
+    cmake --build build/host/vehicle --target vp_blobgen
+
+The script finds the repo root by walking up from its own location, so it can
+be run from any directory.
+"""
+
+import argparse
+import json
+import os
+import subprocess
+import struct
+import sys
+import tempfile
+import textwrap
+
+# ---------------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------------
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT   = os.path.dirname(os.path.dirname(SCRIPT_DIR))
+
+PROFILE_JSON = os.path.join(REPO_ROOT, "vehicles", "catalog", "obd2.generic.vehicle.json")
+OUT_C        = os.path.join(REPO_ROOT, "main", "vehicle", "vp_builtin_generic.c")
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def die(msg):
+    print("gen_builtin: error:", msg, file=sys.stderr)
+    sys.exit(1)
+
+
+def compile_blob(blobgen_path, profile_json_path, signals_path):
+    """Run vp_blobgen and return the compiled blob bytes."""
+    with tempfile.NamedTemporaryFile(suffix=".bin", delete=False) as tmp:
+        tmp_path = tmp.name
+    try:
+        cmd = [blobgen_path]
+        if signals_path and os.path.isfile(signals_path):
+            cmd += ["--signals", signals_path]
+        cmd += [profile_json_path, tmp_path]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            die("vp_blobgen failed:\n" + result.stderr)
+        sys.stdout.write(result.stdout)
+        with open(tmp_path, "rb") as f:
+            return f.read()
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+
+
+def minify_json(path):
+    """Return minified JSON bytes (UTF-8, no trailing newline)."""
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    return json.dumps(data, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+
+
+def blob_to_u32_array(blob):
+    """Pad to 4-byte alignment and return list of uint32_t values (little-endian)."""
+    padded = blob + b"\x00" * ((-len(blob)) % 4)
+    return list(struct.unpack_from("<" + "I" * (len(padded) // 4), padded))
+
+
+def format_hex_array(values, indent="    ", cols=8):
+    """Format a list of uint32_t values as a C hex initializer."""
+    lines = []
+    for i in range(0, len(values), cols):
+        chunk = values[i:i + cols]
+        lines.append(indent + ", ".join("0x%08xu" % v for v in chunk) + ",")
+    return "\n".join(lines)
+
+
+def format_u8_array(data, indent="    ", cols=16):
+    """Format bytes as a C hex initializer."""
+    lines = []
+    for i in range(0, len(data), cols):
+        chunk = data[i:i + cols]
+        lines.append(indent + ", ".join("0x%02xu" % b for b in chunk) + ",")
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--blobgen", default=os.path.join(REPO_ROOT, "build", "host", "vehicle", "vp_blobgen"),
+                    help="path to compiled vp_blobgen binary")
+    ap.add_argument("--signals", default=os.path.join(REPO_ROOT, "contracts", "signals.json"),
+                    help="path to contracts/signals.json")
+    args = ap.parse_args()
+
+    if not os.path.isfile(args.blobgen):
+        die("vp_blobgen not found at %s — build it first:\n"
+            "  cmake -S test/host/vehicle -B build/host/vehicle -G Ninja\n"
+            "  cmake --build build/host/vehicle --target vp_blobgen" % args.blobgen)
+
+    if not os.path.isfile(PROFILE_JSON):
+        die("profile not found: " + PROFILE_JSON)
+
+    print("compiling %s ..." % os.path.relpath(PROFILE_JSON, REPO_ROOT))
+    blob = compile_blob(args.blobgen, PROFILE_JSON, args.signals)
+    if len(blob) % 4 != 0:
+        die("blob size %d is not 4-byte aligned (vp_blobgen bug)" % len(blob))
+
+    minified = minify_json(PROFILE_JSON)
+    u32s = blob_to_u32_array(blob)
+
+    array_body = format_hex_array(u32s)
+    json_body  = format_u8_array(minified)
+
+    out = textwrap.dedent("""\
+        /* vp_builtin_generic.c — AUTO-GENERATED by tools/vehicles/gen_builtin.py
+         * DO NOT EDIT BY HAND.  Source: vehicles/catalog/obd2.generic.vehicle.json
+         *
+         * Regenerate with:
+         *   cmake -S test/host/vehicle -B build/host/vehicle -G Ninja
+         *   cmake --build build/host/vehicle --target vp_blobgen
+         *   python3 tools/vehicles/gen_builtin.py
+         */
+        #include "vp_builtin.h"
+
+        /* Compiled vp_profile_t blob ({blob_bytes} bytes, {n_u32} uint32_t words).
+         * Stored in flash (.rodata); the cast in vp_builtin_generic() is safe
+         * because the blob was produced with the same ABI as the firmware. */
+        const uint32_t vp_builtin_generic_blob[] = {{
+        {array_body}
+        }};
+        const size_t vp_builtin_generic_blob_size = sizeof(vp_builtin_generic_blob);
+
+        /* Minified JSON for export ({json_bytes} bytes, NUL-terminated). */
+        static const uint8_t s_json_bytes[] = {{
+        {json_body}
+            0x00u
+        }};
+        const char   *const vp_builtin_generic_json     = (const char *)s_json_bytes;
+        const size_t        vp_builtin_generic_json_len = {json_bytes}u;
+        """).format(
+        blob_bytes=len(blob),
+        n_u32=len(u32s),
+        array_body=array_body,
+        json_bytes=len(minified),
+        json_body=json_body,
+    )
+
+    os.makedirs(os.path.dirname(OUT_C), exist_ok=True)
+    with open(OUT_C, "w", encoding="utf-8", newline="\n") as f:
+        f.write(out)
+
+    print("wrote %s (%d blob bytes, %d json bytes)" % (
+        os.path.relpath(OUT_C, REPO_ROOT), len(blob), len(minified)))
+
+
+if __name__ == "__main__":
+    main()

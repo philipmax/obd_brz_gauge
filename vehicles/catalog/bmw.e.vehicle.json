@@ -1,0 +1,148 @@
+{
+  "schema": "skygauge.vehicle/1",
+  "id": "bmw.e",
+  "rev": 1,
+  "name": "BMW E",
+  "drivetrain": {
+    "final_drive": 3.846,
+    "tire_radius_m": 0.335,
+    "gear_tolerance": 0.15,
+    "gears": [
+      {
+        "gear": 1,
+        "ratio": 4.055
+      },
+      {
+        "gear": 2,
+        "ratio": 2.396
+      },
+      {
+        "gear": 3,
+        "ratio": 1.582
+      },
+      {
+        "gear": 4,
+        "ratio": 1.192
+      },
+      {
+        "gear": 5,
+        "ratio": 1.0
+      },
+      {
+        "gear": 6,
+        "ratio": 0.872
+      }
+    ]
+  },
+  "bus": {
+    "protocol": 6,
+    "_protocol_note": "ISO 15765-4 CAN 11-bit 500k",
+    "hdr": "7DF",
+    "atst": 10,
+    "poll_gap_ms": 1
+  },
+  "signals": [
+    {
+      "key": "obd.rpm",
+      "src": [
+        {
+          "req": "01 0C",
+          "scale": 0.25,
+          "offset": 0.0
+        }
+      ]
+    },
+    {
+      "key": "obd.speed",
+      "src": [
+        {
+          "req": "01 0D",
+          "scale": 1.0,
+          "offset": 0.0
+        }
+      ]
+    },
+    {
+      "key": "obd.coolant_temp",
+      "src": [
+        {
+          "req": "01 05",
+          "scale": 1.0,
+          "offset": -40.0
+        }
+      ]
+    },
+    {
+      "key": "obd.tps",
+      "src": [
+        {
+          "req": "01 11",
+          "scale": 0.39215686274509803,
+          "offset": 0.0
+        }
+      ]
+    },
+    {
+      "key": "obd.load",
+      "src": [
+        {
+          "req": "01 04",
+          "scale": 0.39215686274509803,
+          "offset": 0.0
+        }
+      ]
+    },
+    {
+      "key": "obd.intake_temp",
+      "src": [
+        {
+          "req": "01 0F",
+          "scale": 1.0,
+          "offset": -40.0
+        }
+      ]
+    },
+    {
+      "key": "obd.battery",
+      "src": [
+        {
+          "req": "01 42",
+          "scale": 0.001,
+          "offset": 0.0
+        }
+      ]
+    },
+    {
+      "key": "obd.oil_temp",
+      "src": [
+        {
+          "req": "22 44 02",
+          "scale": 1.0,
+          "offset": -48.0,
+          "bytes": 2,
+          "byte_index": 0,
+          "hdr": "6F1"
+        },
+        {
+          "req": "22 58 22",
+          "scale": 1.0,
+          "offset": -60.0,
+          "bytes": 1,
+          "byte_index": 0,
+          "hdr": "6F1"
+        }
+      ]
+    },
+    {
+      "key": "obd.oil_pressure",
+      "src": [
+        {
+          "req": "22 58 6F",
+          "scale": 1.0,
+          "offset": 0.0,
+          "unit": "hPa"
+        }
+      ]
+    }
+  ]
+}

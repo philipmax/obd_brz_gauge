@@ -17,6 +17,11 @@ The companion app compares `firmware.count` here against the device's own
 manifest to decide whether an update is available. `count` comes from the
 current git HEAD, so remember to `git commit` your code *before* building
 (see docs/DEVELOPMENT.md).
+
+REFACTOR_PLAN.md P6 additions:
+  - Adds `layout` (partition layout_id) and `flash_files` (web flasher map) to manifest
+  - Validates firmware image ≤ 3MB (0x300000), warns at 90%
+  - Validates bootmedia ≤ 4.75MB (0x4C0000) if present
 """
 
 import hashlib
@@ -31,6 +36,14 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BUILD_DIR = os.path.join(ROOT, "build")
 RELEASE_DIR = os.path.join(ROOT, "firmware", "release")
+
+# Partition layout v2 CRC32 (from partitions.csv, all 9 entries)
+LAYOUT_ID = 0x94752AA3
+
+# Size limits (partition layout v2)
+MAX_FIRMWARE_SIZE = 0x300000      # 3 MB per OTA slot
+MAX_BOOTMEDIA_SIZE = 0x4C0000     # 4.75 MB bootmedia partition
+FIRMWARE_WARN_PCT = 90            # warn if firmware exceeds this % of MAX
 
 # Device block must stay in sync with main/app_obd_dsp/device_identity.c.
 DEVICE = {
@@ -84,6 +97,29 @@ def main():
         shutil.copy2(src, dst)
         print(f"copied {rel}")
 
+    # 1a. Validate firmware size (REFACTOR_PLAN.md P6)
+    fw_path = os.path.join(RELEASE_DIR, "obd_brz_gauge.bin")
+    fw_size = os.path.getsize(fw_path)
+    if fw_size > MAX_FIRMWARE_SIZE:
+        sys.exit(f"ERROR: Firmware {fw_size} bytes exceeds {MAX_FIRMWARE_SIZE} bytes (3 MB OTA slot limit)")
+
+    warn_threshold = int(MAX_FIRMWARE_SIZE * FIRMWARE_WARN_PCT / 100)
+    if fw_size > warn_threshold:
+        pct = fw_size * 100.0 / MAX_FIRMWARE_SIZE
+        print(f"⚠️  WARNING: Firmware is {fw_size} bytes ({pct:.1f}% of 3 MB limit)")
+    else:
+        pct = fw_size * 100.0 / MAX_FIRMWARE_SIZE
+        print(f"✓ Firmware size: {fw_size} bytes ({pct:.1f}% of 3 MB limit)")
+
+    # 1b. Validate bootmedia size if present
+    bootmedia_path = os.path.join(BUILD_DIR, "bootmedia.bin")
+    if os.path.isfile(bootmedia_path):
+        bm_size = os.path.getsize(bootmedia_path)
+        if bm_size > MAX_BOOTMEDIA_SIZE:
+            print(f"⚠️  WARNING: bootmedia.bin {bm_size} bytes exceeds {MAX_BOOTMEDIA_SIZE} bytes (4.75 MB partition)")
+        else:
+            print(f"✓ bootmedia size: {bm_size} bytes")
+
     # 2. Build the version metadata from the current git HEAD.
     branch = git("rev-parse", "--abbrev-ref", "HEAD")
     count = int(git("rev-list", "--count", "HEAD"))
@@ -99,8 +135,25 @@ def main():
         p = os.path.join(RELEASE_DIR, rel)
         files[key] = {"path": rel, "size": os.path.getsize(p), "sha256": sha256(p)}
 
+    # Flash addresses for web flasher complete mode (REFACTOR_PLAN.md P6)
+    flash_files = {
+        "0x0": "bootloader/bootloader.bin",
+        "0x8000": "partition_table/partition-table.bin",
+        "0xf000": "ota_data_initial.bin",
+        "0x20000": "obd_brz_gauge.bin",
+        # Optional files (web flasher may skip these):
+        # "0x620000": "theme.bin",        # user-provided theme
+        # "0xA20000": "bootmedia.bin",    # boot animation
+    }
+
     manifest = {
         "device": DEVICE,
+        "layout": {
+            "id": LAYOUT_ID,
+            "version": 2,
+            "app_slot_size": MAX_FIRMWARE_SIZE,
+            "bootmedia_max": MAX_BOOTMEDIA_SIZE,
+        },
         "firmware": {
             "project": PROJECT,
             "version": VERSION,
@@ -113,6 +166,7 @@ def main():
             "slot": SLOT,
         },
         "files": files,
+        "flash_files": flash_files,
     }
 
     out = os.path.join(RELEASE_DIR, "latest.json")

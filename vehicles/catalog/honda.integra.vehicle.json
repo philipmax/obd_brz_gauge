@@ -1,0 +1,119 @@
+{
+  "schema": "skygauge.vehicle/1",
+  "id": "honda.integra",
+  "rev": 1,
+  "name": "Honda Integra",
+  "drivetrain": {
+    "final_drive": 4.438,
+    "tire_radius_m": 0.325,
+    "gear_tolerance": 0.0,
+    "gears": []
+  },
+  "bus": {
+    "protocol": 7,
+    "_protocol_note": "ISO 15765-4 CAN 29-bit 500k",
+    "hdr": "18DB33F1"
+  },
+  "signals": [
+    {
+      "key": "obd.rpm",
+      "src": [
+        {
+          "req": "01 0C",
+          "scale": 0.25,
+          "offset": 0.0
+        }
+      ]
+    },
+    {
+      "key": "obd.speed",
+      "src": [
+        {
+          "req": "01 0D",
+          "scale": 1.0,
+          "offset": 0.0
+        }
+      ]
+    },
+    {
+      "key": "obd.coolant_temp",
+      "src": [
+        {
+          "req": "01 05",
+          "scale": 1.0,
+          "offset": -40.0
+        }
+      ]
+    },
+    {
+      "key": "obd.tps",
+      "src": [
+        {
+          "req": "01 11",
+          "scale": 0.39215686274509803,
+          "offset": 0.0
+        }
+      ]
+    },
+    {
+      "key": "obd.load",
+      "src": [
+        {
+          "req": "01 04",
+          "scale": 0.39215686274509803,
+          "offset": 0.0
+        }
+      ]
+    },
+    {
+      "key": "obd.intake_temp",
+      "src": [
+        {
+          "req": "01 0F",
+          "scale": 1.0,
+          "offset": -40.0
+        }
+      ]
+    },
+    {
+      "key": "obd.battery",
+      "src": [
+        {
+          "req": "01 42",
+          "scale": 0.001,
+          "offset": 0.0
+        }
+      ]
+    },
+    {
+      "key": "obd.boost",
+      "src": [
+        {
+          "req": "01 0B",
+          "scale": 1.0,
+          "offset": -101.3,
+          "_note": "MAP absolute kPa − 101.3 ≈ boost gauge kPa"
+        }
+      ]
+    },
+    {
+      "key": "obd.oil_temp",
+      "src": [
+        {
+          "req": "01 5C",
+          "scale": 1.0,
+          "offset": -40.0
+        }
+      ]
+    },
+    {
+      "key": "obd.oil_pressure",
+      "src": [
+        {
+          "req": "adc",
+          "_note": "external ADS1115 sensor"
+        }
+      ]
+    }
+  ]
+}

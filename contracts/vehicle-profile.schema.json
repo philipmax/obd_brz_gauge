@@ -1,0 +1,1316 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:skygauge:contracts:vehicle-profile:1",
+  "title": "SkyGauge vehicle profile (skygauge.vehicle/1)",
+  "description": "Importable form of a vehicle profile, mirroring the device validator main/vehicle/vp_validate.c. Deliberately stricter than the device in two ways: unknown keys are errors here (the device only warns, W_UNKNOWN), and obd.* units must be listed in contracts/signals.json profile_units. Checks JSON Schema cannot express (stack depth, byte/bit/LUT indices vs len, raw-frame ISO-TP parsing, request/CAN/veh counts, rate budget, functional header inherited from bus.hdr, duplicate signal ids) are done by the device validator; see contracts/vehicle-rpn.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "id",
+    "rev",
+    "name",
+    "bus",
+    "signals"
+  ],
+  "properties": {
+    "schema": {
+      "type": "string",
+      "pattern": "^skygauge\\.vehicle/1(\\.[0-9]{1,4})?$",
+      "description": "Major version must be 1; an optional minor (1.N) is accepted."
+    },
+    "id": {
+      "$ref": "#/$defs/profileId"
+    },
+    "rev": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "name": {
+      "$ref": "#/$defs/ascii23"
+    },
+    "origin": {
+      "type": "object",
+      "description": "Informational (e.g. legacy_idx, from)."
+    },
+    "meta": {
+      "type": "object",
+      "description": "Informational (make, model, years, author, ...)."
+    },
+    "aliases": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "$ref": "#/$defs/profileId"
+      },
+      "description": "Other ids this profile answers to (e.g. a merged duplicate)."
+    },
+    "force": {
+      "type": "boolean",
+      "description": "Allow installing a lower rev than the installed one."
+    },
+    "notes": {
+      "$ref": "#/$defs/notes"
+    },
+    "requires": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "elm": {
+          "type": "array",
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "ATMA",
+              "ATCEA"
+            ]
+          }
+        }
+      }
+    },
+    "bus": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "proto": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 12,
+          "description": "ATSPn: 0 = automatic, 1..9, 10..12 = A..C."
+        },
+        "hdr": {
+          "$ref": "#/$defs/txHeader"
+        },
+        "atst": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 255,
+          "description": "ATST value (x 4 ms). Default 0x19."
+        },
+        "gap_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000,
+          "description": "Pause between requests. Default 30."
+        },
+        "init": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "$ref": "#/$defs/atInit"
+          }
+        }
+      }
+    },
+    "drivetrain": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fd": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 30
+        },
+        "tire_m": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 1
+        },
+        "gears": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "number",
+            "minimum": 0.05,
+            "maximum": 30
+          }
+        },
+        "tol": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.5
+        },
+        "speed_scale": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2
+        }
+      }
+    },
+    "monitor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "probe",
+            "continuous"
+          ]
+        },
+        "every_ms": {
+          "type": "integer",
+          "minimum": 250,
+          "maximum": 60000
+        },
+        "window_ms": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 200
+        },
+        "stale_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60000
+        }
+      },
+      "if": {
+        "properties": {
+          "mode": {
+            "const": "probe"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "every_ms",
+          "window_ms"
+        ]
+      }
+    },
+    "luts": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "$ref": "#/$defs/lutTable"
+      }
+    },
+    "signals": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 48,
+      "items": {
+        "$ref": "#/$defs/signal"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "title": "a monitor block requires ATMA",
+      "if": {
+        "required": [
+          "monitor"
+        ]
+      },
+      "then": {
+        "required": [
+          "requires"
+        ],
+        "properties": {
+          "requires": {
+            "required": [
+              "elm"
+            ],
+            "properties": {
+              "elm": {
+                "contains": {
+                  "const": "ATMA"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "title": "CAN sources require a monitor block",
+      "if": {
+        "required": [
+          "signals"
+        ],
+        "properties": {
+          "signals": {
+            "contains": {
+              "required": [
+                "src"
+              ],
+              "properties": {
+                "src": {
+                  "contains": {
+                    "required": [
+                      "can"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "monitor"
+        ]
+      }
+    },
+    {
+      "title": "extended addressing (cea) requires ATCEA",
+      "if": {
+        "required": [
+          "signals"
+        ],
+        "properties": {
+          "signals": {
+            "contains": {
+              "required": [
+                "src"
+              ],
+              "properties": {
+                "src": {
+                  "contains": {
+                    "required": [
+                      "cea"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "requires"
+        ],
+        "properties": {
+          "requires": {
+            "required": [
+              "elm"
+            ],
+            "properties": {
+              "elm": {
+                "contains": {
+                  "const": "ATCEA"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "title": "ratio (derive or fallback) needs drivetrain fd, tire_m and at least one gear",
+      "if": {
+        "required": [
+          "signals"
+        ],
+        "properties": {
+          "signals": {
+            "contains": {
+              "anyOf": [
+                {
+                  "required": [
+                    "derive"
+                  ],
+                  "properties": {
+                    "derive": {
+                      "const": "ratio"
+                    }
+                  }
+                },
+                {
+                  "required": [
+                    "fallback"
+                  ],
+                  "properties": {
+                    "fallback": {
+                      "const": "ratio"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "drivetrain"
+        ],
+        "properties": {
+          "drivetrain": {
+            "required": [
+              "fd",
+              "tire_m",
+              "gears"
+            ],
+            "properties": {
+              "gears": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "profileId": {
+      "type": "string",
+      "pattern": "^[a-z0-9._-]{1,31}$",
+      "description": "Profile id: [a-z0-9._-], 1..31 characters (vp_id_ok)."
+    },
+    "ascii23": {
+      "type": "string",
+      "pattern": "^[\\x20-\\x7E]{1,23}$",
+      "description": "Printable ASCII, 1..23 characters (device fonts are ASCII only)."
+    },
+    "notes": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      ],
+      "description": "Free text, ignored by the device."
+    },
+    "txHeader": {
+      "type": "string",
+      "pattern": "^(7[Dd][Ff]|7[Ee][0-7]|6[0-9A-Fa-f]{2}|18[Dd][Bb]33[Ff]1|18[Dd][Aa][0-9A-Fa-f]{2}[Ff]1)$",
+      "description": "Request header (ATSH). Whitelist: 7DF and 18DB33F1 (functional), 7E0-7E7, 600-6FF, 18DAxxF1 (physical)."
+    },
+    "rxFilter": {
+      "type": "string",
+      "pattern": "^(7[Ee][89A-Fa-f]|6[0-9A-Fa-f]{2}|18[Dd][Aa][Ff]1[0-9A-Fa-f]{2})$",
+      "description": "Receive filter (ATCRA). Whitelist: 7E8-7EF, 600-6FF, 18DAF1xx."
+    },
+    "canId": {
+      "type": "string",
+      "pattern": "^([0-7][0-9A-Fa-f]{2}|[01][0-9A-Fa-f]{7})$",
+      "description": "Monitored CAN id: 3 hex digits (<= 7FF) or 8 hex digits (<= 1FFFFFFF)."
+    },
+    "request": {
+      "type": "string",
+      "pattern": "^((01|09|21)[0-9A-Fa-f]{2}|22[0-9A-Fa-f]{4})$",
+      "description": "Compact hex service + PID/DID: 01/09/21 + 1 byte, 22 + 2 bytes (service whitelist, vehicle-rpn.md section 4)."
+    },
+    "rawFrame": {
+      "type": "string",
+      "pattern": "^[0-9A-Fa-f]{2}( ?[0-9A-Fa-f]{2}){0,7}$",
+      "description": "Raw CAN payload, 1..8 hex bytes (single spaces allowed). Must parse as an ISO-TP single frame whose service is whitelisted under every interpretation (checked by the device). Sent between ATCAF0/ATCAF1."
+    },
+    "hexBytes": {
+      "type": "string",
+      "pattern": "^([0-9A-Fa-f]{2}){1,8}$",
+      "description": "Compact hex, 1..8 bytes."
+    },
+    "atInit": {
+      "type": "string",
+      "pattern": "^[Aa] *[Tt][ !-~]{1,13}$",
+      "description": "Extra init AT command. After removing spaces and upper-casing only SH<hdr>, CRA[<rx>], CAF1, ST<02..FF>, SP<0-9,A-C>, SPA<1-9,A-C> are accepted (vp_at_check, context INIT)."
+    },
+    "range": {
+      "type": "array",
+      "minItems": 2,
+      "items": false,
+      "prefixItems": [
+        {
+          "type": "number",
+          "minimum": -10000000.0,
+          "maximum": 10000000.0
+        },
+        {
+          "type": "number",
+          "minimum": -10000000.0,
+          "maximum": 10000000.0
+        }
+      ],
+      "description": "[lo, hi], lo <= hi, |v| <= 1e7."
+    },
+    "instruction": {
+      "description": "One RPN instruction (vp_rpn.h JSON spelling): bare string for operand-less ops, array otherwise. See vehicle-rpn.md.",
+      "oneOf": [
+        {
+          "title": "ADD SUB MUL DIV NEG MIN MAX CLAMP AND OR SHR SHL SEXT8 SEXT16",
+          "enum": [
+            "+",
+            "-",
+            "*",
+            "/",
+            "neg",
+            "min",
+            "max",
+            "clamp",
+            "&",
+            "|",
+            ">>",
+            "<<",
+            "sext8",
+            "sext16"
+          ]
+        },
+        {
+          "title": "PUSH_BYTE",
+          "type": "array",
+          "minItems": 2,
+          "items": false,
+          "prefixItems": [
+            {
+              "const": "A"
+            },
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            }
+          ]
+        },
+        {
+          "title": "PUSH_RAW (explicit bit field)",
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 5,
+          "prefixItems": [
+            {
+              "const": "R"
+            },
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 32
+            }
+          ],
+          "items": {
+            "enum": [
+              "le",
+              "be",
+              "u",
+              "s"
+            ]
+          }
+        },
+        {
+          "title": "PUSH_RAW (source field X)",
+          "type": "array",
+          "minItems": 1,
+          "items": false,
+          "prefixItems": [
+            {
+              "const": "X"
+            }
+          ]
+        },
+        {
+          "title": "PUSH_CONST",
+          "type": "array",
+          "minItems": 2,
+          "items": false,
+          "prefixItems": [
+            {
+              "const": "k"
+            },
+            {
+              "type": "number",
+              "minimum": -10000000.0,
+              "maximum": 10000000.0
+            }
+          ]
+        },
+        {
+          "title": "LUT",
+          "type": "array",
+          "minItems": 2,
+          "items": false,
+          "prefixItems": [
+            {
+              "const": "lut"
+            },
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            }
+          ]
+        }
+      ]
+    },
+    "rpn": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": {
+        "$ref": "#/$defs/instruction"
+      },
+      "description": "Compiled formula. Stack depth <= 8, exactly one value at the end, byte/bit/LUT indices in range (checked by the device validator)."
+    },
+    "lutTable": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "oneOf": [
+          {
+            "type": "array",
+            "minItems": 2,
+            "items": false,
+            "prefixItems": [
+              {
+                "type": "number",
+                "minimum": -10000000.0,
+                "maximum": 10000000.0
+              },
+              {
+                "type": "number",
+                "minimum": -10000000.0,
+                "maximum": 10000000.0
+              }
+            ]
+          },
+          {
+            "type": "array",
+            "minItems": 3,
+            "items": false,
+            "prefixItems": [
+              {
+                "type": "number",
+                "minimum": -10000000.0,
+                "maximum": 10000000.0
+              },
+              {
+                "type": "number",
+                "minimum": -10000000.0,
+                "maximum": 10000000.0
+              },
+              {
+                "type": "number",
+                "minimum": -10000000.0,
+                "maximum": 10000000.0
+              }
+            ]
+          }
+        ]
+      },
+      "description": "Entries [key, out] (x == key) or [lo, hi, out] (lo <= x <= hi, lo <= hi); the first matching entry wins, no match makes the sample invalid."
+    },
+    "hold": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "delta",
+        "max_hold",
+        "gap_ms"
+      ],
+      "properties": {
+        "delta": {
+          "type": "number",
+          "minimum": 0.001,
+          "maximum": 1000
+        },
+        "max_hold": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 255
+        },
+        "gap_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60000
+        }
+      },
+      "description": "Jump filter (legacy ZC6 Mode 21 oil temperature, elm327_ble_client.c:1300-1323)."
+    },
+    "requestSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rpn"
+      ],
+      "anyOf": [
+        {
+          "required": [
+            "req"
+          ]
+        },
+        {
+          "required": [
+            "raw"
+          ]
+        }
+      ],
+      "properties": {
+        "req": {
+          "$ref": "#/$defs/request"
+        },
+        "raw": {
+          "$ref": "#/$defs/rawFrame"
+        },
+        "hdr": {
+          "$ref": "#/$defs/txHeader"
+        },
+        "rx": {
+          "$ref": "#/$defs/rxFilter"
+        },
+        "cea": {
+          "type": "string",
+          "pattern": "^[0-9A-Fa-f]{2}$"
+        },
+        "len": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        },
+        "multiframe": {
+          "type": "boolean"
+        },
+        "byte_from_end": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        },
+        "hold": {
+          "$ref": "#/$defs/hold"
+        },
+        "expect": {
+          "$ref": "#/$defs/hexBytes"
+        },
+        "valid": {
+          "$ref": "#/$defs/range"
+        },
+        "fail_after": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        },
+        "rpn": {
+          "$ref": "#/$defs/rpn"
+        },
+        "expr": {
+          "type": "string",
+          "description": "Infix A..H/X notation, display only, never evaluated."
+        },
+        "notes": {
+          "$ref": "#/$defs/notes"
+        }
+      },
+      "allOf": [
+        {
+          "title": "raw frames need an explicit hdr and no cea",
+          "if": {
+            "required": [
+              "raw"
+            ]
+          },
+          "then": {
+            "required": [
+              "hdr"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "cea"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "title": "byte_from_end needs multiframe: true",
+          "if": {
+            "required": [
+              "byte_from_end"
+            ]
+          },
+          "then": {
+            "required": [
+              "multiframe"
+            ],
+            "properties": {
+              "multiframe": {
+                "const": true
+              }
+            }
+          }
+        },
+        {
+          "title": "functional addressing only for services 01 and 09; no extended addressing",
+          "if": {
+            "required": [
+              "hdr"
+            ],
+            "properties": {
+              "hdr": {
+                "type": "string",
+                "pattern": "^(7[Dd][Ff]|18[Dd][Bb]33[Ff]1)$"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "req": {
+                "pattern": "^(01|09)"
+              }
+            },
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "cea"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "canSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "can",
+        "bit",
+        "bits",
+        "rpn"
+      ],
+      "properties": {
+        "can": {
+          "$ref": "#/$defs/canId"
+        },
+        "bit": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 63
+        },
+        "bits": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32
+        },
+        "endian": {
+          "enum": [
+            "le",
+            "be"
+          ]
+        },
+        "signed": {
+          "type": "boolean"
+        },
+        "valid": {
+          "$ref": "#/$defs/range"
+        },
+        "fail_after": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        },
+        "rpn": {
+          "$ref": "#/$defs/rpn"
+        },
+        "expr": {
+          "type": "string"
+        },
+        "notes": {
+          "$ref": "#/$defs/notes"
+        }
+      }
+    },
+    "source": {
+      "description": "Either a request source (req and/or raw) or a passive CAN monitor source (can).",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/requestSource"
+        },
+        {
+          "$ref": "#/$defs/canSource"
+        }
+      ]
+    },
+    "signal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "enum": [
+                "obd.rpm",
+                "obd.speed",
+                "obd.boost",
+                "obd.coolant_temp",
+                "obd.oil_pressure",
+                "obd.gear",
+                "obd.battery_voltage",
+                "obd.oil_temp",
+                "obd.afr",
+                "obd.throttle",
+                "obd.intake_temp",
+                "obd.load"
+              ]
+            },
+            {
+              "type": "string",
+              "pattern": "^veh\\.[a-z0-9_]{1,27}$"
+            }
+          ],
+          "description": "Registry key (contracts/signals.json, obd.* only) or a custom veh.<name> key (<= 31 chars)."
+        },
+        "name": {
+          "$ref": "#/$defs/ascii23"
+        },
+        "unit": {
+          "type": "string",
+          "pattern": "^[\\x20-\\x7E]{1,7}$"
+        },
+        "decimals": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3,
+          "description": "veh.* only: internal value = R(v * 10^decimals). Default 0."
+        },
+        "rate": {
+          "enum": [
+            "round",
+            "every",
+            "slow",
+            "on_demand"
+          ]
+        },
+        "div": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 64
+        },
+        "period_ms": {
+          "type": "integer",
+          "minimum": 20,
+          "maximum": 60000
+        },
+        "valid": {
+          "$ref": "#/$defs/range"
+        },
+        "post": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "zero_le": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1000000.0
+            },
+            "zero_if_rpm_lt": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20000
+            },
+            "clamp": {
+              "$ref": "#/$defs/range"
+            }
+          }
+        },
+        "filter": {
+          "enum": [
+            "none",
+            "temp_hyst",
+            "ema"
+          ]
+        },
+        "derive": {
+          "enum": [
+            "none",
+            "ratio"
+          ]
+        },
+        "fallback": {
+          "enum": [
+            "none",
+            "ratio"
+          ]
+        },
+        "src": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/source"
+          }
+        },
+        "notes": {
+          "$ref": "#/$defs/notes"
+        }
+      },
+      "allOf": [
+        {
+          "title": "derive: ratio has no sources, every other signal needs src",
+          "if": {
+            "required": [
+              "derive"
+            ],
+            "properties": {
+              "derive": {
+                "const": "ratio"
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "src"
+                  ]
+                }
+              ]
+            }
+          },
+          "else": {
+            "required": [
+              "src"
+            ]
+          }
+        },
+        {
+          "title": "ratio (derive or fallback) only for obd.gear",
+          "if": {
+            "anyOf": [
+              {
+                "required": [
+                  "derive"
+                ],
+                "properties": {
+                  "derive": {
+                    "const": "ratio"
+                  }
+                }
+              },
+              {
+                "required": [
+                  "fallback"
+                ],
+                "properties": {
+                  "fallback": {
+                    "const": "ratio"
+                  }
+                }
+              }
+            ]
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "const": "obd.gear"
+              }
+            }
+          }
+        },
+        {
+          "title": "div only with rate slow",
+          "if": {
+            "required": [
+              "div"
+            ]
+          },
+          "then": {
+            "required": [
+              "rate"
+            ],
+            "properties": {
+              "rate": {
+                "const": "slow"
+              }
+            }
+          }
+        },
+        {
+          "title": "period_ms not with rate every",
+          "if": {
+            "required": [
+              "period_ms"
+            ]
+          },
+          "then": {
+            "properties": {
+              "rate": {
+                "not": {
+                  "const": "every"
+                }
+              }
+            }
+          }
+        },
+        {
+          "title": "decimals only for veh.*",
+          "if": {
+            "required": [
+              "decimals"
+            ]
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^veh\\."
+              }
+            }
+          }
+        },
+        {
+          "title": "units accepted for obd.rpm (contracts/signals.json profile_units)",
+          "if": {
+            "properties": {
+              "id": {
+                "const": "obd.rpm"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "unit": {
+                "enum": [
+                  "rpm"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "units accepted for obd.speed (contracts/signals.json profile_units)",
+          "if": {
+            "properties": {
+              "id": {
+                "const": "obd.speed"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "unit": {
+                "enum": [
+                  "km/h",
+                  "mph"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "units accepted for obd.boost (contracts/signals.json profile_units)",
+          "if": {
+            "properties": {
+              "id": {
+                "const": "obd.boost"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "unit": {
+                "enum": [
+                  "bar",
+                  "0.1bar",
+                  "kPa_rel",
+                  "psi"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "units accepted for obd.coolant_temp (contracts/signals.json profile_units)",
+          "if": {
+            "properties": {
+              "id": {
+                "const": "obd.coolant_temp"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "unit": {
+                "enum": [
+                  "C"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "units accepted for obd.oil_pressure (contracts/signals.json profile_units)",
+          "if": {
+            "properties": {
+              "id": {
+                "const": "obd.oil_pressure"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "unit": {
+                "enum": [
+                  "bar",
+                  "0.1bar",
+                  "kPa",
+                  "hPa",
+                  "psi"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "units accepted for obd.gear (contracts/signals.json profile_units)",
+          "if": {
+            "properties": {
+              "id": {
+                "const": "obd.gear"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "unit": {
+                "enum": [
+                  "gear"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "units accepted for obd.battery_voltage (contracts/signals.json profile_units)",
+          "if": {
+            "properties": {
+              "id": {
+                "const": "obd.battery_voltage"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "unit": {
+                "enum": [
+                  "V",
+                  "mV"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "units accepted for obd.oil_temp (contracts/signals.json profile_units)",
+          "if": {
+            "properties": {
+              "id": {
+                "const": "obd.oil_temp"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "unit": {
+                "enum": [
+                  "C"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "units accepted for obd.afr (contracts/signals.json profile_units)",
+          "if": {
+            "properties": {
+              "id": {
+                "const": "obd.afr"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "unit": {
+                "enum": [
+                  "AFR",
+                  "lambda"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "units accepted for obd.throttle (contracts/signals.json profile_units)",
+          "if": {
+            "properties": {
+              "id": {
+                "const": "obd.throttle"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "unit": {
+                "enum": [
+                  "%"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "units accepted for obd.intake_temp (contracts/signals.json profile_units)",
+          "if": {
+            "properties": {
+              "id": {
+                "const": "obd.intake_temp"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "unit": {
+                "enum": [
+                  "C"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "units accepted for obd.load (contracts/signals.json profile_units)",
+          "if": {
+            "properties": {
+              "id": {
+                "const": "obd.load"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "unit": {
+                "enum": [
+                  "%"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

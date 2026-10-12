@@ -37,8 +37,3 @@ bool app_event_recv(app_event_t *out)
     if (!s_queue || !out) return false;
     return xQueueReceive(s_queue, out, 0) == pdTRUE;  // non-blocking
 }
-
-QueueHandle_t app_event_queue(void)
-{
-    return s_queue;
-}

@@ -30,24 +30,30 @@
 
 /* Application layer */
 #include "bsp_obd_dsp/bsp_board.h"
+#include "bsp_obd_dsp/nvs_app.h"
+#include "bsp_obd_dsp/sd_card.h"
+#include "bsp_obd_dsp/config_part.h"
+#include "app_obd_dsp/sd_import.h"
 #include "bsp_obd_dsp/elm327_ble_client.h"
 #include "bsp_obd_dsp/espnow_link.h"
 #include "bsp_obd_dsp/racechrono_ble_diy.h"
 #include "app_obd_dsp/boot_media_mount.h"
-#include "bsp_obd_dsp/rs485_brake_temp.h"
+#include "app_obd_dsp/first_boot_migration.h"
+#include "app_obd_dsp/inbox_import.h"
 #if CONFIG_OBD_HW_VERSION_V1_WAVESHARE
 #include "bsp_obd_dsp/ads1115_oil_pressure.h"
 #endif
 #include "app_obd_dsp/obd_data_cache.h"
-#include "app_obd_dsp/vehicle_profiles.h"
+#include "app_obd_dsp/signal_store.h"
+#include "vehicle/vp_profile.h"
+#include "vehicle/vp_loader.h"
+#include "app_obd_dsp/lifecycle_state.h"
 #include "export_path/ui_ext.h"
 #include "app_obd_dsp/app_event.h"
 #include "theme_engine/theme_interface.h"
 
 // ===== Triple-gauge roles =====
 // Normally select master/slave via "Settings page -> swipe down to the MULTI-GAUGE page" (stored in NVS device_role, effective after reboot); one firmware is enough.
-// The macro below is only a debug forced override: uncommenting it ignores the setting and forces this board to slave. Keep it commented out normally.
-// #define ESPNOW_FORCE_SLAVE
 
 static const char *TAG = "obd_dsp";
 
@@ -192,7 +198,43 @@ void app_main(void)
     static lv_disp_drv_t disp_drv;
 
     /* 1. NVS init (must be first) */
+    nvs_app_init();      /* nvs_app partition: survives web-flasher complete reflash */
     nvs_storage_init();
+    signal_store_init(); /* zero all signal slots before any OBD data arrives */
+    lifecycle_init();    /* initialize lifecycle state machine */
+    vp_loader_init();    /* load active vehicle profile (generic or from nvs_app) */
+
+    /* 1.2 SD card and config LittleFS partition (best-effort; failures are non-fatal) */
+    esp_err_t sd_err = sd_card_init();
+    if (sd_err == ESP_OK) {
+        ESP_LOGI(TAG, "SD card mounted");
+    } else {
+        ESP_LOGW(TAG, "SD card not available (%s)", esp_err_to_name(sd_err));
+    }
+    esp_err_t cfg_err = config_part_init();
+    if (cfg_err != ESP_OK) {
+        ESP_LOGW(TAG, "config LittleFS mount failed (%s), formatting", esp_err_to_name(cfg_err));
+        config_part_format();
+        config_part_init();
+        if (sd_err == ESP_OK) {
+            config_part_restore_from_sd();
+        }
+    } else if (sd_err == ESP_OK) {
+        /* Mirror config to SD on every healthy boot */
+        config_part_mirror_to_sd();
+    }
+
+    /* 1.3 First-boot partition-table migration (runs once after web-flasher complete reflash;
+     *     no-op on subsequent boots when mig_ver >= NVS_APP_MIG_VER_DONE) */
+    first_boot_migration_run();
+
+    /* 1.3a SD import scan: process *.vehicle.json and control files in /OBD/IMPORT */
+    if (sd_err == ESP_OK) {
+        sd_import_scan();
+    }
+
+    /* 1.4 Inbox import: copy new theme_0 / bootmedia payloads to SD when CRC differs from ledger */
+    inbox_import_run();
 
     /* 1.5 Task watchdog: 10s timeout, idle task not subscribed (avoids false triggers when BLE blocks) */
     esp_task_wdt_config_t wdt_cfg = {
@@ -204,11 +246,12 @@ void app_main(void)
 
     /* 1.5 Vehicle profile init (loads the saved vehicle index from NVS) */
     const nvs_user_cfg_t *user_cfg = nvs_cfg_get();
-    vehicle_profile_set_active(user_cfg->vehicle_profile_idx);
+    // vehicle_profile_set_active(user_cfg->vehicle_profile_idx);  // TODO: Implement profile switching from NVS
+    (void)user_cfg;  // Suppress unused warning until profile switching is implemented
     const nvs_stat_t *stat = nvs_stat_get();
     ESP_LOGI("NVS", "cfg: proto=%u theme=%u profile=%u(%s) odo=%" PRIu64 " trip=%" PRIu64 " max=%d avg=%d run=%" PRIu64,
              user_cfg->protocol, user_cfg->theme_cfg.theme,
-             user_cfg->vehicle_profile_idx, vehicle_profile_get_active()->name,
+             user_cfg->vehicle_profile_idx, vp_loader_get_active()->name,
              stat->odometer_m, stat->trip_m, stat->max_speed_kmh, stat->avg_speed_kmh, stat->run_time_s);
 
     /* 2. I2C bus init (used by the TCA9554 IO expander + CST816 touch on V1, CST816 touch only on V2/V3) */
@@ -281,9 +324,6 @@ void app_main(void)
     assert(lvgl_mux);
     static TaskHandle_t s_lvgl_task_handle = NULL;
     xTaskCreate(lvgl_port_task, "LVGL", LVGL_TASK_STACK_SIZE, NULL, LVGL_TASK_PRIORITY, &s_lvgl_task_handle);
-    // exposed to ui.c for temporarily raising priority during flashing
-    extern TaskHandle_t g_lvgl_task_handle;
-    g_lvgl_task_handle = s_lvgl_task_handle;
 
     /* 6.5 Initialize Bluetooth stack BEFORE UI to claim internal RAM early */
     elm327_ble_ensure_stack_init();
@@ -325,9 +365,6 @@ void app_main(void)
 
     /* 8. Branch by role: master (connects to ELM327 for readings + ESP-NOW broadcast) / slave (only receives and displays the master's data) */
     uint8_t dev_role = user_cfg->device_role;
-#ifdef ESPNOW_FORCE_SLAVE
-    dev_role = ESPNOW_ROLE_SLAVE;   // step 1 test: force slave
-#endif
 
     if (dev_role == ESPNOW_ROLE_SLAVE) {
         /* ---- Slave: does not connect to ELM327, only starts ESP-NOW receive; UI displays the data broadcast by the master ----
@@ -373,21 +410,13 @@ void app_main(void)
             ESP_LOGD(TAG, "No saved BLE device, waiting for user selection");
         }
 
-        /* 9. Start RS485 brake temperature acquisition (V1 board only).
-           V2/V3 have no RS485 hardware; also, its UART pins (TX=13/RX=12 from
-           CONFIG_OBD_RS485_*) collide with the LCD QSPI DATA2/DATA1 lines, so
-           it must never run on the new boards. */
-#if CONFIG_OBD_HW_VERSION_V1_WAVESHARE
-        rs485_brake_temp_start();
-#endif
-
         /* 9.5 Start oil pressure acquisition (external ADS1115 ADC — V1 board only).
            Skip the external ADS1115 ADC for profiles that read oil pressure over OBD
            (e.g. Supra A90 — DID 4436, BMW E — DID 586F), to avoid the ADC overwriting OBD data.
            V2/V3 boards have no ADS1115. */
 #if CONFIG_OBD_HW_VERSION_V1_WAVESHARE
         {
-            const vehicle_profile_t *vp = vehicle_profile_get_active();
+            const vp_profile_t *vp = vp_loader_get_active();
             if (!(vp && vp->obd_oil_pressure_did != 0)) {
                 oil_pressure_start();
             }
@@ -403,8 +432,6 @@ void app_main(void)
         /* 9.9 Start RaceChrono BLE GATTS immediately after ESP-NOW (Master/Standalone) to claim memory before theme loads */
         racechrono_ble_diy_start(user_cfg->rc_enabled);
 
-        /* 10. Mileage statistics task (only the master counts, to avoid double counting by the slave) */
-        vMileageDataStatisticTask();
     }
 
     BaseType_t valid_task_started = xTaskCreate(mark_app_valid_task, "ota_valid", 4096, NULL, tskIDLE_PRIORITY + 1, NULL);

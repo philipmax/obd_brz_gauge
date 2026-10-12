@@ -1,0 +1,157 @@
+{
+  "schema": "skygauge.vehicle/1",
+  "id": "alfa.giulia_20t",
+  "rev": 1,
+  "name": "GIULIA 2.0T",
+  "drivetrain": {
+    "final_drive": 2.35,
+    "tire_radius_m": 0.33,
+    "gear_tolerance": 0.09,
+    "gears": [
+      {
+        "gear": 1,
+        "ratio": 5.0
+      },
+      {
+        "gear": 2,
+        "ratio": 3.2
+      },
+      {
+        "gear": 3,
+        "ratio": 2.143
+      },
+      {
+        "gear": 4,
+        "ratio": 1.72
+      },
+      {
+        "gear": 5,
+        "ratio": 1.313
+      },
+      {
+        "gear": 6,
+        "ratio": 1.0
+      },
+      {
+        "gear": 7,
+        "ratio": 0.823
+      },
+      {
+        "gear": 8,
+        "ratio": 0.64
+      }
+    ]
+  },
+  "bus": {
+    "protocol": 7,
+    "_protocol_note": "ISO 15765-4 CAN 29-bit 500k",
+    "hdr": "18DB33F1",
+    "atst": 15,
+    "poll_gap_ms": 50
+  },
+  "signals": [
+    {
+      "key": "obd.rpm",
+      "src": [
+        {
+          "req": "01 0C",
+          "scale": 0.25,
+          "offset": 0.0
+        }
+      ]
+    },
+    {
+      "key": "obd.speed",
+      "src": [
+        {
+          "req": "01 0D",
+          "scale": 1.0,
+          "offset": 0.0
+        }
+      ]
+    },
+    {
+      "key": "obd.coolant_temp",
+      "src": [
+        {
+          "req": "01 05",
+          "scale": 1.0,
+          "offset": -40.0
+        }
+      ]
+    },
+    {
+      "key": "obd.tps",
+      "src": [
+        {
+          "req": "01 11",
+          "scale": 0.39215686274509803,
+          "offset": 0.0
+        }
+      ]
+    },
+    {
+      "key": "obd.load",
+      "src": [
+        {
+          "req": "01 04",
+          "scale": 0.39215686274509803,
+          "offset": 0.0
+        }
+      ]
+    },
+    {
+      "key": "obd.intake_temp",
+      "src": [
+        {
+          "req": "01 0F",
+          "scale": 1.0,
+          "offset": -40.0
+        }
+      ]
+    },
+    {
+      "key": "obd.battery",
+      "src": [
+        {
+          "req": "01 42",
+          "scale": 0.001,
+          "offset": 0.0
+        }
+      ]
+    },
+    {
+      "key": "obd.boost",
+      "src": [
+        {
+          "req": "01 0B",
+          "scale": 1.0,
+          "offset": -101.3,
+          "_note": "MAP absolute kPa − 101.3 ≈ boost gauge kPa"
+        }
+      ]
+    },
+    {
+      "key": "obd.oil_temp",
+      "src": [
+        {
+          "req": "22 13 02",
+          "scale": 1.0,
+          "offset": 0.0,
+          "bytes": 1,
+          "byte_index": 1,
+          "hdr": "18DA10F1"
+        }
+      ]
+    },
+    {
+      "key": "obd.oil_pressure",
+      "src": [
+        {
+          "req": "adc",
+          "_note": "external ADS1115 sensor"
+        }
+      ]
+    }
+  ]
+}

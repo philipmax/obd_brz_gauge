@@ -13,7 +13,6 @@ extern "C" {
 #include "lvgl.h"
 
 #include "ui_helpers.h"
-#include "ui_events.h"
 #include "ui_disp_item.h"
 #include "ui_theme.h"
 #include "esp_log.h"
@@ -37,23 +36,6 @@ extern "C" {
 void ui_ScreenPageLogo_screen_init(void);
 extern lv_obj_t * ui_ScreenPageLogo;
 extern lv_obj_t * imageLogo;
-
-// SCREEN: ui_ScreenPageMain
-void ui_ScreenPageMain_screen_init(void);
-extern lv_obj_t * ui_ScreenPageMain;
-extern lv_obj_t * ui_ImageMainPageback;
-extern lv_obj_t * ui_SpinnerMainPage;
-extern lv_obj_t * ui_ArcGearNumBack;
-extern lv_obj_t * ui_LabelGeningRpmText;
-extern lv_obj_t * ui_LabelGeningRpmUnitText;
-extern lv_obj_t * ui_LabelCarSpeedText;
-extern lv_obj_t * ui_LabelCarSpeedUnitText;
-extern lv_obj_t * ui_ContainerMainPageBottomBlock;
-extern lv_obj_t * ui_LabelGearNumText;
-extern lv_obj_t * ui_ContainerMainPageMlieageBlock;
-extern lv_obj_t * ui_LabelMainMlieageText;
-extern lv_obj_t * ui_LabelMainMieageNum;
-// CUSTOM VARIABLES
 
 // SCREEN: ui_ScreenPageGear
 void ui_ScreenPageGear_screen_init(void);
@@ -195,10 +177,6 @@ extern lv_obj_t * ui_ScreenPageSettings;
 void ui_event_settings_background(lv_event_t * e);
 // CUSTOM VARIABLES
 
-// SCREEN: ui_ScreenPageOilWarn
-void ui_ScreenPageOilWarn_screen_init(void);
-extern lv_obj_t * ui_ScreenPageOilWarn;
-void ui_event_oil_warn_background(lv_event_t * e);
 
 // SCREEN: ui_ScreenPageRpmWarn (RPM warning settings)
 void ui_ScreenPageRpmWarn_screen_init(void);
@@ -230,7 +208,7 @@ void ui_event_multi_gauge_background(lv_event_t * e);
 // Needle page runtime interface (implemented in ui.c, reuses the disp_item system)
 void ui_needle_page_update(float sweep_ratio, int16_t clt, int16_t iat, int16_t oil,
                            int16_t load_pct, int16_t tps, int32_t bat_mv,
-                           int16_t oilp_x10, int16_t brake_x10,
+                           int16_t oilp_x10,
                            uint16_t rpm, uint16_t speed, int16_t boost_x10,
                            int16_t afr_x100);
 void ui_needle_apply_source(void);  // rebuild range/name/unit after the data source changes
@@ -239,16 +217,7 @@ int  ui_sweep_get_step(void);       // get the current sweep progress (master br
 
 // EVENTS
 
-extern lv_obj_t * ui____initial_actions0;
-LV_IMG_DECLARE(gifBlueLightLogo);    
-LV_IMG_DECLARE(gifSnake400);  
-LV_IMG_DECLARE(gifKaBiBaLaZip);    // assets/pngBlueLightLogo.png
-LV_IMG_DECLARE(gifCuteCatZip);
-LV_IMG_DECLARE(gifBlackLeopard);
 // IMAGES AND IMAGE SETS
-LV_IMG_DECLARE(ui_img_pngmainback_png);    // assets/pngMainBack.png
-LV_IMG_DECLARE(pngLogoMITSUBISHI);    // assets/pngLogoMITSUBISHI.png
-LV_IMG_DECLARE(pngLogoSkyGarage);     // assets/sklogo.png (280x280)
 #if USE_CUSTOM_BOOT_LOGO == 1
 LV_IMG_DECLARE(imgBootLogoCustom);    // customer custom boot image (convert it yourself and place in images/)
 #endif
@@ -269,30 +238,13 @@ void ui_showroom_set_active(bool en);
 void ui_showroom_set_page_from_sync(int sweep_step);
 LV_IMG_DECLARE(ui_img_pngblackear_png);    // assets/pngBlackEar.png
 // FONTS
-LV_FONT_DECLARE(ui_font_FontBabyGearNumSize48);
-LV_FONT_DECLARE(ui_font_FontBabySize108);
-LV_FONT_DECLARE(ui_font_FontBabySize156);
-LV_FONT_DECLARE(ui_font_FontBabySize180);
-LV_FONT_DECLARE(ui_font_FontBabySize200);
-LV_FONT_DECLARE(ui_font_FontBabySize56);
-LV_FONT_DECLARE(ui_font_FontTaikongSize108);
-LV_FONT_DECLARE(ui_font_FontTaikongSize128);
-LV_FONT_DECLARE(ui_font_FontTaikongSize32);
-LV_FONT_DECLARE(ui_font_FontTaikongSize40);
-LV_FONT_DECLARE(ui_font_FontTaikongSize48);
-LV_FONT_DECLARE(ui_font_FontTaikongSize56);
-LV_FONT_DECLARE(ui_font_FontTaikongSize64);
-LV_FONT_DECLARE(ui_font_FontTaikongSize72);
 LV_FONT_DECLARE(ui_font_FontTypoderSize16);
 LV_FONT_DECLARE(ui_font_FontTypoderSize20);
 LV_FONT_DECLARE(ui_font_FontTypoderSize24);
-LV_FONT_DECLARE(ui_font_FontTypoderSize28);
-LV_FONT_DECLARE(ui_font_FontTypoderSize32);
 LV_FONT_DECLARE(ui_font_FontTypoderSize36);
 LV_FONT_DECLARE(ui_font_FontTypoderSize40);
 LV_FONT_DECLARE(ui_font_FontTypoderSize44);
 LV_FONT_DECLARE(ui_font_FontTypoderSize56);
-LV_FONT_DECLARE(ui_font_FontTypoderSize100);
 LV_FONT_DECLARE(ui_font_FontTypoderSize140);
 
 

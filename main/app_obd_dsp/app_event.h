@@ -59,9 +59,6 @@ bool app_event_send(app_event_type_t type, uint32_t data);
 // Receive an event (non-blocking, returns false when there is no event)
 bool app_event_recv(app_event_t *out);
 
-// Get the queue handle (for xQueueReceive with timeout)
-QueueHandle_t app_event_queue(void);
-
 #ifdef __cplusplus
 }
 #endif

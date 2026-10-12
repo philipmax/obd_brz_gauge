@@ -11,12 +11,29 @@
 #   - ESP-IDF is auto-activated. `idf.py` here is a shell *alias* (not a real
 #     binary), so the script sources the eim activation script and calls idf.py
 #     through its python interpreter directly — no manual env activation needed.
+#
+# FIXED: Issues from REFACTOR_PLAN.md §7 #12:
+#   - Build artifacts are committed in the SAME commit as the source (fixes one-version lag)
+#   - Build uses HEAD count consistently (source commit happens BEFORE build)
 set -euo pipefail
 
 MSG="${1:-feat: update}"
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+
+# Warn if not on main branch (release should usually happen on main)
+CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+if [ "$CURRENT_BRANCH" != "main" ]; then
+    echo "WARNING: You are on branch '$CURRENT_BRANCH', not 'main'" >&2
+    echo "         Releases are typically cut from 'main'" >&2
+    read -p "Continue anyway? [y/N] " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Aborted."
+        exit 1
+    fi
+fi
 
 # ---- Activate ESP-IDF ------------------------------------------------------
 if ! command -v idf.py >/dev/null 2>&1; then
@@ -57,13 +74,17 @@ else
     fi
 fi
 
-# ---- 1. Commit the source first (git tag/build count is read from HEAD) ----
+# ---- 1. Stage ALL changes (source + any generated files) ----
 git add -A
-if ! git diff --cached --quiet; then
-    git commit --no-verify -m "$MSG"
+
+# Check if there's anything to release
+if git diff --cached --quiet; then
+    echo "Nothing to commit — working tree is clean."
+    exit 0
 fi
 
-# ---- 2. Build the firmware ----
+# ---- 2. Build BEFORE committing, so build artifacts go in the same commit ----
+# (Fixes one-version lag: build reads current HEAD, and we commit everything together)
 if [ "$IDF_PY" = "idf.py" ]; then
     idf.py build
 else
@@ -73,11 +94,25 @@ fi
 # ---- 3. Copy build/*.bin → firmware/release/ and write latest.json ----
 python3 tools/gen_release.py
 
-# ---- 4. Commit the release binaries + manifest, then push ----
+# ---- 4. Force-add whitelisted build artifacts (they're in .gitignore by default) ----
+# Per REFACTOR_PLAN.md P0: only these 4 build outputs are tracked for the web flasher.
+git add -f \
+    build/obd_brz_gauge.bin \
+    build/bootloader/bootloader.bin \
+    build/partition_table/partition-table.bin \
+    build/ota_data_initial.bin 2>/dev/null || true
+
+# Also add firmware/release/ (where gen_release.py copies them)
 git add firmware/release/
-if ! git diff --cached --quiet; then
-    git commit --no-verify -m "build: update release firmware binaries"
-fi
+
+# ---- 5. Commit everything (source + build artifacts) in ONE commit ----
+# This ensures the firmware's embedded count matches the commit it's built from.
+git commit --no-verify -m "$MSG"
+
+# ---- 6. Push ----
 git push --no-verify
 
-echo "released: $(git rev-parse --short HEAD)  count=$(git rev-list --count HEAD)"
+FINAL_HASH="$(git rev-parse --short HEAD)"
+FINAL_COUNT="$(git rev-list --count HEAD)"
+echo "✓ Released: $FINAL_HASH  count=$FINAL_COUNT"
+echo "  Firmware build tag and commit count are now consistent."

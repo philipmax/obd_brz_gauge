@@ -2,23 +2,24 @@
 
 [English](APP_PROTOCOL.en.md) | 简体中文
 
-设备在 OTA 模式下暴露的 BLE 服务与 WiFi HTTP API。用户侧的烧录与升级操作见
+设备在 OTA 模式下暴露的 WiFi HTTP API。用户侧的烧录与升级操作见
 [FLASH.md](FLASH.md)。
 
 ## OTA 模式下设备暴露什么
 
 仪表 **版本页 → OTA 按钮** 进入 OTA 模式后：
 
-- OTA BLE 服务（`0x1FFB`）
-- WiFi SoftAP：SSID `OBD-Gauge-OTA-XXXX`（MAC 后两字节）、密码 `obd2024`、
+- WiFi SoftAP：SSID `OBD-Gauge-OTA-XXXX`（MAC 后两字节）、密码 `88888888`、
   IP `192.168.4.1`、端口 80
 - 每次会话生成随机 16 位 hex token，用于 HTTP 鉴权
 
-## BLE 设备清单服务（只读 0x1FFA）
+进入 OTA 模式会彻底释放蓝牙，设备不提供任何 BLE OTA / 清单服务；离开 OTA 模式即重启。
+
+## 设备清单（`GET /ota/info`）
 
 App 刷写前用它做硬件匹配校验：
 
-- Service UUID：`0x1FFA`，Characteristic UUID：`0x0001`
+- 免鉴权，OTA 模式下可用
 - 载荷：UTF-8 JSON（上限 512 字节，只返回 App 实际使用的字段）
 
 ```json
@@ -46,30 +47,21 @@ App 刷写前用它做硬件匹配校验：
 注入。App 用 `firmware.count` 与 `latest.json` 比较判断新旧。
 硬件字段与所选 release 不一致时 App 应拒绝刷写。
 
-## BLE OTA 服务（0x1FFB）
-
-- Service UUID `0x1FFB`；控制特征 `0x0001`、数据特征 `0x0002`、状态特征 `0x0003`
-- 控制包：Magic `OTA1`；命令 `begin` / `end` / `cancel`；目标 `firmware` 或 `bootmedia`；
-  小端 u32 长度；32 字节原始 SHA256；长度前缀 UTF-8 文件名
-- 控制命令 `4` = 启动 WiFi OTA 模式（大文件走 WiFi 更快），设备通过状态特征回 JSON：
-
-```json
-{"ssid":"OBD-Gauge-OTA-ABCD","password":"obd2024","ip":"192.168.4.1","token":"a1b2c3d4e5f6a7b8","port":80}
-```
-
-BLE 状态特征同步 WiFi OTA 进度：`wifi-starting` / `wifi-ready` / `wifi-receiving` /
-`wifi-done` / `wifi-error`。
-
 ## WiFi OTA HTTP API
 
-App 连上设备 SoftAP 后走 HTTP（所有端点均支持 OPTIONS 预检）。
+App 连上设备 SoftAP 后走 HTTP（所有端点均支持 OPTIONS 预检）。先调免鉴权的
+`GET /ota/discover` 取本次会话的 token：
 
-**公共请求头**：`X-OTA-Token: <BLE 握手拿到的 16 位 hex>`
+```json
+{"ssid":"OBD-Gauge-OTA-ABCD","password":"88888888","ip":"192.168.4.1","token":"a1b2c3d4e5f6a7b8","port":80}
+```
+
+**公共请求头**：`X-OTA-Token: <GET /ota/discover 返回的 16 位 hex>`（`/ota/discover`、`/ota/info` 免鉴权）
 
 | 端点 | 方法 | 说明 |
 |------|------|------|
-| `/ota/discover` | GET | 局域网发现 |
-| `/ota/info` | GET | 设备清单 JSON（同 BLE `0x1FFA`）|
+| `/ota/discover` | GET | 局域网发现，返回 SoftAP 信息与 token |
+| `/ota/info` | GET | 设备清单 JSON（格式见上）|
 | `/ota/status` | GET | `{"state":"ready\|receiving\|done\|error","received":N,"expected":M}` |
 | `/ota/firmware` | POST | 固件上传 |
 | `/ota/bootmedia/prepare` | POST | 开机动画预检 |
@@ -77,6 +69,8 @@ App 连上设备 SoftAP 后走 HTTP（所有端点均支持 OPTIONS 预检）。
 | `/ota/theme/prepare` | POST | 主题预检（返回挂载状态，不擦除）|
 | `/ota/theme` | POST | 主题分块上传 |
 | `/ota/theme/erase` | POST | 擦除主题分区，下次开机回退默认主题 |
+| `/ota/coredump` | GET | 下载 coredump 分区原始二进制；分区为空时返回 204 |
+| `/ota/coredump/erase` | POST | 擦除 coredump 分区 |
 
 各上传端点的专有请求头：
 

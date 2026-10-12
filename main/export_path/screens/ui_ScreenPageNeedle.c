@@ -7,13 +7,15 @@
 #include "../ui.h"
 #include <string.h>
 #include "bsp_obd_dsp/nvs_storage.h"
-#include "app_obd_dsp/vehicle_profiles.h"
+#include "vehicle/vp_profile.h"
+#include "vehicle/vp_loader.h"
 
-// Selectable data sources for the needle page (disp_item_t values); RPM(5) is deliberately excluded -- RPM already has its own page.
-// Order: CLT, IAT, OIL, LOAD, TPS, SPEED, BAT, OILP, BKT
-#define NEEDLE_ITEM_BOOST 10   // value of disp_item_t DISP_ITEM_BOOST
-#define NEEDLE_ITEM_AFR   11   // value of disp_item_t DISP_ITEM_AFR
-static const uint8_t k_needle_sources_base[] = {0, 1, 2, 3, 4, 6, 7, 8, 9, NEEDLE_ITEM_AFR};
+// Selectable data sources for the needle page (disp_item_t values); RPM is deliberately excluded -- RPM already has its own page.
+// DISP_ITEM_RESERVED_9 is retired and never listed.
+static const uint8_t k_needle_sources_base[] = {
+    DISP_ITEM_CLT, DISP_ITEM_IAT, DISP_ITEM_OIL, DISP_ITEM_LOAD, DISP_ITEM_TPS,
+    DISP_ITEM_SPEED, DISP_ITEM_BAT, DISP_ITEM_OILP, DISP_ITEM_AFR,
+};
 #define NEEDLE_BASE_COUNT (sizeof(k_needle_sources_base) / sizeof(k_needle_sources_base[0]))
 
 // At runtime, dynamically decide the selectable sources based on whether the selected vehicle profile has a turbo (BOOST is appended only with turbo)
@@ -28,9 +30,9 @@ static void build_needle_sources(void)
     for (uint8_t i = 0; i < NEEDLE_BASE_COUNT; i++) {
         s_needle_sources[s_needle_source_count++] = k_needle_sources_base[i];
     }
-    const vehicle_profile_t *vp = vehicle_profile_get_active();
+    const vp_profile_t *vp = vp_loader_get_active();
     if (vp && vp->has_boost) {
-        s_needle_sources[s_needle_source_count++] = NEEDLE_ITEM_BOOST;
+        s_needle_sources[s_needle_source_count++] = DISP_ITEM_BOOST;
     }
 }
 

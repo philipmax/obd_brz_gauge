@@ -4,6 +4,14 @@
 extern lv_obj_t *ui_ScreenPageTempCustom;
 static lv_obj_t *s_temp_rollers[3] = {NULL, NULL, NULL};
 
+// Roller position <-> disp_item_t mapping is explicit: DISP_ITEM_RESERVED_9 (retired) is not listed,
+// so from BOOST on the position differs from the item value. k_data_options lists labels in the same order.
+static const uint8_t k_temp_sources[] = {
+    DISP_ITEM_CLT, DISP_ITEM_IAT, DISP_ITEM_OIL, DISP_ITEM_LOAD, DISP_ITEM_TPS, DISP_ITEM_RPM,
+    DISP_ITEM_SPEED, DISP_ITEM_BAT, DISP_ITEM_OILP, DISP_ITEM_BOOST, DISP_ITEM_AFR,
+};
+#define TEMP_SOURCE_COUNT (sizeof(k_temp_sources) / sizeof(k_temp_sources[0]))
+
 static const char *k_data_options =
     "CLT\n"
     "IAT\n"
@@ -14,17 +22,31 @@ static const char *k_data_options =
     "SPEED\n"
     "BAT\n"
     "OILP\n"
-    "BKT\n"
     "BOOST\n"
     "AFR";
+
+// Per-row default item; also used for a stored value that is not selectable (same rule as nvs_storage_init)
+static const uint8_t k_temp_default_items[3] = NVS_TEMP_MAP_DEFAULT;
+
+static uint16_t temp_item_to_pos(uint8_t item, int row)
+{
+    if (!ui_disp_item_is_selectable(item)) item = k_temp_default_items[row];
+    for (uint16_t i = 0; i < TEMP_SOURCE_COUNT; i++) {
+        if (k_temp_sources[i] == item) return i;
+    }
+    return 0;
+}
 
 static void on_temp_map_changed(lv_event_t *e)
 {
     uintptr_t idx = (uintptr_t)lv_event_get_user_data(e);
     if (idx >= 3) return;
 
+    uint16_t pos = lv_roller_get_selected(s_temp_rollers[idx]);
+    if (pos >= TEMP_SOURCE_COUNT) return;
+
     nvs_user_cfg_t cfg = *nvs_cfg_get();
-    cfg.temp_display_map[idx] = (uint8_t)lv_roller_get_selected(s_temp_rollers[idx]);
+    cfg.temp_display_map[idx] = k_temp_sources[pos];
     nvs_cfg_set(&cfg);
 }
 
@@ -71,9 +93,9 @@ void ui_ScreenPageTempCustom_screen_init(void)
     create_row(ui_ScreenPageTempCustom, 1, "ROW 2", -18);
     create_row(ui_ScreenPageTempCustom, 2, "ROW 3", 36);
 
-    lv_roller_set_selected(s_temp_rollers[0], cfg->temp_display_map[0], LV_ANIM_OFF);
-    lv_roller_set_selected(s_temp_rollers[1], cfg->temp_display_map[1], LV_ANIM_OFF);
-    lv_roller_set_selected(s_temp_rollers[2], cfg->temp_display_map[2], LV_ANIM_OFF);
+    for (int i = 0; i < 3; ++i) {
+        lv_roller_set_selected(s_temp_rollers[i], temp_item_to_pos(cfg->temp_display_map[i], i), LV_ANIM_OFF);
+    }
 
     lv_obj_t *hint = lv_label_create(ui_ScreenPageTempCustom);
     lv_label_set_text(hint, "Swipe up/left/right to return");

@@ -20,7 +20,7 @@ reads vehicle data, and renders a touch UI with LVGL.
 |----------|----------|
 | [docs/USER_GUIDE.en.md](docs/USER_GUIDE.en.md) | **User guide** — page navigation, settings, triple-gauge pairing, boot animation, app updates |
 | [docs/FLASH.en.md](docs/FLASH.en.md) | **Flash & update** — partition table, USB flashing, App OTA with rollback |
-| [docs/APP_PROTOCOL.en.md](docs/APP_PROTOCOL.en.md) | **App integration protocol** — BLE services, WiFi HTTP API |
+| [docs/APP_PROTOCOL.en.md](docs/APP_PROTOCOL.en.md) | **App integration protocol** — OTA-mode WiFi HTTP API |
 | [docs/VEHICLES.en.md](docs/VEHICLES.en.md) | **Vehicle profiles** — all 17 built-in profiles, adding a new vehicle |
 | [docs/THEMES.en.md](docs/THEMES.en.md) | **Theming** — both theme systems, artwork specs, theme store |
 | [docs/TROUBLESHOOTING.en.md](docs/TROUBLESHOOTING.en.md) | **Troubleshooting** — no connection / no data, protocol auto-detection |
@@ -69,7 +69,7 @@ profiles are configured but some still need road testing.
 - **Two theme systems** — compiled-in TOML themes (colors/artwork) and a
   runtime theme partition (custom page layouts), see
   [docs/THEMES.en.md](docs/THEMES.en.md)
-- **Dual-path OTA** — the companion app pushes over BLE or a WiFi hotspot,
+- **App OTA** — the companion app pushes over a WiFi hotspot,
   SHA256-verified, with a 15-second boot self-check and automatic rollback
 - **Boot animation** — OFF / RACE / VIDEO modes; VIDEO plays a custom
   animation uploaded from the phone app (360×360 circular safe area)
@@ -129,7 +129,6 @@ main/
 ├── export_path/        # LVGL UI (SquareLine export): 20+ screens, fonts, images
 └── theme_engine/       # Runtime theme loader (theme_0 partition)
 themes/                 # Compiled-theme sources (TOML manifests + artwork)
-theme_store/            # Packed theme binaries and catalog (distribution)
 bootmedia/              # Boot animation sources
 tools/                  # Helper scripts (theme codegen, packing, PID hunting, release)
 firmware/release/       # Pre-built firmware

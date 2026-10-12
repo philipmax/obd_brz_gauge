@@ -1,0 +1,154 @@
+{
+  "schema": "skygauge.vehicle/1",
+  "id": "subaru.zc6.can",
+  "rev": 1,
+  "name": "ZN/C6 CAN",
+  "drivetrain": {
+    "final_drive": 4.1,
+    "tire_radius_m": 0.314,
+    "gear_tolerance": 0.15,
+    "gears": [
+      {
+        "gear": 1,
+        "ratio": 3.626
+      },
+      {
+        "gear": 2,
+        "ratio": 2.188
+      },
+      {
+        "gear": 3,
+        "ratio": 1.541
+      },
+      {
+        "gear": 4,
+        "ratio": 1.213
+      },
+      {
+        "gear": 5,
+        "ratio": 1.0
+      },
+      {
+        "gear": 6,
+        "ratio": 0.767
+      }
+    ]
+  },
+  "bus": {
+    "protocol": 6,
+    "_protocol_note": "ISO 15765-4 CAN 11-bit 500k",
+    "atst": 10,
+    "poll_gap_ms": 1,
+    "can_broadcast": true
+  },
+  "signals": [
+    {
+      "key": "obd.rpm",
+      "src": [
+        {
+          "req": "01 0C",
+          "scale": 0.25,
+          "offset": 0.0
+        }
+      ]
+    },
+    {
+      "key": "obd.speed",
+      "src": [
+        {
+          "req": "01 0D",
+          "scale": 1.0,
+          "offset": 0.0
+        }
+      ]
+    },
+    {
+      "key": "obd.coolant_temp",
+      "src": [
+        {
+          "signal": "obd.coolant_temp",
+          "can_id": "0x360",
+          "bit_off": 24,
+          "bit_len": 8,
+          "scale": 1.0,
+          "offset": -40.0
+        },
+        {
+          "req": "01 05",
+          "scale": 1.0,
+          "offset": -40.0
+        }
+      ]
+    },
+    {
+      "key": "obd.tps",
+      "src": [
+        {
+          "signal": "obd.tps",
+          "can_id": "0x140",
+          "bit_off": 48,
+          "bit_len": 8,
+          "scale": 0.39215686274509803,
+          "offset": 0.0
+        },
+        {
+          "req": "01 11",
+          "scale": 0.39215686274509803,
+          "offset": 0.0
+        }
+      ]
+    },
+    {
+      "key": "obd.load",
+      "src": [
+        {
+          "req": "01 04",
+          "scale": 0.39215686274509803,
+          "offset": 0.0
+        }
+      ]
+    },
+    {
+      "key": "obd.intake_temp",
+      "src": [
+        {
+          "req": "01 0F",
+          "scale": 1.0,
+          "offset": -40.0
+        }
+      ]
+    },
+    {
+      "key": "obd.battery",
+      "src": [
+        {
+          "req": "01 42",
+          "scale": 0.001,
+          "offset": 0.0
+        }
+      ]
+    },
+    {
+      "key": "obd.oil_temp",
+      "src": [
+        {
+          "req": "21 01",
+          "scale": 1.0,
+          "offset": -40.0,
+          "bytes": 1,
+          "byte_index": 0,
+          "_note": "Toyota/Subaru Mode 21 — multi-frame special parsing"
+        }
+      ]
+    },
+    {
+      "key": "obd.oil_pressure",
+      "src": [
+        {
+          "req": "adc",
+          "_note": "external ADS1115 sensor"
+        }
+      ]
+    }
+  ]
+}

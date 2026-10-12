@@ -1,5 +1,7 @@
 #include "obd_data_cache.h"
-#include "vehicle_profiles.h"
+#include "signal_store.h"
+#include "vehicle/vp_profile.h"
+#include "vehicle/vp_loader.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/portmacro.h"
 #include "freertos/task.h"
@@ -15,11 +17,9 @@ static int16_t  s_load_pct = -1;
 static int16_t  s_tps = -1;
 static int32_t  s_bat_mv = -1;
 static int16_t  s_oil_pressure_x10 = -1;
-static int16_t  s_brake_temp_x10 = -1000;
 static int16_t  s_boost_x10 = -32768;
 static int8_t   s_gear = 127;
 static int16_t  s_afr_x100 = -1;
-static brake_rs485_status_t s_brake_rs485_status = BRAKE_RS485_IDLE;
 static portMUX_TYPE s_mux = portMUX_INITIALIZER_UNLOCKED;
 
 #define SPEED_SMOOTH_TIME_MS 300   // speed ramp-up/down time constant (ms); the UI side already has anim_step, keep this small
@@ -49,6 +49,7 @@ void obd_data_set_rpm(uint16_t rpm)
     portENTER_CRITICAL(&s_mux);
     s_rpm_smooth = rpm;  // CAN 100Hz data is already clean, no smoothing needed
     portEXIT_CRITICAL(&s_mux);
+    signal_store_set(SIG_OBD_RPM, (int32_t)rpm);
 }
 
 void obd_data_reset_temp_cache(void)
@@ -58,6 +59,9 @@ void obd_data_reset_temp_cache(void)
     s_oil_temp = -100;
     s_intake_temp = -40;
     portEXIT_CRITICAL(&s_mux);
+    signal_store_invalidate(SIG_OBD_COOLANT_TEMP);
+    signal_store_invalidate(SIG_OBD_OIL_TEMP);
+    signal_store_invalidate(SIG_OBD_INTAKE_TEMP);
 }
 
 void obd_data_set_oil_temp_invalid(void)
@@ -65,6 +69,7 @@ void obd_data_set_oil_temp_invalid(void)
     portENTER_CRITICAL(&s_mux);
     s_oil_temp = -100;
     portEXIT_CRITICAL(&s_mux);
+    signal_store_invalidate(SIG_OBD_OIL_TEMP);
 }
 
 void obd_data_set_speed(uint8_t kmh)
@@ -83,6 +88,7 @@ void obd_data_set_speed(uint8_t kmh)
     portENTER_CRITICAL(&s_mux);
     s_speed_smooth = smoothed;
     portEXIT_CRITICAL(&s_mux);
+    signal_store_set(SIG_OBD_SPEED, (int32_t)smoothed);
 }
 
 void obd_data_set_coolant_temp(int16_t temp)
@@ -90,6 +96,9 @@ void obd_data_set_coolant_temp(int16_t temp)
     portENTER_CRITICAL(&s_mux);
     s_coolant_temp = temp;
     portEXIT_CRITICAL(&s_mux);
+    /* -40 is the initial sentinel (never-received); treat as invalid */
+    if (temp == -40) signal_store_invalidate(SIG_OBD_COOLANT_TEMP);
+    else             signal_store_set(SIG_OBD_COOLANT_TEMP, (int32_t)temp);
 }
 
 void obd_data_set_oil_temp(int16_t temp)
@@ -98,6 +107,7 @@ void obd_data_set_oil_temp(int16_t temp)
     portENTER_CRITICAL(&s_mux);
     s_oil_temp = temp;
     portEXIT_CRITICAL(&s_mux);
+    signal_store_set(SIG_OBD_OIL_TEMP, (int32_t)temp);
 }
 
 void obd_data_set_intake_temp(int16_t temp)
@@ -105,6 +115,8 @@ void obd_data_set_intake_temp(int16_t temp)
     portENTER_CRITICAL(&s_mux);
     s_intake_temp = temp;
     portEXIT_CRITICAL(&s_mux);
+    if (temp == -40) signal_store_invalidate(SIG_OBD_INTAKE_TEMP);
+    else             signal_store_set(SIG_OBD_INTAKE_TEMP, (int32_t)temp);
 }
 
 uint16_t obd_data_get_rpm(void)
@@ -116,29 +128,11 @@ uint16_t obd_data_get_rpm(void)
     return val;
 }
 
-uint8_t obd_data_get_speed(void)
-{
-    uint8_t val;
-    portENTER_CRITICAL(&s_mux);
-    val = s_speed_smooth;
-    portEXIT_CRITICAL(&s_mux);
-    return val;
-}
-
 int16_t obd_data_get_coolant_temp(void)
 {
     int16_t val;
     portENTER_CRITICAL(&s_mux);
     val = s_coolant_temp;
-    portEXIT_CRITICAL(&s_mux);
-    return val;
-}
-
-int16_t obd_data_get_oil_temp(void)
-{
-    int16_t val;
-    portENTER_CRITICAL(&s_mux);
-    val = s_oil_temp;
     portEXIT_CRITICAL(&s_mux);
     return val;
 }
@@ -157,15 +151,8 @@ void obd_data_set_load_pct(int16_t pct)
     portENTER_CRITICAL(&s_mux);
     s_load_pct = pct;
     portEXIT_CRITICAL(&s_mux);
-}
-
-int16_t obd_data_get_load_pct(void)
-{
-    int16_t val;
-    portENTER_CRITICAL(&s_mux);
-    val = s_load_pct;
-    portEXIT_CRITICAL(&s_mux);
-    return val;
+    if (pct == -1) signal_store_invalidate(SIG_OBD_LOAD);
+    else           signal_store_set(SIG_OBD_LOAD, (int32_t)pct);
 }
 
 void obd_data_set_tps(int16_t pct)
@@ -173,15 +160,8 @@ void obd_data_set_tps(int16_t pct)
     portENTER_CRITICAL(&s_mux);
     s_tps = pct;
     portEXIT_CRITICAL(&s_mux);
-}
-
-int16_t obd_data_get_tps(void)
-{
-    int16_t val;
-    portENTER_CRITICAL(&s_mux);
-    val = s_tps;
-    portEXIT_CRITICAL(&s_mux);
-    return val;
+    if (pct == -1) signal_store_invalidate(SIG_OBD_TPS);
+    else           signal_store_set(SIG_OBD_TPS, (int32_t)pct);
 }
 
 void obd_data_set_bat_mv(int32_t mv)
@@ -189,73 +169,32 @@ void obd_data_set_bat_mv(int32_t mv)
     portENTER_CRITICAL(&s_mux);
     s_bat_mv = mv;
     portEXIT_CRITICAL(&s_mux);
-}
-
-int32_t obd_data_get_bat_mv(void)
-{
-    int32_t val;
-    portENTER_CRITICAL(&s_mux);
-    val = s_bat_mv;
-    portEXIT_CRITICAL(&s_mux);
-    return val;
+    if (mv == -1) signal_store_invalidate(SIG_OBD_BAT_MV);
+    else          signal_store_set(SIG_OBD_BAT_MV, mv);
 }
 
 void obd_data_set_oil_pressure_x10(int16_t pressure_x10)
 {
-    if (pressure_x10 < 0 || pressure_x10 > 200) return;
+    if (pressure_x10 < 0 || pressure_x10 > 200) {
+        signal_store_invalidate(SIG_OBD_OIL_PRESSURE);
+        return;
+    }
     portENTER_CRITICAL(&s_mux);
     s_oil_pressure_x10 = pressure_x10;
     portEXIT_CRITICAL(&s_mux);
-}
-
-int16_t obd_data_get_oil_pressure_x10(void)
-{
-    int16_t val;
-    portENTER_CRITICAL(&s_mux);
-    val = s_oil_pressure_x10;
-    portEXIT_CRITICAL(&s_mux);
-    return val;
+    signal_store_set(SIG_OBD_OIL_PRESSURE, (int32_t)pressure_x10);
 }
 
 void obd_data_set_boost_x10(int16_t boost_x10)
 {
-    if (boost_x10 < -15 || boost_x10 > 300) return;
+    if (boost_x10 < -15 || boost_x10 > 300) {
+        signal_store_invalidate(SIG_OBD_BOOST);
+        return;
+    }
     portENTER_CRITICAL(&s_mux);
     s_boost_x10 = boost_x10;
     portEXIT_CRITICAL(&s_mux);
-}
-
-int16_t obd_data_get_boost_x10(void)
-{
-    int16_t val;
-    portENTER_CRITICAL(&s_mux);
-    val = s_boost_x10;
-    portEXIT_CRITICAL(&s_mux);
-    return val;
-}
-
-void obd_data_set_brake_temp_x10(int16_t temp_x10)
-{
-    if (temp_x10 < -500 || temp_x10 > 12000) return;
-    portENTER_CRITICAL(&s_mux);
-    s_brake_temp_x10 = temp_x10;
-    portEXIT_CRITICAL(&s_mux);
-}
-
-void obd_data_set_brake_rs485_status(brake_rs485_status_t status)
-{
-    portENTER_CRITICAL(&s_mux);
-    s_brake_rs485_status = status;
-    portEXIT_CRITICAL(&s_mux);
-}
-
-int16_t obd_data_get_brake_temp_x10(void)
-{
-    int16_t val;
-    portENTER_CRITICAL(&s_mux);
-    val = s_brake_temp_x10;
-    portEXIT_CRITICAL(&s_mux);
-    return val;
+    signal_store_set(SIG_OBD_BOOST, (int32_t)boost_x10);
 }
 
 void obd_data_set_gear(int8_t gear)
@@ -263,32 +202,20 @@ void obd_data_set_gear(int8_t gear)
     portENTER_CRITICAL(&s_mux);
     s_gear = gear;
     portEXIT_CRITICAL(&s_mux);
-}
-
-int8_t obd_data_get_gear(void)
-{
-    int8_t val;
-    portENTER_CRITICAL(&s_mux);
-    val = s_gear;
-    portEXIT_CRITICAL(&s_mux);
-    return val;
+    if (gear == 127) signal_store_invalidate(SIG_OBD_GEAR);
+    else             signal_store_set(SIG_OBD_GEAR, (int32_t)gear);
 }
 
 void obd_data_set_afr_x100(int16_t afr_x100)
 {
-    if (afr_x100 < 800 || afr_x100 > 2200) return;
+    if (afr_x100 < 800 || afr_x100 > 2200) {
+        signal_store_invalidate(SIG_OBD_AFR);
+        return;
+    }
     portENTER_CRITICAL(&s_mux);
     s_afr_x100 = afr_x100;
     portEXIT_CRITICAL(&s_mux);
-}
-
-int16_t obd_data_get_afr_x100(void)
-{
-    int16_t val;
-    portENTER_CRITICAL(&s_mux);
-    val = s_afr_x100;
-    portEXIT_CRITICAL(&s_mux);
-    return val;
+    signal_store_set(SIG_OBD_AFR, (int32_t)afr_x100);
 }
 
 void obd_data_get_snapshot(obd_data_snapshot_t *out)
@@ -306,10 +233,8 @@ void obd_data_get_snapshot(obd_data_snapshot_t *out)
     out->bat_mv = s_bat_mv;
     out->oil_pressure_x10 = s_oil_pressure_x10;
     out->boost_x10 = s_boost_x10;
-    out->brake_temp_x10 = s_brake_temp_x10;
     out->gear = s_gear;
     out->afr_x100 = s_afr_x100;
-    out->brake_rs485_status = s_brake_rs485_status;
     portEXIT_CRITICAL(&s_mux);
 }
 
@@ -328,7 +253,7 @@ enGear calculate_gear(float rpm, float speed) {
     }
 
     // 2. Compute the total gear ratio using the active vehicle profile
-    const vehicle_profile_t *profile = vehicle_profile_get_active();
+    const vp_profile_t *profile = vp_loader_get_active();
     float calc_const = vehicle_profile_calc_constant(profile);
     float total_ratio = rpm / (speed * calc_const);
 
@@ -361,31 +286,3 @@ enGear calculate_gear(float rpm, float speed) {
  * @note
  * @note Mileage statistics task
  */
-static void mileage_timer_cb(void* arg)
-{
-    (void)arg;
-    obd_data_snapshot_t snap;
-    obd_data_get_snapshot(&snap);
-    nvs_stat_update_speed(snap.speed, 1000);
-}
-
-/**
- * @brief Initialize the mileage statistics task
- * @return none
- * @note
- * @note Initialize the mileage statistics task
- */
-void vMileageDataStatisticTask(void)
-{
-    static esp_timer_handle_t s_timer = NULL;
-    if(!s_timer){
-        const esp_timer_create_args_t args={
-            .callback = mileage_timer_cb,
-            .arg = NULL,
-            .name = "mile_stat"
-        };
-        if(esp_timer_create(&args,&s_timer)==ESP_OK){
-            esp_timer_start_periodic(s_timer, 1000000); //1s
-        }
-    }
-}
