@@ -10,6 +10,7 @@ void _ui_screen_change(lv_obj_t ** target, lv_scr_load_anim_t fademode, int spd,
 {
     if(*target == NULL)
         target_init();
+    if(*target == NULL) return;   // theme page that failed to build: stay on the current screen
     lv_scr_load_anim(*target, fademode, spd, delay, false);
 }
 

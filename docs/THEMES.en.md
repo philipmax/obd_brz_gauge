@@ -4,18 +4,24 @@ English | [简体中文](THEMES.md)
 
 This project has **two coexisting theme systems** for different scenarios:
 
-| | Compiled-in theme (TOML) | Runtime theme (theme_0 partition) |
+| | Compiled-in theme (TOML) | Runtime theme (SD card) |
 |---|---|---|
 | What changes | 8 decorative colors + bezel/needle/dial artwork (reskin, no layout) | Colors + artwork + **custom gauge pages and layout** (layout.json) |
-| How it installs | The theme folder compiles into the firmware; reflash | Packed into a 4 MB `theme.bin`; USB flash or WiFi OTA push |
-| How it activates | Settings → THEME roller (reboot to apply) | Device loads the theme_0 partition at boot |
-| Who it's for | Quickly reskinning the built-in pages | Defining your own gauge page composition and data bindings |
-| Sources | [themes/](../themes/) | `themes/example_boost_oil/` + [tools/theme_packer/](../tools/theme_packer/) |
+| How it installs | The theme folder compiles into the firmware; reflash | Export a theme ZIP and install to SD over web USB; App WiFi OTA remains compatible |
+| How it switches | Fixed by the firmware build; not selectable on the gauge | Install and select through the web UI or App; read from SD after reboot |
+| Audience | Reskin built-in pages | Custom page layout and data bindings |
+| Source | [themes/](../themes/) | Theme editor (`obd_theme_store`), `<id>.zip` (containing `theme.bin`, rules, and video resources); [contract](../contracts/theme-editor-contract.md) |
+| Install paths | Developer rebuild | One-click web USB install, or App OTA (firmware manages the SD library) |
+| Takes effect | Reboot | USB install and activation, APPLY, and OTA install automatically reboot |
 
-The two cooperate: when a runtime theme declares pages, boot skips the
-built-in gauge pages (saving 40–60 KB RAM) and the theme pages join the
-carousel (entered by swiping down from the GEAR page); a missing or corrupt
-runtime theme falls back to the built-in pages automatically.
+The systems coexist: when the runtime theme declares pages, boot skips built-in gauge pages
+(saving 40–60 KB RAM), and theme pages enter the navigation ring (swipe down from GEAR;
+see [USER_GUIDE.en.md](USER_GUIDE.en.md#page-navigation)). A theme without pages only supplies
+color defaults for its own elements; built-in pages keep their compiled palette.
+No selection, missing card/file, corrupt manifest or parse failure falls back to the built-in
+default theme while preserving the saved selection.
+
+Web theme installation and “Delete current theme” both use ESP32-S3 native USB, requiring no device address, token or WiFi OTA. Deletion releases theme pages and resources, removes the current `/OBD/THEMES/<key>/` directory (including `theme.bin`, rules, images, fonts and video) and saved selection, then the web client separately requests reboot to restore the built-in theme. Other themes and the shared boot animation remain. Update to USB-management firmware first; missing SD, busy storage and deletion failures report errors.
 
 ---
 
@@ -57,10 +63,7 @@ bolted into a car, and red must always mean "something is wrong":
 
 | Macro | Value | Meaning |
 |-------|-------|---------|
-| `UI_SEM_ALERT` | `0xFF4D4D` | Alarm / over-threshold text |
 | `UI_SEM_FLASH` | `0xFF0000` | Full-screen RPM warning flash |
-| `UI_SEM_ON` | `0x06D6A0` | Toggle ON / positive state |
-| `UI_SEM_WARN` | `0xFFD166` | Caution (oil pressure etc.) |
 
 ### Build one in four steps
 
@@ -108,10 +111,9 @@ echo "3  sunset" >> themes/registry.txt
 idf.py build flash monitor
 ```
 
-After boot, **Settings → THEME** lists it; selecting **reboots** the device —
-screens are created once at boot, so a restart is the most reliable reskin.
-For quick validation run the generator standalone (errors point at exact
-file and line):
+Compile-time themes ship with the firmware; users cannot switch them on the gauge.
+Developers can validate a theme by running the generator standalone (errors point
+at the exact file and line):
 
 ```bash
 python3 tools/gen_themes.py            # regenerate
@@ -198,118 +200,337 @@ open a PR titled `theme: add SUNSET`.
 
 ---
 
-## 2. Runtime themes (theme_0 partition)
+## 2. Runtime themes (SD card)
 
-Separates UI presentation from the firmware: the firmware provides data and
-system pages (settings/OTA/Bluetooth), while the `theme_0` partition
-(4 MB @ `0x620000`) provides gauge pages, layout, colors and artwork.
+Firmware supplies data (`signal_store`), the theme engine and system pages (Settings/OTA/Bluetooth).
+Custom images, fonts, layouts and theme videos are read from SD, with no Flash media cache. Boot
+animation media is independent of the selected theme and is read only from the shared SD boot
+directory. The legacy web uploader writes to that same directory.
+Built-in default UI and compiled themes remain in firmware for fallback.
+NVS stores the selected key; the SD sidecar is authoritative for rules and label overrides. A legacy config sidecar is migrated once when the SD copy is missing.
 
+```text
+/OBD/THEMES/<key>/
+  theme.bin
+  sidecar.json
+  rpm.obv                  # optional ordinary theme video
+/OBD/BOOT/boot.obv         # boot video (existing web upload workflow)
+/OBD/BOOT/boot.jpg         # optional boot still
+/OBD/BOOT/bootmedia.raw    # legacy boot animation
+/OBD/VIDEO/rpm.obv        # optional shared fallback
 ```
-┌────────────────────────────────────┐      ┌─────────────────────────────────┐
-│ Firmware (ota_0/ota_1, 3MB each)   │      │ theme_0 partition (4MB)         │
-│ OBD / BLE+WiFi / NVS / settings    │ ───→ │ theme_manifest.json (≤16KB hdr) │
-│ Theme engine (load + bind data)    │ read │ assets/ (dial.png, ring.png)    │
-└────────────────────────────────────┘      │ layout.json (page elements)     │
-                                            └─────────────────────────────────┘
-```
+
+`theme.bin` contains the 16 KB manifest, images/fonts and page layouts. Images/fonts must still
+use the binary package format; arbitrary PNG/TTF files are not loaded directly. Theme videos
+belong in their theme directory first; `/OBD/VIDEO` is an optional shared fallback directory.
+VIDEO mode reads `/OBD/BOOT/boot.obv`, then `/OBD/BOOT/boot.jpg`, then legacy
+`/OBD/BOOT/bootmedia.raw`. The existing web upload workflow continues to write to `/OBD/BOOT/`,
+removing other old-format boot animations after the new file commits. Transfer interruption or validation failure preserves existing animations; old-file cleanup failure is reported as an error.
+A still is displayed for 2.5 seconds.
+Legacy raw animation duration is computed from `frame_count/fps` rather than manifest `duration_ms`, avoiding an extra last-frame hold when metadata disagrees.
+JPEGs must be baseline and no larger than 360×360.
+Packages no longer have the old 4 MB partition limit; SD space, format count
+limits and runtime RAM budgets still apply.
 
 ### Protected boot pages
 
 The following pages are **never themed** and always use the firmware
-implementation; manifests must list them under `system_pages` (entries in
-`theme_pages` are ignored):
+implementation; listing them under `theme_pages` is skipped and logged:
 
 | Page ID | Content |
 |---------|---------|
 | `logo` | Sky Gauge logo (brand consistency) |
 | `intro` | RACE AS ONE boot animation (NVS `intro_enable`: 0=OFF 1=RACE 2=VIDEO) |
-| `boot_video` | Custom boot video (`boot_block.bin` in the `bootmedia` partition, played by `boot_block_player`) |
+| `boot_video` | Protected boot-media controller; reads shared SD media independently of the theme; player: `media/boot_video` |
 
-Rationale: the boot flow must not depend on possibly-corrupt theme data, and
-users should see the same startup experience every time.
+The boot controller remains protected firmware code and is independent of theme selection. OBV1
+files are played only after full validation. Missing or corrupt shared SD media falls back to the
+built-in startup screen. Applying a theme does not change boot media.
 
-### Building and packing
+### theme.bin format
 
-Theme directory layout (see [themes/example_boost_oil/](../themes/example_boost_oil/)):
+`theme.bin` is exported by the theme editor (`obd_theme_store`), not a
+hand-written directory; the firmware only knows the file's own binary layout
+(code: `main/theme_engine/theme_loader.c`, `theme_internal.h`):
 
 ```
-my_theme/
-├── theme_manifest.json   # required
-├── layout.json           # optional, custom page elements and data bindings
-└── assets/
-    ├── dial.png          # optional, 360×360 RGB
-    └── ring.png          # optional, 360×360 RGBA
+[0, 16 KB)   manifest JSON (parsed with cJSON_ParseWithLength, 0xFF-padded tail)
+[16 KB, …)   images + fonts + per-page layout (offset/size given by the manifest)
 ```
 
-`theme_manifest.json` (schema 1.0):
+Key fields and limits:
 
-```json
-{
-  "schema_version": "1.0",
-  "theme": {
-    "id": "my_theme",
-    "name": "MY THEME",
-    "version": "1.0.0",
-    "author": "your-name"
-  },
-  "colors": {
-    "bg": "0x000000",
-    "ring": "0xFF0000"
-  },
-  "pages": {
-    "comment": "logo/intro/boot_video must be listed in system_pages",
-    "system_pages": ["logo", "intro", "boot_video", "settings", "ota", "bluetooth_pair"],
-    "theme_pages": ["main_gauge"]
-  }
-}
-```
+- First byte `0xFF` or `0x00` → the theme is treated as unavailable, built-in
+  default theme is used
+- `schema_version` must equal `"1.0"` exactly, otherwise
+  `ESP_ERR_NOT_SUPPORTED` and the default theme is used
+- `theme.id` is required, ≤64 chars; `name` / `version` / `author` are
+  truncated on UTF-8 character boundaries when too long
+- `assets.*`: `format` is `rgb565` / `rgba8888` / `lv_font_bin`, unknown
+  formats are skipped entirely; width/height ≤2047 px; `size` must equal
+  `width*height*bytes-per-pixel`; offset ≥16 KB; duplicate names keep the first
+- `pages.theme_pages[]`: `{id, layout_data_offset, layout_data_size}`, one
+  page's layout ≤64 KB; duplicate ids keep the first; ids `logo` / `intro` /
+  `boot_video` are skipped per the previous section
+- Colors fall back to the built-in default palette when missing
+- Capacity: ≤32 pages, ≤16 images, ≤16 fonts; ≤128 elements and ≤32 data
+  bindings per page
 
-Pack into a 4 MB partition image (0xFF-padded, 16 KB manifest header reserve):
+Fonts are `lv_font_bin`. The 'F' filesystem driver reads the font segment from SD into temporary
+PSRAM during `lv_font_load`, then frees the segment on close; LVGL font objects remain until
+unload. Failure logs "font '%s': lv_font_load failed, built-in font used" and uses a built-in font.
+`theme_load()` refuses reload while theme page objects exist or a background boot-page
+preparation is active. Theme switching/deletion waits for image reads to finish so it
+cannot race the SD files used by the worker.
+
+### Theme mode: with pages vs. without (`main/export_path/ui.c`)
+
+The built-in gauge pages (Gear/Rpm/Speed/Temp/OilPressure/Needle) are skipped
+only when the theme's **id is not `default` and it declares at least one
+`theme_pages` entry** (saving 40–60 KB RAM); boot goes straight to the
+theme's default page (the page with id `main_gauge`, else the first page),
+falling back to the built-in default page if building it fails. Inside the
+theme page carousel, swiping left/right moves between theme pages, and past
+either end lands on the Info (EasterEgg) page; swiping down from the Gear
+page also opens the theme's first page (it only requires a non-empty
+`theme_pages`). The default page's images are read and converted by a background
+task during the Logo / boot animation, leaving the boot screen visible. The
+boot video replaces the Logo only after its first frame finishes transferring to the LCD.
+If the video ends before theme preparation, playback releases its buffers and the gauge
+returns to the Logo until the page is ready. Fullscreen playback guards the
+LVGL refresh callback so page or layout invalidations cannot resume rendering, clear the
+panel or overwrite borrowed DMA buffers. Normal refresh resumes after the decoder releases
+the panel and buffers. LVGL creates the theme
+widgets after video playback and preparation finish, then switches pages, so
+neither transparent-image conversion nor widget creation interrupts video. If preparation finishes before playback starts, widgets can be created during the Logo. Theme-package streaming uses file-descriptor `read` calls and an internal DMA buffer for bulk transfers, avoiding byte-by-byte refills from `_IONBF` + `fread` on this target. Slow-read logs separate buffer waits, actual reads and callbacks. A
+boot-video decode failure or interruption restores the Logo; failed theme
+preparation falls back to the built-in page. Images, videos and other theme child widgets
+bubble gestures to the page root, so swiping anywhere in the theme content
+continues the carousel. Full navigation: [USER_GUIDE.en.md](USER_GUIDE.en.md#page-navigation).
+
+LCD output also includes the upstream ESP-IDF 5.5.3 SPI bus-lock wakeup fix, preventing a cross-core request from waiting indefinitely at DMA interrupt exit. The low-speed LCD probe handle is released before the normal handle is registered. Only a build-local SDK source copy is replaced; the installed SDK is unchanged. On the tested device, preparation of the same 360×360 RGBA image takes about 238–240 ms; 20 consecutive USB resets each completed the 100-frame OBV2 video and entered the theme page. These measurements apply to that device and those resources, not every SD card, image or video.
+
+**A theme with no pages**: in the current code, `colors.*` only supplies
+default colors for the theme's own page elements — moot when it has no
+pages. It does **not** change the built-in pages' colors; those always use
+the compiled-in theme palette.
+
+### Sidecar (rules + overlay)
+
+Editor rules (alarms / recoloring / animation) and label overlays (rotation,
+direction, numeric display format) do not go into `theme.bin`; they are kept
+as a separate slim JSON:
+
+- Location: SD `/OBD/THEMES/<key>/sidecar.json` (`<key>` =
+  `storage_theme_key(theme.id)`), the only authoritative copy. Install/delete requires an SD card.
+  A legacy config partition `/themes/<key>/sidecar.json` is migrated once when the SD file is
+  missing, then the old copy is removed
+- Input is either the reduced format itself (`"format":"gauge-sidecar/1"`) or
+  a full `<id>.gaugeproj.json` (streamed and filtered, dropping large fields
+  like images/fonts as it reads)
+- Limits (`theme_sidecar_core.h`): reduced form ≤64 KB; ≤32 pages; ≤128
+  element ids per page; one element id ≤128 chars; one element/rule/overlay
+  entry ≤16 KB; overlong strings (>4096) are dropped while streaming
+- Optional `asset_files`: asset name → gaugeproj file name, used by `vid_` /
+  `video_` elements to switch videos with an `asset` rule
+- Install failures: `ESP_ERR_INVALID_ARG` (bad JSON / format / theme id),
+  `ESP_ERR_INVALID_SIZE` ("sidecar too big: reduced form exceeds 64 KB"),
+  `ESP_ERR_NO_MEM`
+- Install returns a pairing report: page/rule counts, truncation counts,
+  `not in theme.bin: ...`, per-page matched/missing/kind-mismatch, unknown
+  assets/sources, elements expected to be skipped by the PSRAM budget (up to
+  8 names); the last line always reads "applies on the next page build;
+  bin-only installs (app/store/web flash) have no overlay"; an overlong
+  report ends in "..."
+- API: `POST /api/v1/theme/sidecar` (chunked; ≤64 KB kept in PSRAM, larger
+  streams to an SD temp file; an SD card is required for every save, otherwise
+  409 `sd_unavailable`; 32 MB overall cap, 413 if exceeded; 422 `invalid_sidecar`
+  on bad input; success `{"ok":true,"size":N,"report":"..."}`),
+  `DELETE /api/v1/theme/sidecar[?theme=<id>]` (no parameter removes the
+  current theme's). `/api/v1` requires `X-OTA-Token`. SD import of
+  `*.gaugeproj.json` is installed the same way as a sidecar (`sd_import.c`)
+
+### PSRAM budget and skip order
+
+Building a page sizes its artwork budget by whether it has a video element
+(`theme_img_cache.h`): **no video 2560 KB, with video 1536 KB**. Allocation
+order when over budget:
+
+1. Pointers and all their variants — required, kept
+2. Rule-target images (images a rule can change the look of) — required,
+   kept; their tint variants also count against the budget
+3. Decorative images, bottom-to-top in stacking order, topmost dropped
+   first when the budget runs out; decorative images must also leave 512 KB
+   of PSRAM free (`TE_PSRAM_RESERVE`)
+
+Dropped images log "'%s' skipped: over the page budget / PSRAM reserve". All images, including
+untinted `rgb565`, own RAM pixels read from SD and count against the cache budget; Flash mmap
+zero-copy is retired. Cache misses also need temporary source data and possibly resize buffers,
+so package size differs from page RAM use. Tint variants over 128 KB (`TE_TINT_BAKE_MAX`) use
+runtime recoloring instead of pre-baking.
+
+### SD theme library
+
+`/OBD/THEMES/<key>/theme.bin` is the firmware-managed runtime source. Users install and select
+themes through the web UI or App and do not need direct SD-card access.
+`storage_theme_key(theme.id)` generates
+`<key>` (unsafe characters, leading/trailing dots and DOS reserved names handled; ≤64 chars).
+Copy directly into that directory or import `*.bin` through `/OBD/IMPORT/`, leaving a `.ok` note.
+WiFi OTA also installs directly to SD. Old Flash themes are migration sources only; existing
+SD packages and selections are preserved.
+
+The theme editor's `*-sd.zip` export is **not directly readable by firmware**. On a computer,
+import the archive through the web UI or App; users do not need to organize SD files manually.
+The archive places `theme.bin` in
+`/OBD/THEMES/<key>/`, the rules sidecar in `/OBD/IMPORT/`, and theme videos beside the package;
+firmware imports the sidecar and reads the package and videos directly from the SD theme folder.
+Do not put the ZIP itself in `/OBD/IMPORT/`. Theme videos are exported by asset key and keep the
+names referenced by the manifest. Theme images, fonts and videos are stored on SD; images and fonts
+are inside `theme.bin`, while ordinary theme videos sit beside it. The editor's Media panel can use
+an image or video for preview, but startup media is not part of the theme bundle. The existing web
+uploader remains compatible and writes the independent boot media to `/OBD/BOOT/`.
+
+Themes are selected through the web UI or App; the gauge has no theme picker or SD management page.
+The following describes the firmware's internal theme-application behavior:
+
+1. Deletes theme pages and calls `theme_unload()`.
+2. Shows "Loading theme..." / "Loading theme NN%"; a worker validates the SD package and commits the NVS selection, polled every 500 ms.
+3. Shows "Theme selected, restarting" and reboots after about 1.5 s to read SD directly.
+4. On failure shows "Theme selection failed: <reason>" and reloads the old selection or built-in default.
+5. Busy shows "Busy, try again"; an unusable package shows "Not a usable theme.bin".
+
+Switching does not erase/write Flash media or copy the entire package into PSRAM. OTA, no card
+or another storage job prevents switching. Interrupted old Flash writes become SD selections;
+without a card the marker waits for retry. Ordinary SD import cannot replace the selected package:
+switch themes first. OTA can replace it after theme pages are released. Boot without a card uses
+the built-in UI; apply again after insertion. Removing a card during use may leave cached images
+visible, but later page/asset reads fail; immediate whole-UI fallback is not guaranteed.
+
+### Theme video
+
+A theme image element whose id starts with `vid_` or `video_` is treated as a
+video element: the image itself is the poster, and the key is the id with
+that prefix stripped. Lookup order is
+`/OBD/THEMES/<theme_key>/<key>.obv`, then `/OBD/VIDEO/<key>.obv` (for sharing
+across themes); if neither exists, the poster stays. A `visible` rule can pause the video, and an
+`asset` rule switches to another file named by the sidecar's `asset_files`
+(no folder or extension). Theme videos loop, and only one video decodes at a
+time.
+Theme directory keys and video keys support up to 64 characters; the player path buffer accommodates
+the complete SD path for a theme video.
+
+Looping theme videos use the custom **OBV1** container
+(`main/media/obv1_format.h`, produced by `tools/make_video.py`):
+`[64 B header][8 B × frame_count frame index][JPEG frame data]`, width/height
+8..360 and multiples of 8, fps 1..60, up to 36000 frames, each frame ≤48 KB,
+checked by CRC-32. Web boot-animation uploads use OBV2 below. Commands:
 
 ```bash
-python3 tools/theme_packer/pack_theme.py themes/my_theme my_theme.bin
+python3 tools/make_video.py boot INPUT -o boot.obv            # boot video, defaults 360px/4:2:2/Q75/24fps
+python3 tools/make_video.py theme INPUT -o rpm.obv --size 240x240 [--poster rpm.png]
+python3 tools/make_video.py inspect boot.obv                  # print the header
+python3 tools/make_video.py verify boot.obv                   # check CRCs and every frame
+python3 tools/make_video.py legacy INPUT -o bootmedia/slot_a [--raw bootmedia.raw]  # old delta_varint boot animation
 ```
 
-### Flash / push
+Needs Pillow (`pip install Pillow`); video inputs also need ffmpeg.
 
-**USB** (first time or debugging):
+Local web boot animation uses **OBV2**; looping theme videos continue to use OBV1. OBV2 keeps the `OBV1` magic and 64 B header,
+with `version=2`, `fps=0`, and `timescale=1000000`; each 16 B index entry is `offset,size,timestamp_us,duration_us`.
+Timestamps start at 0 and are contiguous, frame intervals are ≥16666 µs, and `duration_ms` rounds the total duration up.
+Limits are 36000 frames, ≤48 KiB per frame, ≤256 MiB per file, and ≤1.25 MiB for a sliding one-second compressed window plus wrap headroom.
+Header, index, and frame data each have CRC-32. The browser converts H.264 MP4 to aspect-preserving, uncropped 360×360 Q90 baseline JPEG 4:2:0,
+retaining the source timeline and reporting budget overflow. Firmware prebuffers about one second of compressed frames and reads SD sequentially.
+360×360/4:2:0 uses whole-frame decoding and two DMA strip buffers for display output; MCU-aligned assets with a passing decoder self-test can use block decoding.
+OBV2 supports only non-looping fullscreen boot playback; three consecutive frames missing their individual display deadlines log an error and stop playback,
+without silently dropping frames or stretching the timeline. These are format limits; actual frame rate still requires device testing.
+USB `BEGIN_OBV=7` stages, validates, and installs `/OBD/BOOT/boot.obv`. The tool's `boot/theme` commands still produce OBV1;
+`inspect/verify` read both versions, and legacy BIN/raw animations remain compatible.
 
-```bash
-esptool.py --chip esp32s3 -p PORT write_flash 0x620000 my_theme.bin
-```
+### Install / push
 
-**WiFi OTA push** (device in OTA mode; from the app or curl, protocol in
+The theme editor merges the former BIN and SD-bundle exports into **Export theme ZIP**, downloading one `<id>.zip`.
+The ZIP contains `/OBD/THEMES/<key>/theme.bin`, the theme's `*.obv` videos, and
+`/OBD/IMPORT/<key>.gaugeproj.json`; images, fonts, and layouts are in `theme.bin`, while rules come from gaugeproj.
+Export is blocked when referenced video files need relinking. Boot animation is independent and stays under shared `/OBD/BOOT/`.
+
+Recommended workflow: insert an SD card, connect the ESP32-S3 native USB port to the web flasher, and choose **From community** or
+**Upload local files** in the **Theme** section. The page checks paths, CRCs, theme IDs, data ranges, and video dependencies, unpacks it, and uploads files in order.
+Firmware verifies SHA-256, stages files, and generates `sidecar.json`; after all steps succeed it saves the theme selection and restarts.
+No manual extraction or separate activation is needed. First install firmware with USB theme-bundle support; older firmware prompts an upgrade.
+
+New complete ZIPs, old `*-sd.zip` files, and STORE / DEFLATE compression are supported. Legacy BIN, companion gaugeproj / sidecar JSON,
+and `.obv` files can also be selected together. A BIN alone retains its images, fonts, and layouts but cannot restore missing rules or videos;
+upload is rejected if a declared video is missing. New community publications store complete ZIPs; historical BIN files remain installable,
+with format detected from content. After a complete firmware flash, reconnect before installing themes or animations.
+
+Updates to an existing theme ID are supported: before commit, release active theme resources, then replace the whole directory using staging,
+a backup, and a recovery journal. Failed installation rolls back; if power fails during commit, the next boot with SD mounted attempts to restore
+old files and selection. Before upload, at least `2 × upload stream size + 1 MiB` of free space is required. Both the web ZIP and upload stream
+are limited to 256 MiB, with at most 128 installed files. Host tests cover directory replacement, validation failure, selection rollback, and
+interruption recovery; they do not establish actual SD-card power-loss reliability.
+
+Alternatively extract the ZIP at the SD root, preserving existing files. Rules are imported automatically at boot, but copying does not activate the theme.
+Web theme installation uses ESP32-S3 native USB; the App WiFi OTA path remains compatible.
+
+**WiFi OTA push** (enter OTA mode; protocol:
 [APP_PROTOCOL.en.md](APP_PROTOCOL.en.md#wifi-ota-http-api)):
 
-- `POST /ota/theme/prepare` — preflight, returns mount status (no erase)
-- `POST /ota/theme` — chunked upload (`X-OTA-SHA256` / `X-OTA-Size` /
-  `X-OTA-Offset` / `X-Last` headers)
-- `POST /ota/theme/erase` — erase the whole theme partition; next boot falls
-  back to the built-in default theme
+- `POST /ota/theme/prepare` — check SD mount and space; returns `storage:"sd"`. PSRAM fields are diagnostic.
+- `POST /ota/theme` — stream to an SD temporary file, verify SHA and manifest, import, save selection and automatically reboot.
+- `POST /ota/theme/erase` — delete the selected theme's entire `/OBD/THEMES/<key>/` directory (including `theme.bin`, rules, images, fonts, and dedicated videos) and clear selection; the built-in theme loads on next boot. Requires a mounted SD card; other themes and the shared `/OBD/BOOT/` boot animation are untouched. Returns `{"ok":true,"deleted":true|false}`.
 
-Themes go over WiFi OTA or USB flashing only; there is no BLE transfer
-path.
+While theme selection runs these endpoints and the first `/ota/bootmedia` chunk return
+"theme library busy". Themes transfer via USB, SD, or WiFi; no BLE theme upload. Without a card,
+media upload returns "SD card required".
 
 ### Runtime behavior
 
-- At boot `theme_engine_init()` reads theme_0: corrupt manifest / empty
-  partition / parse failure → automatic fallback to the built-in default
-  theme, never a brick
-- When the theme declares pages, the built-in gauge pages (Gear/RPM/Speed/
-  Temp/Chart …) are not created and the theme pages join the carousel; data
-  is pushed periodically via `theme_update_data()` (`obd_snapshot_t`, a
-  16-byte ABI-stable struct: rpm/speed/boost/coolant/oil pressure/gear/
-  voltage/oil temp/AFR/throttle/intake temp)
-- Artwork is memory-mapped straight from flash (zero-copy mmap), no heap cost
-- Switching / updating a theme takes effect after a reboot (same as
-  compiled-in themes)
+- At boot `theme_engine_init()` reads the SD package selected in NVS: missing card/file,
+  corrupt manifest or parse failure falls back to the built-in default.
+- While a theme page is on screen, the LVGL task normally calls `theme_tick()`
+  every 16 ms (animations/alarms use their respective refresh periods): it reads `signal_store` once (keys defined in
+  `contracts/signals.json`), updates data bindings (only changed values touch
+  LVGL objects), then evaluates sidecar rules on that same snapshot and
+  applies the diff; it is a no-op with no theme page on screen
+- While a theme page is on screen during the Bluetooth-connect gauge sweep, rule evaluation temporarily simulates all 12 standard
+  `obd.*` signals as changing inputs, so threshold conditions and `change` rules for every signal can respond to the sweep.
+  Rule input immediately returns to real `signal_store` data when the sweep ends; simulated values are never written to or used
+  to overwrite real OBD data. Vehicle-specific `veh.*` signals have no shared range and continue using their live data during sweep
+- Rule conditions/hysteresis/debounce/timing state still advance on each call. An unchanged
+  active set reuses the sorted action coverage; changes rebuild it and remove overrides of
+  rules that exit. Rebuilding a page or theme clears the cache.
+  When both the set and system-alarm suppression stay unchanged, target look assembly/comparison
+  is skipped as well. Bindings continue updating; rule exits, suppression changes, and the first
+  update after reset still apply looks. Ending an alarm still restores the page background.
+- For arcs and bars, rule-action `set.color` changes only the indicator/fill color; the track retains the element's `bgColor`. Immediate changes and color animations follow the same rule, so crossing a sweep threshold does not light the unfilled track and appear to jump to full scale. When the rule exits, the original indicator color returns. Existing theme packages only need a firmware update, with no re-export.
+- Arc progress uses the full 0–10000 value range without the 8191 pixel-coordinate limit; both sweep and live readings can reach full scale.
+- Rule-action `set.color` supports `animation` modes `fade`, `keyframes` and `strobe`, updating colors
+  or image tint on each theme tick. `change` and `timer` rules remain active through the longest
+  animation duration. Frames are not pre-generated; `text`, `visible` and `asset` still change
+  immediately, and image-resource changes are not crossfaded.
+- Label fonts: try the manifest's `font_asset` first, fall back to built-in
+  Montserrat 12/14/16/26/32/48 on failure (exact match first, else the
+  nearest smaller size, else 12 as a last resort); sizes above 48 use the 48
+  font with `transform_zoom = size*256/48` (LVGL's zoom, unrelated to the
+  compiled-in theme's artwork scaling)
+- A missing value or NaN shows `--` on the label (no unit)
+- System alarms take priority over theme rules: while the RPM warning flash
+  or the triple-gauge linked red owns the background, theme rules are
+  suppressed (data bindings keep refreshing); when it ends, built-in pages
+  get their palette background + dial face back, and theme pages get their
+  own layout's `bg_color` back
+- Layouts and assets are read from SD in segments; cache hits do not read SD. Image conversion,
+  cropping, tinting and pointer resizing use PSRAM. Identity-size images still own RAM pixels;
+  referenced cache entries remain alive. Font/layout source segments are freed after parsing.
+  SD lock waits are bounded to one second; failure ends the current load. Host tests cover
+  pixel/geometry compatibility and read/allocation cleanup, not physical SD/LCD performance.
 - API reference: [main/theme_engine/theme_interface.h](../main/theme_engine/theme_interface.h)
 
 ### Partition background
 
-`theme_0` (0x620000, 4 MB) and `bootmedia` (0xA20000, 5.875 MB) — see
-[partitions.csv](../partitions.csv). A single theme slot is enough: a bad
-theme falls back to the default, so no A/B slots. Devices on the old
-partition table (no theme_0, bootmedia at the old address) must be upgraded
-with a **one-time full USB reflash** — OTA cannot rewrite the partition
-table itself.
+Physical layout v2 is preserved: `theme_0` (0x620000, 4 MB) and `bootmedia` (0xA20000, 4.75 MB)
+are legacy migration sources / reserved space totaling 8.75 MiB. New themes and animations do
+not use them; this change does not reassign the space to firmware or config.
+See [partitions.csv](../partitions.csv). Devices already on layout v2 can update by OTA;
+older partition tables need one full reflash because OTA cannot change the table.

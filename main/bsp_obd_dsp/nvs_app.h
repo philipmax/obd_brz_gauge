@@ -11,8 +11,9 @@
  * web-flasher full reflash unchanged.
  *
  * Namespaces:
- *   sys   magic ('NAP2'), layout_crc, mig_ver
- *   imp   inbox CRC ledger (theme_0 / bootmedia last-seen CRC)
+ *   sys   magic ('NAP2'), layout_crc, mig_ver, mig_veh (pending legacy vehicle)
+ *   imp   legacy media CRC ledger, old write markers th_wr / th_mc for
+ *         migration recovery, selected SD library theme th_cur
  *   veh   current vehicle profile id, prev id, installation state
  *
  * Call nvs_app_init() once at boot, before nvs_storage_init() and before
@@ -33,7 +34,8 @@
  *
  * Calls nvs_flash_init_partition().  If the partition is corrupt it is erased
  * and re-initialised.  If the stored magic does not match 'NAP2' the partition
- * is erased and a fresh magic + layout_crc are written.
+ * is erased and a fresh magic is written; layout_crc is written only by the
+ * first-boot migration (0 until then).
  *
  * Idempotent: safe to call again after a crash during migration.
  */
@@ -89,3 +91,41 @@ esp_err_t nvs_app_veh_prev_id_get(char *out, size_t out_len);
 
 veh_state_t nvs_app_veh_state_get(void);
 esp_err_t   nvs_app_veh_state_set(veh_state_t state);
+
+/** Pending profile id (activated on the next boot); "" = none. */
+esp_err_t nvs_app_veh_pending_id_get(char *out, size_t out_len);
+esp_err_t nvs_app_veh_pending_id_set(const char *id);
+
+/**
+ * Compiled-or-source copy of the active profile (key "blob", <= 8KB) so the
+ * vehicle survives a config partition wipe. *len is in/out (buffer size in,
+ * stored size out). ESP_ERR_NVS_NOT_FOUND when absent.
+ */
+#define NVS_APP_VEH_BLOB_MAX (8u * 1024u)
+esp_err_t nvs_app_veh_blob_get(void *buf, size_t *len);
+esp_err_t nvs_app_veh_blob_set(const void *buf, size_t len);
+esp_err_t nvs_app_veh_blob_erase(void);
+
+/** Boots in a row where a PENDING profile failed verification. */
+uint8_t   nvs_app_veh_boot_fail_get(void);
+esp_err_t nvs_app_veh_boot_fail_set(uint8_t n);
+
+/* ---- sys namespace: health ---- */
+
+/** Partition layout CRC recorded by the migration (0 = never written). */
+uint32_t  nvs_app_layout_crc_get(void);
+esp_err_t nvs_app_layout_crc_set(uint32_t crc);
+
+/** Consecutive abnormal resets (panic/WDT/brownout); drives safe mode. */
+uint8_t   nvs_app_crash_count_get(void);
+esp_err_t nvs_app_crash_count_set(uint8_t n);
+
+/* ---- generic access (namespaces sys/imp/veh/stat/diag) ---- */
+
+uint32_t  nvs_app_get_u32(const char *ns, const char *key, uint32_t def);
+esp_err_t nvs_app_set_u32(const char *ns, const char *key, uint32_t val);
+esp_err_t nvs_app_get_str(const char *ns, const char *key, char *out, size_t out_len);
+esp_err_t nvs_app_set_str(const char *ns, const char *key, const char *val);
+esp_err_t nvs_app_get_blob(const char *ns, const char *key, void *buf, size_t *len);
+esp_err_t nvs_app_set_blob(const char *ns, const char *key, const void *buf, size_t len);
+esp_err_t nvs_app_erase_key(const char *ns, const char *key);

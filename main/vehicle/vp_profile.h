@@ -14,8 +14,8 @@
  *         are fixed-width little-endian with explicit padding; the sizes are
  *         asserted below so a host-generated blob matches the ESP32-S3 ABI.
  *
- * The scheduler / ELM integration consumes this structure; it is not part
- * of this module.
+ * vp_engine (vp_engine.h) runs this structure against the ELM327; that is
+ * not part of this module.
  */
 
 #include <stddef.h>
@@ -32,6 +32,7 @@ extern "C" {
 
 #define VP_PROFILE_MAGIC        0x31525056u   /* "VPR1" */
 #define VP_PROFILE_VERSION      1
+#define VP_DEFAULT_PROTO        0             /* saved protocol or OBD-II auto-detect */
 #define VP_DEFAULT_HDR          0x7E0u
 #define VP_DEFAULT_GAP_MS       30            /* legacy OBD_POLL_SLOT_GAP_MS */
 #define VP_DEFAULT_ATST         0x19          /* legacy default when unset */
@@ -211,7 +212,9 @@ typedef enum {
 } vp_compile_err_t;
 
 /*
- * Validate and compile. On success *out is one allocation from alloc; free
+ * Expand omitted standard OBD2 signals, validate and compile. Explicit signal
+ * declarations replace defaults; disabled entries are omitted from the blob.
+ * The caller-owned JSON is unchanged. On success *out is one allocation from alloc; free
  * it with vp_profile_free(). issues may be NULL.
  */
 struct cJSON;

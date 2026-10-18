@@ -2,8 +2,8 @@
 # Name,     Type, SubType,  Offset,    Size,      Flags
 #
 # App slots (ota_0/ota_1) must be 0x10000-aligned — gen_esp32part.py enforces this.
-# theme_0 and bootmedia are written by the web flasher at fixed addresses (0x620000
-# and 0xA20000); all offsets in this section must stay compatible with that tool.
+# theme_0 and bootmedia retain legacy addresses for migration/reservation.
+# New custom themes and boot media live on SD; no runtime Flash media cache.
 # layout_id (CRC32 of all 9 entries): 0x94752aa3
 nvs,        data, nvs,      0x9000,    0x6000,
 otadata,    data, ota,      0xF000,    0x2000,

@@ -1,0 +1,40 @@
+{
+  "schema": "skygauge.vehicle/1",
+  "id": "custom.bmw.g.sparse",
+  "rev": 1,
+  "name": "BMW G sparse",
+  "bus": {
+    "proto": 6,
+    "hdr": "7DF",
+    "atst": 15,
+    "gap_ms": 1
+  },
+  "signals": [
+    {
+      "id": "obd.gear",
+      "rate": "round",
+      "period_ms": 200,
+      "src": [
+        {
+          "raw": "18 03 22 DA 2E",
+          "hdr": "6F1",
+          "rx": "618",
+          "expect": "62DA2E",
+          "len": 1,
+          "valid": [
+            0,
+            8
+          ],
+          "fail_after": 1,
+          "expr": "A",
+          "rpn": [
+            [
+              "A",
+              0
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}

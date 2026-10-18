@@ -1,0 +1,99 @@
+{
+  "id": "mini.r55",
+  "legacy": {
+    "rev": "4b056c0",
+    "idx": 11,
+    "name": "MINI R55"
+  },
+  "init": ["ATZ", "ATE0", "ATL0", "ATS1", "ATH0", "ATAT1", "ATST0A", "ATSP6", "ATSH7DF"],
+  "gap_ms": 1,
+  "requests": [
+    {
+      "sig": "obd.rpm",
+      "src": 0,
+      "hdr": "7DF",
+      "tx": "010C",
+      "class": "fast"
+    },
+    {
+      "sig": "obd.intake_temp",
+      "src": 0,
+      "hdr": "7DF",
+      "tx": "010F",
+      "class": "round"
+    },
+    {
+      "sig": "obd.speed",
+      "src": 0,
+      "hdr": "7DF",
+      "tx": "010D",
+      "class": "round"
+    },
+    {
+      "sig": "obd.coolant_temp",
+      "src": 0,
+      "hdr": "7DF",
+      "tx": "0105",
+      "class": "round"
+    },
+    {
+      "sig": "obd.load",
+      "src": 0,
+      "hdr": "7DF",
+      "tx": "0104",
+      "class": "round"
+    },
+    {
+      "sig": "obd.throttle",
+      "src": 0,
+      "hdr": "7DF",
+      "tx": "0111",
+      "class": "round"
+    },
+    {
+      "sig": "obd.oil_temp",
+      "src": 0,
+      "hdr": "7E0",
+      "tx": "225822",
+      "class": "round"
+    },
+    {
+      "sig": "obd.oil_temp",
+      "src": 1,
+      "hdr": "7DF",
+      "tx": "015C",
+      "class": "round"
+    },
+    {
+      "sig": "obd.battery_voltage",
+      "src": 0,
+      "hdr": "7DF",
+      "tx": "0142",
+      "class": "round"
+    },
+    {
+      "sig": "obd.boost",
+      "src": 0,
+      "hdr": "7DF",
+      "tx": "010B",
+      "class": "round"
+    },
+    {
+      "sig": "obd.afr",
+      "src": 0,
+      "hdr": "7DF",
+      "tx": "0144",
+      "class": "round"
+    }
+  ],
+  "requires": [],
+  "monitor": null,
+  "can": [],
+  "drivetrain": {
+    "fd": 3.65,
+    "tire_m": 0.306,
+    "gears": [3.308, 1.913, 1.233, 0.967, 0.806, 0.684],
+    "tol": 0.15
+  },
+  "notes": ["obd.boost: legacy truncated (MAP-100)/10 to 0.1 bar; v1 stores 0.01 bar.", "225822: legacy sent it on the functional header 7DF (enum path, no ATSH7E0 wrap); v1 refuses service 22 on a functional header, so it goes to 7E0."]
+}

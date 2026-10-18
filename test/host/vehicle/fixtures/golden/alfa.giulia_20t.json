@@ -1,0 +1,92 @@
+{
+  "id": "alfa.giulia_20t",
+  "legacy": {
+    "rev": "4b056c0",
+    "idx": 14,
+    "name": "GIULIA 2.0T"
+  },
+  "init": ["ATZ", "ATE0", "ATL0", "ATS1", "ATH0", "ATAT1", "ATST0F", "ATSP7", "ATSH18DB33F1"],
+  "gap_ms": 50,
+  "requests": [
+    {
+      "sig": "obd.rpm",
+      "src": 0,
+      "hdr": "18DB33F1",
+      "tx": "010C",
+      "class": "fast"
+    },
+    {
+      "sig": "obd.intake_temp",
+      "src": 0,
+      "hdr": "18DB33F1",
+      "tx": "010F",
+      "class": "round"
+    },
+    {
+      "sig": "obd.speed",
+      "src": 0,
+      "hdr": "18DB33F1",
+      "tx": "010D",
+      "class": "round"
+    },
+    {
+      "sig": "obd.coolant_temp",
+      "src": 0,
+      "hdr": "18DB33F1",
+      "tx": "0105",
+      "class": "round"
+    },
+    {
+      "sig": "obd.load",
+      "src": 0,
+      "hdr": "18DB33F1",
+      "tx": "0104",
+      "class": "round"
+    },
+    {
+      "sig": "obd.throttle",
+      "src": 0,
+      "hdr": "18DB33F1",
+      "tx": "0111",
+      "class": "round"
+    },
+    {
+      "sig": "obd.oil_temp",
+      "src": 0,
+      "hdr": "18DA10F1",
+      "tx": "221302",
+      "class": "round"
+    },
+    {
+      "sig": "obd.battery_voltage",
+      "src": 0,
+      "hdr": "18DB33F1",
+      "tx": "0142",
+      "class": "round"
+    },
+    {
+      "sig": "obd.boost",
+      "src": 0,
+      "hdr": "18DB33F1",
+      "tx": "010B",
+      "class": "round"
+    },
+    {
+      "sig": "obd.afr",
+      "src": 0,
+      "hdr": "18DB33F1",
+      "tx": "0144",
+      "class": "round"
+    }
+  ],
+  "requires": [],
+  "monitor": null,
+  "can": [],
+  "drivetrain": {
+    "fd": 2.35,
+    "tire_m": 0.33,
+    "gears": [5, 3.2, 2.143, 1.72, 1.313, 1, 0.823, 0.64],
+    "tol": 0.09
+  },
+  "notes": ["obd.boost: legacy truncated (MAP-100)/10 to 0.1 bar; v1 stores 0.01 bar."]
+}

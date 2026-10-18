@@ -86,7 +86,7 @@ if(MATH_LIB)
     target_link_libraries(theme_rules PUBLIC ${MATH_LIB})
 endif()
 
-foreach(t test_rules_vectors test_label_format test_rules_unit)
+foreach(t test_rules_vectors test_label_format test_rules_unit test_rule_cache)
     add_executable(${t} ${t}.c test_util.c)
     target_compile_options(${t} PRIVATE ${TR_WARN})
     target_link_libraries(${t} PRIVATE theme_rules)
@@ -103,3 +103,13 @@ add_test(NAME label_format_golden
 add_test(NAME label_format_extra
          COMMAND test_label_format "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/label_vectors.json")
 add_test(NAME rules_unit COMMAND test_rules_unit)
+
+add_test(NAME rules_output_cache COMMAND test_rule_cache)
+
+# Timing is explicitly opt-in; never use host wall time as a CTest assertion.
+option(TR_BENCHMARK "Build rule output-cache microbenchmark" OFF)
+if(TR_BENCHMARK)
+    add_executable(bench_rule_cache bench_rule_cache.c)
+    target_compile_options(bench_rule_cache PRIVATE ${TR_WARN})
+    target_link_libraries(bench_rule_cache PRIVATE theme_rules)
+endif()

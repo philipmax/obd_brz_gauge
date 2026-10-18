@@ -1,5 +1,5 @@
 {
-  "schema": "skygauge.vehicle/1",
+  "defaults":"none", "schema": "skygauge.vehicle/1",
   "id": "test.full",
   "rev": 3,
   "name": "Test Full",
@@ -27,7 +27,7 @@
      "src": [{"req": "224436", "hdr": "7E0", "len": 2, "rpn": [["R",0,16,"be"],["k",1000],"/"]}]},
     {"id": "obd.gear", "fallback": "ratio",
      "src": [{"raw": "18 03 22 DA 2E", "hdr": "6F1", "rx": "618", "expect": "62DA2E", "len": 1,
-              "valid": [0, 8], "rpn": [["A",0],["lut",0]]}]},
+              "valid": [-1, 8], "rpn": [["A",0],["lut",0]]}]},
     {"id": "veh.trans_temp", "name": "Trans temp", "unit": "C", "rate": "slow", "div": 8,
      "src": [{"req": "221310", "hdr": "7E1", "cea": "10", "len": 2,
               "rpn": [["A",0],["k",256],"*",["A",1],"+",["k",100],"/",["k",40],"-"]}]},

@@ -8,18 +8,18 @@
 // Adapted for Waveshare ESP32-S3-Touch-LCD-1.85 by adaptation
 
 #include <stdio.h>
-#include <inttypes.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "driver/gpio.h"
 #include "esp_timer.h"
 #include "esp_err.h"
+#include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_task_wdt.h"
 #include "esp_ota_ops.h"
 
 #include "lvgl.h"
+#include "cJSON.h"
 
 /* Waveshare BSP drivers */
 #include "bsp_obd_dsp/i2c_driver/I2C_Driver.h"
@@ -29,28 +29,25 @@
 #include "bsp_obd_dsp/lcd_driver/ST77916.h"       // internally includes CST816.h & TCA9554PWR.h
 
 /* Application layer */
-#include "bsp_obd_dsp/bsp_board.h"
 #include "bsp_obd_dsp/nvs_app.h"
+#include "bsp_obd_dsp/nvs_storage.h"
 #include "bsp_obd_dsp/sd_card.h"
-#include "bsp_obd_dsp/config_part.h"
-#include "app_obd_dsp/sd_import.h"
+#include "bsp_obd_dsp/ble_hub.h"
 #include "bsp_obd_dsp/elm327_ble_client.h"
 #include "bsp_obd_dsp/espnow_link.h"
 #include "bsp_obd_dsp/racechrono_ble_diy.h"
-#include "app_obd_dsp/boot_media_mount.h"
-#include "app_obd_dsp/first_boot_migration.h"
-#include "app_obd_dsp/inbox_import.h"
 #if CONFIG_OBD_HW_VERSION_V1_WAVESHARE
 #include "bsp_obd_dsp/ads1115_oil_pressure.h"
 #endif
-#include "app_obd_dsp/obd_data_cache.h"
+#include "app_obd_dsp/coredump_store.h"
+#include "app_obd_dsp/storage_service.h"
+#include "app_obd_dsp/bootmedia_serial.h"
+#include "app_obd_dsp/lvgl_runtime.h"
 #include "app_obd_dsp/signal_store.h"
-#include "vehicle/vp_profile.h"
-#include "vehicle/vp_loader.h"
-#include "app_obd_dsp/lifecycle_state.h"
-#include "export_path/ui_ext.h"
 #include "app_obd_dsp/app_event.h"
-#include "theme_engine/theme_interface.h"
+#include "app_obd_dsp/perf_stats.h"
+#include "vehicle/vp_manager.h"
+#include "export_path/ui_ext.h"
 
 // ===== Triple-gauge roles =====
 // Normally select master/slave via "Settings page -> swipe down to the MULTI-GAUGE page" (stored in NVS device_role, effective after reboot); one firmware is enough.
@@ -73,6 +70,13 @@ static void mark_app_valid_task(void *arg)
     vTaskDelete(NULL);
 }
 
+/* cJSON trees (vehicle profiles, theme manifests / sidecars, /api/v1 bodies)
+ * go to PSRAM; internal RAM only when PSRAM is exhausted. */
+static void *cjson_malloc(size_t size)
+{
+    return heap_caps_malloc_prefer(size, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_8BIT);
+}
+
 extern void ui_init(void);
 SemaphoreHandle_t lvgl_mux = NULL; // non-static: used by BLE scan page
 
@@ -83,13 +87,10 @@ SemaphoreHandle_t lvgl_mux = NULL; // non-static: used by BLE scan page
 /* Resolution comes directly from the macros in ST77916.h */
 #define LCD_H_RES               EXAMPLE_LCD_WIDTH       // 360
 #define LCD_V_RES               EXAMPLE_LCD_HEIGHT      // 360
-#define LCD_BIT_PER_PIXEL       EXAMPLE_LCD_COLOR_BITS  // 16
 
 /* LVGL parameters */
 #define LVGL_BUFF_SIZE              (LCD_H_RES * 20)
 #define LVGL_TICK_PERIOD_MS         2
-#define LVGL_TASK_MAX_DELAY_MS      500
-#define LVGL_TASK_MIN_DELAY_MS      2
 #define LVGL_TASK_STACK_SIZE        (8 * 1024)
 #define LVGL_TASK_PRIORITY          4   // raised (was 2): less prone to dropping frames from preemption by BLE/OBD (priority 4) during animations
 
@@ -111,8 +112,11 @@ static bool notify_lvgl_flush_ready(esp_lcd_panel_io_handle_t panel_io,
 static void lvgl_flush_cb(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t *color_map)
 {
     esp_lcd_panel_handle_t panel = (esp_lcd_panel_handle_t)drv->user_data;
+    PERF_BEGIN(perf_lcd_start);
     esp_lcd_panel_draw_bitmap(panel, area->x1, area->y1,
                               area->x2 + 1, area->y2 + 1, color_map);
+    PERF_END(PERF_LCD_SUBMIT, perf_lcd_start,
+             (uint32_t)(area->x2 - area->x1 + 1) * (uint32_t)(area->y2 - area->y1 + 1));
 }
 
 /* Coordinate alignment (even boundaries) */
@@ -171,72 +175,36 @@ static void lvgl_unlock(void)
     xSemaphoreGive(lvgl_mux);
 }
 
-static void lvgl_port_task(void *arg)
-{
-    uint32_t task_delay_ms = LVGL_TASK_MAX_DELAY_MS;
-    while (1) {
-        if (lvgl_lock(-1)) {
-            task_delay_ms = lv_timer_handler();
-            lvgl_unlock();
-        }
-        if (task_delay_ms > LVGL_TASK_MAX_DELAY_MS) {
-            task_delay_ms = LVGL_TASK_MAX_DELAY_MS;
-        } else if (task_delay_ms < LVGL_TASK_MIN_DELAY_MS) {
-            task_delay_ms = LVGL_TASK_MIN_DELAY_MS;
-        }
-        vTaskDelay(pdMS_TO_TICKS(task_delay_ms));
-    }
-}
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////// Main function ////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void app_main(void)
 {
+    perf_stats_start();
     static lv_disp_draw_buf_t disp_buf;
     static lv_disp_drv_t disp_drv;
 
-    /* 1. NVS init (must be first) */
-    nvs_app_init();      /* nvs_app partition: survives web-flasher complete reflash */
-    nvs_storage_init();
-    signal_store_init(); /* zero all signal slots before any OBD data arrives */
-    lifecycle_init();    /* initialize lifecycle state machine */
-    vp_loader_init();    /* load active vehicle profile (generic or from nvs_app) */
+    cJSON_Hooks json_hooks = { .malloc_fn = cjson_malloc, .free_fn = heap_caps_free };
+    cJSON_InitHooks(&json_hooks);
 
-    /* 1.2 SD card and config LittleFS partition (best-effort; failures are non-fatal) */
+    /* 1. Persistent state (must be first) */
+    nvs_app_init();             /* nvs_app partition: survives web-flasher complete reflash */
+    ESP_ERROR_CHECK(nvs_storage_init());
+    signal_store_init();        /* zero all signal slots before any OBD data arrives */
+
+    /* 1.1 SD card (no I2C/EXIO needed: D3 has a pull-up), then storage bring-up:
+     *     first-boot layout migration or config mount, theme_0 resume, boot-time
+     *     /OBD/IMPORT (RESET / ACTIVATE / vehicle JSON). Best-effort, never fatal. */
     esp_err_t sd_err = sd_card_init();
-    if (sd_err == ESP_OK) {
-        ESP_LOGI(TAG, "SD card mounted");
-    } else {
+    if (sd_err != ESP_OK) {
         ESP_LOGW(TAG, "SD card not available (%s)", esp_err_to_name(sd_err));
     }
-    esp_err_t cfg_err = config_part_init();
-    if (cfg_err != ESP_OK) {
-        ESP_LOGW(TAG, "config LittleFS mount failed (%s), formatting", esp_err_to_name(cfg_err));
-        config_part_format();
-        config_part_init();
-        if (sd_err == ESP_OK) {
-            config_part_restore_from_sd();
-        }
-    } else if (sd_err == ESP_OK) {
-        /* Mirror config to SD on every healthy boot */
-        config_part_mirror_to_sd();
-    }
+    storage_service_boot();
+    coredump_store_boot_check();    /* after the migration, which erases the coredump */
+    vp_manager_init();              /* active profile; falls back to obd2.generic */
 
-    /* 1.3 First-boot partition-table migration (runs once after web-flasher complete reflash;
-     *     no-op on subsequent boots when mig_ver >= NVS_APP_MIG_VER_DONE) */
-    first_boot_migration_run();
-
-    /* 1.3a SD import scan: process *.vehicle.json and control files in /OBD/IMPORT */
-    if (sd_err == ESP_OK) {
-        sd_import_scan();
-    }
-
-    /* 1.4 Inbox import: copy new theme_0 / bootmedia payloads to SD when CRC differs from ledger */
-    inbox_import_run();
-
-    /* 1.5 Task watchdog: 10s timeout, idle task not subscribed (avoids false triggers when BLE blocks) */
+    /* 1.2 Task watchdog: 10s timeout, idle task not subscribed (avoids false triggers when BLE blocks) */
     esp_task_wdt_config_t wdt_cfg = {
         .timeout_ms = 10000,
         .idle_core_mask = 0,  // do not monitor idle task
@@ -244,15 +212,9 @@ void app_main(void)
     };
     esp_task_wdt_reconfigure(&wdt_cfg);
 
-    /* 1.5 Vehicle profile init (loads the saved vehicle index from NVS) */
-    const nvs_user_cfg_t *user_cfg = nvs_cfg_get();
-    // vehicle_profile_set_active(user_cfg->vehicle_profile_idx);  // TODO: Implement profile switching from NVS
-    (void)user_cfg;  // Suppress unused warning until profile switching is implemented
-    const nvs_stat_t *stat = nvs_stat_get();
-    ESP_LOGI("NVS", "cfg: proto=%u theme=%u profile=%u(%s) odo=%" PRIu64 " trip=%" PRIu64 " max=%d avg=%d run=%" PRIu64,
-             user_cfg->protocol, user_cfg->theme_cfg.theme,
-             user_cfg->vehicle_profile_idx, vp_loader_get_active()->name,
-             stat->odometer_m, stat->trip_m, stat->max_speed_kmh, stat->avg_speed_kmh, stat->run_time_s);
+    nvs_user_cfg_t user_cfg = nvs_cfg_read();
+    ESP_LOGI(TAG, "cfg: proto=%u theme=%u vehicle=%s",
+             user_cfg.protocol, user_cfg.theme_cfg.theme, vp_manager_active_id());
 
     /* 2. I2C bus init (used by the TCA9554 IO expander + CST816 touch on V1, CST816 touch only on V2/V3) */
     I2C_Init();
@@ -322,14 +284,16 @@ void app_main(void)
     /* 6. Start LVGL task */
     lvgl_mux = xSemaphoreCreateMutex();
     assert(lvgl_mux);
-    static TaskHandle_t s_lvgl_task_handle = NULL;
-    xTaskCreate(lvgl_port_task, "LVGL", LVGL_TASK_STACK_SIZE, NULL, LVGL_TASK_PRIORITY, &s_lvgl_task_handle);
+    xTaskCreate(lvgl_runtime_task, "LVGL", LVGL_TASK_STACK_SIZE, lvgl_mux, LVGL_TASK_PRIORITY, NULL);
 
-    /* 6.5 Initialize Bluetooth stack BEFORE UI to claim internal RAM early */
-    elm327_ble_ensure_stack_init();
+    /* 6.5 Bring up the BLE stack BEFORE the UI to claim internal RAM early. Every
+     *     BLE user (ELM327, RaceChrono, gauge pairing) registers through ble_hub. */
+    esp_err_t ble_err = ble_hub_init();
+    if (ble_err != ESP_OK) {
+        ESP_LOGE(TAG, "BLE stack init failed (%s)", esp_err_to_name(ble_err));
+    }
 
     /* 7. Start UI - Logo displayed first, then theme loading */
-    // Step 1: Show logo immediately (before theme loading)
     ESP_LOGI(TAG, "Creating and displaying logo page");
     if (lvgl_lock(-1)) {
         lv_disp_t * dispp = lv_disp_get_default();
@@ -340,45 +304,43 @@ void app_main(void)
         extern lv_obj_t * ui_ScreenPageLogo;
         ui_ScreenPageLogo_screen_init();
         lv_disp_load_scr(ui_ScreenPageLogo);
-        lvgl_unlock();  // Release lock so logo can be rendered immediately
-    }
-    ESP_LOGI(TAG, "Logo page displayed, yielding to LVGL task");
-
-    // Force LVGL to flush the logo to screen immediately
-    // Give LVGL task multiple chances to complete rendering
-    for (int i = 0; i < 3; i++) {
-        vTaskDelay(1);  // Each delay allows one LVGL task iteration
+        // Submit the logo now and wait for its final DMA transfer, before any
+        // SD/theme work. A few scheduler ticks never guaranteed a first paint.
+        lv_refr_now(dispp);
+        while (disp_buf.flushing) vTaskDelay(1);
+#if EXAMPLE_PIN_NUM_BK_LIGHT >= 0
+        uint8_t bright = user_cfg.brightness_day;
+        if (bright < 10) bright = 100;
+        Set_Backlight(bright);
+#endif
+        lvgl_unlock();
     }
 
     ESP_LOGI(TAG, "Starting theme load");
-    // Step 2: Load theme and create other UI elements (logo already visible)
     if (lvgl_lock(-1)) {
-        ui_init();  // Now loads theme with logo already displayed
-        ui_ext_init();
+        ui_init();
+        ui_ext_init();          /* SD-only boot video starts from ui_ext_boot_video_tick */
         lvgl_unlock();
     }
     app_event_init();
 
-    /* 7.5 Mount bootmedia SPIFFS and start animation BEFORE role-specific init (prevents Master black screen delay) */
-    boot_media_mount();
-    boot_media_recover_previous_if_needed();
-
     /* 8. Branch by role: master (connects to ELM327 for readings + ESP-NOW broadcast) / slave (only receives and displays the master's data) */
-    uint8_t dev_role = user_cfg->device_role;
+    uint8_t dev_role = user_cfg.device_role;
 
     if (dev_role == ESPNOW_ROLE_SLAVE) {
         /* ---- Slave: does not connect to ELM327, only starts ESP-NOW receive; UI displays the data broadcast by the master ----
            Screen navigation (not bound to a master → BLE pairing page; bound → normal boot flow) is handled
-           centrally by boot_enter_default_page() in ui.c; nothing to do here. */
+           centrally by boot_enter_default_page() in ui_ext.c; nothing to do here. */
         ESP_LOGI(TAG, "Device role: SLAVE (ESP-NOW receiver, no BLE/OBD)");
         espnow_link_start_slave();
         {
-            const uint8_t *bm = espnow_link_get_bound_master_mac();
+            uint8_t bm[6];
+            espnow_link_get_bound_master_mac(bm);
             ESP_LOGD(TAG, "Bound master MAC at boot: %02x:%02x:%02x:%02x:%02x:%02x (0=unbound)",
                      bm[0], bm[1], bm[2], bm[3], bm[4], bm[5]);
         }
         /* Slave: start BLE GATTS for pairing immediately after ESP-NOW receive setup */
-        racechrono_ble_diy_start(user_cfg->rc_enabled);
+        racechrono_ble_diy_start(user_cfg.rc_enabled);
     } else {
         /* ---- Master / standalone: both run the full BLE OBD chain; the only difference is whether ESP-NOW (=WiFi) starts ----
            STANDALONE: does not start WiFi/ESP-NOW; existing devices (already set to master/slave) are unaffected. */
@@ -390,18 +352,18 @@ void app_main(void)
         /* 8.1 Start BLE OBD - auto-connect only when a MAC is already bound in NVS (exact MAC match only, no fuzzy name matching);
                legacy configs with a name but no MAC no longer auto-connect; the user must re-select on the scan page to bind the MAC.
                MASTER starts the Bluetooth stack even without a configured OBD device, so it can broadcast the SkyGauge pairing signal. */
-        bool has_obd_mac = (user_cfg->ble_obd_mac[0] | user_cfg->ble_obd_mac[1] |
-                            user_cfg->ble_obd_mac[2] | user_cfg->ble_obd_mac[3] |
-                            user_cfg->ble_obd_mac[4] | user_cfg->ble_obd_mac[5]) != 0;
+        bool has_obd_mac = (user_cfg.ble_obd_mac[0] | user_cfg.ble_obd_mac[1] |
+                            user_cfg.ble_obd_mac[2] | user_cfg.ble_obd_mac[3] |
+                            user_cfg.ble_obd_mac[4] | user_cfg.ble_obd_mac[5]) != 0;
         if (has_obd_mac) {
             ESP_LOGD(TAG, "BLE target device: %s (mac=%02x:%02x:%02x:%02x:%02x:%02x, MAC-only match)",
-                     user_cfg->ble_device_name,
-                     user_cfg->ble_obd_mac[0], user_cfg->ble_obd_mac[1], user_cfg->ble_obd_mac[2],
-                     user_cfg->ble_obd_mac[3], user_cfg->ble_obd_mac[4], user_cfg->ble_obd_mac[5]);
-            elm327_ble_start_default(user_cfg->ble_device_name, user_cfg->ble_obd_mac);
-        } else if (user_cfg->ble_device_name[0] != '\0') {
+                     user_cfg.ble_device_name,
+                     user_cfg.ble_obd_mac[0], user_cfg.ble_obd_mac[1], user_cfg.ble_obd_mac[2],
+                     user_cfg.ble_obd_mac[3], user_cfg.ble_obd_mac[4], user_cfg.ble_obd_mac[5]);
+            elm327_ble_start_default(user_cfg.ble_device_name, user_cfg.ble_obd_mac);
+        } else if (user_cfg.ble_device_name[0] != '\0') {
             ESP_LOGD(TAG, "Saved device '%s' has no bound MAC, auto-connect disabled; re-select it on BLE SCAN page to bind MAC",
-                     user_cfg->ble_device_name);
+                     user_cfg.ble_device_name);
             elm327_ble_ensure_stack_init();   // the stack must still be started for RaceChrono/the scan page
         } else if (espnow_on) {
             ESP_LOGD(TAG, "No saved BLE device, but MASTER needs BLE stack for SkyGauge pairing broadcast");
@@ -410,28 +372,32 @@ void app_main(void)
             ESP_LOGD(TAG, "No saved BLE device, waiting for user selection");
         }
 
-        /* 9.5 Start oil pressure acquisition (external ADS1115 ADC — V1 board only).
-           Skip the external ADS1115 ADC for profiles that read oil pressure over OBD
-           (e.g. Supra A90 — DID 4436, BMW E — DID 586F), to avoid the ADC overwriting OBD data.
-           V2/V3 boards have no ADS1115. */
+        /* 8.2 External ADS1115 oil pressure (V1 board only). Skipped when the active
+               profile reads oil pressure over OBD, so the ADC never overwrites OBD data.
+               The slot is marked local: valid without an OBD link, kept on link loss. */
 #if CONFIG_OBD_HW_VERSION_V1_WAVESHARE
-        {
-            const vp_profile_t *vp = vp_loader_get_active();
-            if (!(vp && vp->obd_oil_pressure_did != 0)) {
-                oil_pressure_start();
-            }
+        if (!vp_manager_has_signal(SIG_OBD_OIL_PRESSURE)) {
+            signal_store_set_local(SIG_OBD_OIL_PRESSURE, true);
+            oil_pressure_start();
         }
 #endif
 
-        /* 9.8 Start ESP-NOW broadcast (sends this unit's OBD data cache to the slave) -- MASTER only;
+        /* 8.3 Start ESP-NOW broadcast (sends this unit's OBD data cache to the slave) -- MASTER only;
                STANDALONE skips it; WiFi is never initialized (saves RF/power and does not interfere with BLE). */
         if (espnow_on) {
             espnow_link_start_master();
         }
 
-        /* 9.9 Start RaceChrono BLE GATTS immediately after ESP-NOW (Master/Standalone) to claim memory before theme loads */
-        racechrono_ble_diy_start(user_cfg->rc_enabled);
+        /* 8.4 Start RaceChrono BLE GATTS immediately after ESP-NOW (Master/Standalone) to claim memory before theme loads */
+        racechrono_ble_diy_start(user_cfg.rc_enabled);
+    }
 
+    /* SD insert/remove polling + background card jobs (inbox, config mirror, IMPORT scan) */
+    if (storage_service_start() != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to start storage service");
+    }
+    if (bootmedia_serial_start() != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to start USB boot-media receiver");
     }
 
     BaseType_t valid_task_started = xTaskCreate(mark_app_valid_task, "ota_valid", 4096, NULL, tskIDLE_PRIORITY + 1, NULL);

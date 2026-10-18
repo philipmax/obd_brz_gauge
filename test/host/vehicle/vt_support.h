@@ -7,27 +7,11 @@
 #include "vp_profile.h"
 
 /*
- * Fallback signal registry (obd.* keys and numeric ids from the event-system
- * spec). Tools prefer contracts/signals.json via vt_registry_load().
+ * Compiled-blob size limit of the NVS import slot. Mirrors
+ * NVS_APP_VEH_BLOB_MAX in main/bsp_obd_dsp/nvs_app.h (that header pulls in
+ * esp_err.h, so it is not included on the host); keep the two equal.
  */
-extern const vp_sig_def_t vt_default_registry[];
-extern const size_t vt_default_registry_count;
-
-typedef struct {
-    vp_sig_def_t *defs;
-    size_t        n;
-    char         *strings;   /* backing store for keys */
-} vt_registry_t;
-
-/*
- * Load obd.* keys from a signals.json: either an array of entries or an
- * object holding such an array under "signals". An entry is a string key
- * or an object with "key" (or an "id" that starts with "obd.") and an
- * optional numeric id in "num_id" or "id" (number or "0x..." string).
- * Returns 0 on success, -1 on error (message printed).
- */
-int vt_registry_load(const char *path, vt_registry_t *reg);
-void vt_registry_free(vt_registry_t *reg);
+#define VT_VEH_BLOB_MAX (8u * 1024u)
 
 /* Read a whole file (malloc'd, NUL-terminated). Returns NULL on error. */
 char *vt_read_file(const char *path, size_t *len);

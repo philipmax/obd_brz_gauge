@@ -12,10 +12,10 @@ themes/
 ├── registry.txt        # slot -> id registry, append only (slot 0 must be default)
 ├── _TEMPLATE/          # copy this to start a new theme
 ├── builtin/            # shipped with the firmware: default / amber / ocean
-├── community/          # community themes go here
-└── example_boost_oil/  # runtime-theme example (theme_manifest.json + layout.json;
-                        #   packed with theme_packer, not part of compiled-theme codegen)
+└── community/          # community themes go here
 ```
+
+Runtime themes (theme_0 / the SD theme library) are `theme.bin` files exported by the editor; they don't live here.
 
 Fastest start:
 

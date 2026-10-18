@@ -1,9 +1,10 @@
-# build/ is ignored except the 4 artifacts the obd_theme_store firmware-watcher
+# build/ is ignored except the 5 artifacts the obd_theme_store firmware-watcher
 # reads from origin/main for the web "complete" flash bundle
-# (backend/src/services/firmwareWatcher.ts findFirmwareFiles).
+# (backend/src/services/firmwareWatcher.ts findFirmwareFiles; bootmedia optional).
 /build/*
 !/build/obd_brz_gauge.bin
 !/build/ota_data_initial.bin
+!/build/bootmedia.bin
 !/build/bootloader/
 /build/bootloader/*
 !/build/bootloader/bootloader.bin

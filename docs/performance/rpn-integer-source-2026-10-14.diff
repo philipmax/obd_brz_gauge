@@ -1,0 +1,30 @@
+--- a/main/vehicle/vp_rpn.c
++++ b/main/vehicle/vp_rpn.c
+@@ -199,21 +199,21 @@
+ /* Integer-op operand: truncate toward zero, range [-2^31, 2^32-1], 32-bit pattern. */
+ static bool to_u32(float f, uint32_t *out)
+ {
+-    double d = (double)f;
+-    if (!isfinite(d) || d <= -2147483649.0 || d >= 4294967296.0) {
++    /* Binary32 has no value between -2^31 and -2^31-1. Keep the exact
++     * accepted set, then truncate inside the signed/unsigned 32-bit ranges. */
++    if (!isfinite(f) || f < -2147483648.0f || f >= 4294967296.0f) {
+         return false;
+     }
+-    *out = (uint32_t)(int64_t)d;
++    *out = f < 0.0f ? (uint32_t)(int32_t)f : (uint32_t)f;
+     return true;
+ }
+ 
+ static bool to_shift(float f, uint32_t *out)
+ {
+-    double d = (double)f;
+-    if (!isfinite(d) || d <= -1.0 || d >= 32.0) {
++    if (!isfinite(f) || f <= -1.0f || f >= 32.0f) {
+         return false;
+     }
+-    *out = (uint32_t)d;
++    *out = (uint32_t)f;
+     return true;
+ }
+ 

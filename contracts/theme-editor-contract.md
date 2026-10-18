@@ -19,10 +19,10 @@
 [0, 16384)          manifest：UTF-8 JSON（JSON.stringify(…, null, 2)），长度 < 16384，其后为 0xFF 填充，没有 NUL
 [16384, …)          images（project.assets 数组顺序，全部打包，不论是否被引用）
                     → fonts（≤ 16 个）→ 每页 layout（紧凑 JSON，每页 ≤ 65536 B，没有 NUL）
-[usedBytes, 4 MB)   不保证内容
+[usedBytes, EOF)    不属于主题包
 ```
 
-- 只有 `[0, usedBytes)` 有效：下载、上架、App 上传都只发 `usedBytes`；网页刷机器只擦写自己写入的扇区，之后可能残留旧字节（推断）。固件**不得假设 4 MB，也不得扫描找结尾**，一切以 manifest 里的偏移为准。【证据】`lib/themePacker.ts:263, 353-370`；`GaugeEditorFabric.tsx:461-468`；`CreateThemePage.tsx:77-79`
+- 只有 `[0, usedBytes)` 有效，且编辑器输出长度就是 `usedBytes`；主题在设备上存于 SD，不再受旧 4 MB Flash 分区限制。实际上传受 SD 可用空间与 32 位包偏移限制。固件**不得假设固定包长，也不得扫描找结尾**，一切以 manifest 里的偏移为准。
 - manifest 必须按长度解析：`cJSON_ParseWithLength`，或读 16384+1 字节后补 NUL。现行 `theme_loader.c:661-668` 把未 NUL 结尾的缓冲交给 `cJSON_Parse`（内部 `strlen`）会越界读。【证据】`~/.espressif/v5.5.3/esp-idf/components/json/cJSON/cJSON.c:1136`
 - **首字节为 0xFF** 表示空槽（网页「清除主题」只写 4 KB 0xFF 到 0x620000）：直接使用内建默认主题，不报错。【证据】`DeviceFlasherPage.tsx:667-677`
 - 偏移都是相对 blob 起点的绝对偏移。【证据】`themePacker.ts:266-351`
@@ -271,7 +271,7 @@ static bool rule_active(const rrule_t *r, ...)
 - **priority**：active 规则按 `priority ?? 0` 升序**稳定**排序（并列按数组下标），然后依次合并，后者覆盖前者；每帧从 base 重新计算。
 - **timer**：`interval = max(100, intervalMs ?? 1000)`，`elapsed > 0 && elapsed % interval < 120`（`interval <= 120` 时恒真，向量 E14）。timer/change 规则忽略 conditions，但仍受 `enabled` 约束。
 - **change**：源 = `trigger.source ?? when.source ?? "obd.rpm"`。
-- **合并**（`ruleEngine.ts:138-158`）：`color` 打在 image/pointer 上记为 `tintColor`；打在 arc/bar 上同时设 `color` 和 `bgColor`；其他（含 label、未知 target）只设 `color`。`text`/`visible`/`asset` 直接覆盖。同一规则内后一个动作覆盖前一个（向量 E25）。
+- **合并**（`ruleEngine.ts:138-158`）：`color` 打在 image/pointer 上记为 `tintColor`；打在 arc/bar 上只设进度/填充 `color`，底轨保留元素的 `bgColor`（即时变色和颜色动画相同）；其他（含 label、未知 target）只设 `color`。`text`/`visible`/`asset` 直接覆盖。同一规则内后一个动作覆盖前一个（向量 E25）。
 
 ### C3 覆盖结果 → LVGL
 
@@ -279,7 +279,7 @@ static bool rule_active(const rrule_t *r, ...)
 
 | set | arc | bar | label | image / pointer |
 |-----|-----|-----|-------|-----------------|
-| color | MAIN 和 INDICATOR 的 `arc_color` 都设为 c | bg、fg 两个矩形都设为 c | `text_color` | `img_recolor = c`，`recolor_opa = 191`（预览 tint 为 `0.75*tint + 0.25*src`，alpha 不变，`fabric dist/index.mjs:20627-20688`、`FabricCanvas.tsx:1254-1264`） |
+| color | 只将 INDICATOR 的 `arc_color` 设为 c，MAIN 保留 base | 只将 fg 矩形设为 c，bg 保留 base | `text_color` | `img_recolor = c`，`recolor_opa = 191`（预览 tint 为 `0.75*tint + 0.25*src`，alpha 不变，`fabric dist/index.mjs:20627-20688`、`FabricCanvas.tsx:1254-1264`） |
 | text | 忽略 | 忽略 | 只对静态 label（无 `data_source`）生效，改完重新对齐；绑定数据的 label 忽略（预览优先显示数据） | 忽略 |
 | visible | 最终合并值 `=== false` 时加 `LV_OBJ_FLAG_HIDDEN` | 同左 | 同左 | 同左 |
 | asset | 忽略 | 忽略 | 忽略 | 换 src；pointer 的新图在建页时就预缩放好 |

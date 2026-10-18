@@ -1,0 +1,5 @@
+case,signals,sources,requests,queries,iterations,linear_ns,indexed_ns,ratio,checksum
+catalog_like,12,24,12,256,1000000,13.35,3.39,3.940,4312550
+mixed_max,48,96,32,256,1000000,39.31,3.79,10.365,29500247
+sparse_max,48,48,32,256,1000000,36.27,2.10,17.232,4250017
+can_heavy,48,96,32,256,1000000,38.35,2.68,14.299,6875001

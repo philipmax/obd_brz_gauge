@@ -1,5 +1,6 @@
 #include "vp_validate.h"
 #include "vp_internal.h"
+#include "app_obd_dsp/signal_registry.h"
 
 #include <math.h>
 #include <stdarg.h>
@@ -276,6 +277,20 @@ static const char *at_refusal(const char *a)
     return "command not whitelisted";
 }
 
+/* Fixed commands the firmware sends itself (link setup, vehicle check,
+ * monitor window); never accepted from a profile. */
+static bool engine_fixed(const char *a)
+{
+    static const char *const k_fixed[] = {
+        "Z", "E0", "L0", "S1", "H0", "H1", "AT1", "I", "RV", "MA", "AR", NULL
+    };
+    size_t i;
+    for (i = 0; k_fixed[i]; i++) {
+        if (!strcmp(a, k_fixed[i])) return true;
+    }
+    return false;
+}
+
 bool vp_at_check(const char *cmd, vp_at_ctx_t ctx, char *norm, size_t norm_cap,
                  const char **why)
 {
@@ -344,6 +359,8 @@ bool vp_at_check(const char *cmd, vp_at_ctx_t ctx, char *norm, size_t norm_cap,
             ok = p[1] == '\0' && ((p[0] >= '0' && p[0] <= '9') || (p[0] >= 'A' && p[0] <= 'C'));
         }
         if (!ok) reason = "protocol not 0-9/A-C";
+    } else if (ctx == VP_AT_CTX_ENGINE && engine_fixed(a)) {
+        ok = true;
     } else {
         reason = at_refusal(a);
     }
@@ -891,21 +908,21 @@ static void check_source(vctx_t *c, const cJSON *src, const char *base)
 
 static const char *const k_sig_keys[] = {
     "id", "name", "unit", "rate", "div", "period_ms", "valid", "post", "filter",
-    "derive", "fallback", "src", "notes", NULL
+    "derive", "fallback", "src", "disabled", "notes", NULL
 };
 static const char *const k_post_keys[] = { "zero_le", "zero_if_rpm_lt", "clamp", NULL };
 static const char *const k_rates[] = { "round", "every", "slow", "on_demand", NULL };
 static const char *const k_filters[] = { "none", "temp_hyst", "ema", NULL };
 static const char *const k_derive[] = { "none", "ratio", NULL };
 
-static bool registry_has(const vp_validate_cfg_t *cfg, const char *key)
+static int registry_find(const vp_validate_cfg_t *cfg, const char *key)
 {
     size_t i;
-    if (!cfg || !cfg->registry) return false;
+    if (!cfg || !cfg->registry) return -1;
     for (i = 0; i < cfg->n_registry; i++) {
-        if (cfg->registry[i].key && !strcmp(cfg->registry[i].key, key)) return true;
+        if (cfg->registry[i].key && !strcmp(cfg->registry[i].key, key)) return (int)i;
     }
-    return false;
+    return -1;
 }
 
 static bool veh_id_ok(const char *id)
@@ -929,6 +946,7 @@ static void check_signal(vctx_t *c, const cJSON *sig, int idx, const cJSON *sign
     long period = 0;
     const cJSON *src;
     bool is_gear = false;
+    int reg = -1;
 
     snprintf(base, sizeof(base), "signals[%d]", idx);
     if (!cJSON_IsObject(sig)) {
@@ -945,7 +963,7 @@ static void check_signal(vctx_t *c, const cJSON *sig, int idx, const cJSON *sign
         if (!strncmp(id, "obd.", 4)) {
             if (!vp_id_ok(id)) {
                 verr(c, "E_NAME", p, "malformed signal id");
-            } else if (!registry_has(c->cfg, id)) {
+            } else if ((reg = registry_find(c->cfg, id)) < 0) {
                 verr(c, "E_SIGNAL", p, "\"%.31s\" not in signal registry", id);
             }
             is_gear = !strcmp(id, "obd.gear");
@@ -970,11 +988,30 @@ static void check_signal(vctx_t *c, const cJSON *sig, int idx, const cJSON *sign
         }
     }
 
+    {
+        bool disabled = false;
+        if (f_bool(c, sig, "disabled", base, &disabled) == F_OK && disabled) {
+            const cJSON *field;
+            cJSON_ArrayForEach(field, sig) {
+                if (field->string && strcmp(field->string, "id") &&
+                    strcmp(field->string, "disabled") && strcmp(field->string, "notes")) {
+                    verr(c, "E_SCHEMA", pj(p, sizeof(p), base, field->string),
+                         "disabled signal only allows id, disabled and notes");
+                }
+            }
+            return;
+        }
+    }
+
     if (f_str(c, sig, "name", base, &s) == F_OK && !vp_ascii_ok(s, VP_NAME_MAX_LEN)) {
         verr(c, "E_NAME", pj(p, sizeof(p), base, "name"), "printable ASCII, 1..%d chars", VP_NAME_MAX_LEN);
     }
-    if (f_str(c, sig, "unit", base, &s) == F_OK && !vp_ascii_ok(s, VP_UNIT_MAX_LEN)) {
-        verr(c, "E_SCHEMA", pj(p, sizeof(p), base, "unit"), "printable ASCII, 1..%d chars", VP_UNIT_MAX_LEN);
+    if (f_str(c, sig, "unit", base, &s) == F_OK) {
+        if (!vp_ascii_ok(s, VP_UNIT_MAX_LEN)) {
+            verr(c, "E_SCHEMA", pj(p, sizeof(p), base, "unit"), "printable ASCII, 1..%d chars", VP_UNIT_MAX_LEN);
+        } else if (reg >= 0 && c->cfg->unit_ok && !c->cfg->unit_ok((size_t)reg, s)) {
+            verr(c, "E_SCHEMA", pj(p, sizeof(p), base, "unit"), "\"%.7s\" is not a unit of %.31s", s, id);
+        }
     }
 
     rate = f_enum(c, sig, "rate", base, k_rates, 0);
@@ -1063,10 +1100,7 @@ static void check_bus(vctx_t *c, const cJSON *bus)
     const cJSON *init;
     char p[48];
 
-    if (!bus) {
-        verr(c, "E_SCHEMA", "bus", "required");
-        return;
-    }
+    if (!bus) return;
     if (!cJSON_IsObject(bus)) {
         verr(c, "E_SCHEMA", "bus", "must be an object");
         return;
@@ -1287,11 +1321,11 @@ size_t vp_int_count_requests(const cJSON *signals, uint32_t bus_hdr)
     return distinct;
 }
 
-size_t vp_validate(const cJSON *root, const vp_validate_cfg_t *cfg, vp_issues_t *out)
+size_t vp_int_validate_resolved(const cJSON *root, const vp_validate_cfg_t *cfg, vp_issues_t *out)
 {
     static const char *const root_keys[] = {
         "schema", "id", "rev", "name", "origin", "meta", "aliases", "force", "notes",
-        "requires", "bus", "drivetrain", "monitor", "luts", "signals", NULL
+        "requires", "bus", "drivetrain", "monitor", "luts", "signals", "defaults", NULL
     };
     vctx_t c;
     const char *s = NULL;
@@ -1328,6 +1362,10 @@ size_t vp_validate(const cJSON *root, const vp_validate_cfg_t *cfg, vp_issues_t 
     }
     f_bool(&c, root, "force", "", NULL);
 
+    {
+        static const char *const policies[] = { "obd2", "none", NULL };
+        f_enum(&c, root, "defaults", "", policies, 0);
+    }
     check_requires(&c, jget(root, "requires"));
     check_bus(&c, jget(root, "bus"));
     c.bus_hdr = vp_int_bus_hdr(root, NULL);
@@ -1349,6 +1387,7 @@ size_t vp_validate(const cJSON *root, const vp_validate_cfg_t *cfg, vp_issues_t 
         int i = 0;
         cJSON_ArrayForEach(sig, signals) {
             const char *id = jstr(sig, "id");
+            if (cJSON_IsTrue(jget(sig, "disabled"))) continue;
             if (id && !strcmp(id, "obd.rpm") && (jget(sig, "src") || jget(sig, "derive"))) c.has_rpm = true;
             if (id && !strcmp(id, "obd.speed") && (jget(sig, "src") || jget(sig, "derive"))) c.has_speed = true;
         }
@@ -1389,6 +1428,17 @@ size_t vp_validate(const cJSON *root, const vp_validate_cfg_t *cfg, vp_issues_t 
     return c.errors;
 }
 
+size_t vp_validate(const cJSON *root, const vp_validate_cfg_t *cfg, vp_issues_t *out)
+{
+    cJSON *owned = NULL;
+    const cJSON *resolved = vp_int_resolve_defaults(root, &owned, out);
+    size_t errors;
+    if (!resolved && root) return 1;
+    errors = vp_int_validate_resolved(resolved, cfg, out);
+    cJSON_Delete(owned);
+    return errors;
+}
+
 size_t vp_validate_json(const char *text, size_t len, const vp_validate_cfg_t *cfg, vp_issues_t *out)
 {
     size_t max = (cfg && cfg->max_json_bytes) ? cfg->max_json_bytes : VP_MAX_JSON_BYTES;
@@ -1411,4 +1461,46 @@ size_t vp_validate_json(const char *text, size_t len, const vp_validate_cfg_t *c
     n = vp_validate(root, cfg, out);
     cJSON_Delete(root);
     return n;
+}
+
+/* ------------------------------------------------------------------ */
+/* firmware configuration from the generated signal registry           */
+/* ------------------------------------------------------------------ */
+
+static vp_sig_def_t s_default_reg[SIG_OBD_COUNT];
+static vp_validate_cfg_t s_default_cfg;
+
+static bool default_unit_ok(size_t reg_index, const char *unit)
+{
+    const sig_def_t *d;
+    size_t i;
+    if (reg_index >= SIG_OBD_COUNT || !unit) return false;
+    d = &sig_registry[SIG_OBD_FIRST + reg_index];
+    for (i = 0; i < d->n_units; i++) {
+        if (d->units[i].unit && !strcmp(d->units[i].unit, unit)) return true;
+    }
+    return false;
+}
+
+const vp_validate_cfg_t *vp_validate_default_cfg(void)
+{
+    size_t i;
+    if (s_default_cfg.registry) return &s_default_cfg;
+    for (i = 0; i < SIG_OBD_COUNT; i++) {
+        const sig_def_t *d = &sig_registry[SIG_OBD_FIRST + i];
+        vp_sig_def_t *o = &s_default_reg[i];
+        o->key = d->key;
+        o->num_id = d->num_id;
+        o->editor_index = d->editor_index;
+        o->n_units = d->n_units;
+        o->scale = d->scale;
+        o->min = d->min;
+        o->max = d->max;
+        o->unit_default = (d->n_units && d->units) ? d->units[0].unit : NULL;
+    }
+    s_default_cfg.n_registry = SIG_OBD_COUNT;
+    s_default_cfg.max_json_bytes = VP_MAX_JSON_BYTES;
+    s_default_cfg.unit_ok = default_unit_ok;
+    s_default_cfg.registry = s_default_reg;
+    return &s_default_cfg;
 }

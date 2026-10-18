@@ -1,0 +1,92 @@
+{
+  "id": "honda.integra",
+  "legacy": {
+    "rev": "4b056c0",
+    "idx": 16,
+    "name": "Honda Integra"
+  },
+  "init": ["ATZ", "ATE0", "ATL0", "ATS1", "ATH0", "ATAT1", "ATST19", "ATSP7", "ATSH18DB33F1"],
+  "gap_ms": 30,
+  "requests": [
+    {
+      "sig": "obd.rpm",
+      "src": 0,
+      "hdr": "18DB33F1",
+      "tx": "010C",
+      "class": "fast"
+    },
+    {
+      "sig": "obd.intake_temp",
+      "src": 0,
+      "hdr": "18DB33F1",
+      "tx": "010F",
+      "class": "round"
+    },
+    {
+      "sig": "obd.speed",
+      "src": 0,
+      "hdr": "18DB33F1",
+      "tx": "010D",
+      "class": "round"
+    },
+    {
+      "sig": "obd.coolant_temp",
+      "src": 0,
+      "hdr": "18DB33F1",
+      "tx": "0105",
+      "class": "round"
+    },
+    {
+      "sig": "obd.load",
+      "src": 0,
+      "hdr": "18DB33F1",
+      "tx": "0104",
+      "class": "round"
+    },
+    {
+      "sig": "obd.throttle",
+      "src": 0,
+      "hdr": "18DB33F1",
+      "tx": "0111",
+      "class": "round"
+    },
+    {
+      "sig": "obd.oil_temp",
+      "src": 0,
+      "hdr": "18DB33F1",
+      "tx": "015C",
+      "class": "round"
+    },
+    {
+      "sig": "obd.battery_voltage",
+      "src": 0,
+      "hdr": "18DB33F1",
+      "tx": "0142",
+      "class": "round"
+    },
+    {
+      "sig": "obd.boost",
+      "src": 0,
+      "hdr": "18DB33F1",
+      "tx": "010B",
+      "class": "round"
+    },
+    {
+      "sig": "obd.afr",
+      "src": 0,
+      "hdr": "18DB33F1",
+      "tx": "0144",
+      "class": "round"
+    }
+  ],
+  "requires": [],
+  "monitor": null,
+  "can": [],
+  "drivetrain": {
+    "fd": 4.438,
+    "tire_m": 0.325,
+    "gears": [],
+    "tol": 0
+  },
+  "notes": ["obd.boost: legacy truncated (MAP-100)/10 to 0.1 bar; v1 stores 0.01 bar."]
+}

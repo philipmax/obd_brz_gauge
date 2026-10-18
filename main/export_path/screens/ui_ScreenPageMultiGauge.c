@@ -1,7 +1,7 @@
 // Multi-Gauge (triple-gauge) Settings Page  (entered by swiping down from the settings page)
 //  - MODE: MASTER (connects to ELM327 + broadcasts) / SLAVE (receives the master's data) / STANDALONE (standalone, WiFi not started) → NVS device_role
 //  - POSITION: this unit's position 1/2/3 (RACE/AS/ONE) in the boot animation     → NVS device_position
-//  - INTRO: boot animation: OFF / RACE (LVGL intro) / VIDEO (app-flashed boot_block)  → NVS intro_enable
+//  - INTRO: boot animation: OFF / RACE (LVGL intro) / VIDEO (SD boot media only) → NVS intro_enable
 //  Changes take effect after reboot (next ignition). Swipe up/left/right to return to the settings page.
 
 #include "../ui.h"
@@ -10,7 +10,7 @@
 
 static const char *mode_names = "MASTER\nSLAVE\nALONE";   // index=device_role: 0=MASTER,1=SLAVE,2=STANDALONE
 static const char *pos_names  = "1\n2\n3";          // index 0/1/2 → position 1/2/3
-static const char *intro_names = "OFF\nRACE\nVIDEO";  // 0=OFF, 1=RACE, 2=VIDEO (boot_block flashed via the phone app)
+static const char *intro_names = "OFF\nRACE\nVIDEO";  // 0=OFF, 1=RACE, 2=VIDEO (SD /OBD/BOOT files only)
 
 static lv_obj_t *s_roller_mode = NULL;
 static lv_obj_t *s_roller_pos  = NULL;
@@ -28,9 +28,11 @@ static void mg_update_visibility(uint8_t role)
 
 static void on_mode_roller_change(lv_event_t *e)
 {
-    nvs_user_cfg_t cfg = *nvs_cfg_get();
+    nvs_user_cfg_t base;
+    nvs_cfg_snapshot(&base);
+    nvs_user_cfg_t cfg = base;
     cfg.device_role = (uint8_t)lv_roller_get_selected(s_roller_mode);
-    nvs_cfg_set(&cfg);
+    nvs_cfg_update(&base, &cfg);
     mg_update_visibility(cfg.device_role);
 }
 static void on_pos_roller_change(lv_event_t *e)
@@ -63,7 +65,7 @@ static void make_mg_label(lv_obj_t *parent, const char *txt, int y)
 
 void ui_ScreenPageMultiGauge_screen_init(void)
 {
-    const nvs_user_cfg_t *cfg = nvs_cfg_get();
+    nvs_user_cfg_t cfg = nvs_cfg_read();
 
     ui_ScreenPageMultiGauge = lv_obj_create(NULL);
     lv_obj_clear_flag(ui_ScreenPageMultiGauge, LV_OBJ_FLAG_SCROLLABLE);
@@ -96,7 +98,7 @@ void ui_ScreenPageMultiGauge_screen_init(void)
     lv_obj_set_style_clip_corner(s_roller_mode, true, 0);
     style_mg_roller(s_roller_mode);
     lv_roller_set_options(s_roller_mode, mode_names, LV_ROLLER_MODE_NORMAL);
-    lv_roller_set_selected(s_roller_mode, (cfg->device_role <= 2) ? cfg->device_role : ESPNOW_ROLE_STANDALONE, LV_ANIM_OFF);
+    lv_roller_set_selected(s_roller_mode, (cfg.device_role <= 2) ? cfg.device_role : ESPNOW_ROLE_STANDALONE, LV_ANIM_OFF);
     lv_obj_align(s_roller_mode, LV_ALIGN_CENTER, 0, -38);
     lv_obj_add_event_cb(s_roller_mode, on_mode_roller_change, LV_EVENT_VALUE_CHANGED, NULL);
 
@@ -137,7 +139,7 @@ void ui_ScreenPageMultiGauge_screen_init(void)
     lv_obj_add_event_cb(s_roller_intro, on_intro_roller_change, LV_EVENT_VALUE_CHANGED, NULL);
 
     // Hide irrelevant rows based on role
-    mg_update_visibility(cfg->device_role);
+    mg_update_visibility(cfg.device_role);
 
     lv_obj_move_foreground(ring);
     lv_obj_add_event_cb(ui_ScreenPageMultiGauge, ui_event_multi_gauge_background, LV_EVENT_GESTURE, NULL);

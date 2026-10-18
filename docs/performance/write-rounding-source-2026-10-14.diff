@@ -1,0 +1,39 @@
+--- a/main/vehicle/vp_engine.c
++++ b/main/vehicle/vp_engine.c
+@@ -779,6 +779,22 @@
+     return (int32_t)floorf(g->filt + 0.5f);
+ }
+ 
++/* Round Binary32 like floor((double)v + 0.5), using hardware integer/float
++ * conversions. Guard the cast first; fractional inputs are too small for the
++ * final +/-1 to overflow. Negative half ties round toward positive infinity. */
++static bool round_identity(float v, int32_t *out)
++{
++    int32_t integer;
++    float fraction;
++    if (!(v >= -2147483648.0f && v < 2147483648.0f)) return false;
++    integer = (int32_t)v;
++    fraction = v - (float)integer;
++    if (fraction >= 0.5f) integer++;
++    else if (fraction < -0.5f) integer--;
++    *out = integer;
++    return true;
++}
++
+ /* P6..P10 for a source value v (P1..P5 done by the caller). */
+ static void write_value(vp_engine_t *e, int i, float v, uint32_t now, bool from_can)
+ {
+@@ -807,12 +823,10 @@
+      * that hot path in single precision and avoid the Xtensa double helpers.
+      * The general path preserves the profile's double-precision rounding. */
+     if (e->factor_identity_mask & (UINT64_C(1) << (unsigned)i)) {
+-        float rounded = floorf(v + 0.5f);
+-        if (!(rounded >= -2147483648.0f && rounded < 2147483648.0f)) {
++        if (!round_identity(v, &internal)) {
+             sig_invalidate(e, i, now);
+             return;
+         }
+-        internal = (int32_t)rounded;
+     } else {
+         x = floor((double)v * g->factor + 0.5);
+         if (!(x >= -2147483648.0 && x <= 2147483647.0)) {

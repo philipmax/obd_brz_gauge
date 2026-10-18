@@ -21,9 +21,11 @@ static void on_rpm_warn_slider_change(lv_event_t *e)
     lv_slider_set_value(s_slider_rpm_warn, val, LV_ANIM_OFF);
     lv_label_set_text_fmt(s_label_rpm_warn_val, "%ld", val);
 
-    nvs_user_cfg_t cfg = *nvs_cfg_get();
+    nvs_user_cfg_t base;
+    nvs_cfg_snapshot(&base);
+    nvs_user_cfg_t cfg = base;
     cfg.rpm_warn_threshold = (uint16_t)val;
-    nvs_cfg_set(&cfg);
+    nvs_cfg_update(&base, &cfg);
 
     // Linked mode: changing the threshold on this unit → broadcast to the other gauges (relayed via the master, keeping the threshold consistent across all three gauges)
     if (cfg.rpm_warn_linked_en && cfg.device_role != ESPNOW_ROLE_STANDALONE) {
@@ -35,7 +37,9 @@ static void on_rpm_warn_slider_change(lv_event_t *e)
 static void on_anim_toggle_click(lv_event_t *e)
 {
     (void)e;
-    nvs_user_cfg_t cfg = *nvs_cfg_get();
+    nvs_user_cfg_t base;
+    nvs_cfg_snapshot(&base);
+    nvs_user_cfg_t cfg = base;
     cfg.rpm_warn_anim_en = cfg.rpm_warn_anim_en ? 0 : 1;
     if (cfg.rpm_warn_anim_en && cfg.rpm_warn_linked_en) {
         cfg.rpm_warn_linked_en = 0;
@@ -44,7 +48,7 @@ static void on_anim_toggle_click(lv_event_t *e)
             lv_obj_set_style_text_color(s_label_linked_state, lv_color_hex(0x666666), LV_PART_MAIN);
         }
     }
-    nvs_cfg_set(&cfg);
+    nvs_cfg_update(&base, &cfg);
     lv_label_set_text(s_label_anim_state, cfg.rpm_warn_anim_en ? "ON" : "OFF");
     lv_obj_set_style_text_color(s_label_anim_state,
         cfg.rpm_warn_anim_en ? lv_color_hex(0x06D6A0) : lv_color_hex(0x666666), LV_PART_MAIN);
@@ -53,7 +57,9 @@ static void on_anim_toggle_click(lv_event_t *e)
 static void on_linked_toggle_click(lv_event_t *e)
 {
     (void)e;
-    nvs_user_cfg_t cfg = *nvs_cfg_get();
+    nvs_user_cfg_t base;
+    nvs_cfg_snapshot(&base);
+    nvs_user_cfg_t cfg = base;
     cfg.rpm_warn_linked_en = cfg.rpm_warn_linked_en ? 0 : 1;
     if (cfg.rpm_warn_linked_en && cfg.rpm_warn_anim_en) {
         cfg.rpm_warn_anim_en = 0;
@@ -62,7 +68,7 @@ static void on_linked_toggle_click(lv_event_t *e)
             lv_obj_set_style_text_color(s_label_anim_state, lv_color_hex(0x666666), LV_PART_MAIN);
         }
     }
-    nvs_cfg_set(&cfg);
+    nvs_cfg_update(&base, &cfg);
     lv_label_set_text(s_label_linked_state, cfg.rpm_warn_linked_en ? "ON" : "OFF");
     lv_obj_set_style_text_color(s_label_linked_state,
         cfg.rpm_warn_linked_en ? lv_color_hex(0x06D6A0) : lv_color_hex(0x666666), LV_PART_MAIN);
@@ -71,8 +77,8 @@ static void on_linked_toggle_click(lv_event_t *e)
 static void on_test_click(lv_event_t *e)
 {
     (void)e;
-    const nvs_user_cfg_t *cfg = nvs_cfg_get();
-    bool linked_active = cfg->rpm_warn_linked_en && (cfg->device_role != ESPNOW_ROLE_STANDALONE);
+    nvs_user_cfg_t cfg = nvs_cfg_read();
+    bool linked_active = cfg.rpm_warn_linked_en && (cfg.device_role != ESPNOW_ROLE_STANDALONE);
     if (linked_active) {
         // Linked: the master drives the RPM climb (0→peak→fallback) and all three gauges render synchronously via ESP-NOW.
         // If this unit is the master → start directly; if it is the slave → send a request to the master, so all gauges test together either way.
@@ -86,24 +92,24 @@ static void on_test_click(lv_event_t *e)
 void ui_rpm_warn_refresh_from_nvs(void)
 {
     if (!ui_ScreenPageRpmWarn) return;
-    const nvs_user_cfg_t *cfg = nvs_cfg_get();
-    if (s_label_rpm_warn_val) lv_label_set_text_fmt(s_label_rpm_warn_val, "%d", cfg->rpm_warn_threshold);
-    if (s_slider_rpm_warn) lv_slider_set_value(s_slider_rpm_warn, cfg->rpm_warn_threshold, LV_ANIM_OFF);
+    nvs_user_cfg_t cfg = nvs_cfg_read();
+    if (s_label_rpm_warn_val) lv_label_set_text_fmt(s_label_rpm_warn_val, "%d", cfg.rpm_warn_threshold);
+    if (s_slider_rpm_warn) lv_slider_set_value(s_slider_rpm_warn, cfg.rpm_warn_threshold, LV_ANIM_OFF);
     if (s_label_anim_state) {
-        lv_label_set_text(s_label_anim_state, cfg->rpm_warn_anim_en ? "ON" : "OFF");
+        lv_label_set_text(s_label_anim_state, cfg.rpm_warn_anim_en ? "ON" : "OFF");
         lv_obj_set_style_text_color(s_label_anim_state,
-            cfg->rpm_warn_anim_en ? lv_color_hex(0x06D6A0) : lv_color_hex(0x666666), LV_PART_MAIN);
+            cfg.rpm_warn_anim_en ? lv_color_hex(0x06D6A0) : lv_color_hex(0x666666), LV_PART_MAIN);
     }
     if (s_label_linked_state) {
-        lv_label_set_text(s_label_linked_state, cfg->rpm_warn_linked_en ? "ON" : "OFF");
+        lv_label_set_text(s_label_linked_state, cfg.rpm_warn_linked_en ? "ON" : "OFF");
         lv_obj_set_style_text_color(s_label_linked_state,
-            cfg->rpm_warn_linked_en ? lv_color_hex(0x06D6A0) : lv_color_hex(0x666666), LV_PART_MAIN);
+            cfg.rpm_warn_linked_en ? lv_color_hex(0x06D6A0) : lv_color_hex(0x666666), LV_PART_MAIN);
     }
 }
 
 void ui_ScreenPageRpmWarn_screen_init(void)
 {
-    const nvs_user_cfg_t *cfg = nvs_cfg_get();
+    nvs_user_cfg_t cfg = nvs_cfg_read();
 
     ui_ScreenPageRpmWarn = lv_obj_create(NULL);
     lv_obj_clear_flag(ui_ScreenPageRpmWarn, LV_OBJ_FLAG_SCROLLABLE);
@@ -126,7 +132,7 @@ void ui_ScreenPageRpmWarn_screen_init(void)
     lv_obj_align(sub, LV_ALIGN_CENTER, 0, -88);
 
     // Threshold value (already clamped in nvs_storage_init(), just read it here)
-    uint16_t thresh = cfg->rpm_warn_threshold;
+    uint16_t thresh = cfg.rpm_warn_threshold;
     s_label_rpm_warn_val = lv_label_create(ui_ScreenPageRpmWarn);
     lv_label_set_text_fmt(s_label_rpm_warn_val, "%d", thresh);
     lv_obj_set_style_text_font(s_label_rpm_warn_val, &ui_font_FontTypoderSize44, LV_PART_MAIN);
@@ -156,7 +162,7 @@ void ui_ScreenPageRpmWarn_screen_init(void)
     lv_obj_set_style_text_color(range, lv_color_hex(0x777777), LV_PART_MAIN);
     lv_obj_align(range, LV_ALIGN_CENTER, 0, 48);
 
-    bool is_standalone = (cfg->device_role == ESPNOW_ROLE_STANDALONE);
+    bool is_standalone = (cfg.device_role == ESPNOW_ROLE_STANDALONE);
 
     // Animation toggle
     lv_obj_t *anim_label = lv_label_create(ui_ScreenPageRpmWarn);
@@ -177,10 +183,10 @@ void ui_ScreenPageRpmWarn_screen_init(void)
     lv_obj_add_event_cb(s_btn_anim_toggle, on_anim_toggle_click, LV_EVENT_CLICKED, NULL);
 
     s_label_anim_state = lv_label_create(s_btn_anim_toggle);
-    lv_label_set_text(s_label_anim_state, cfg->rpm_warn_anim_en ? "ON" : "OFF");
+    lv_label_set_text(s_label_anim_state, cfg.rpm_warn_anim_en ? "ON" : "OFF");
     lv_obj_set_style_text_font(s_label_anim_state, &ui_font_FontTypoderSize16, LV_PART_MAIN);
     lv_obj_set_style_text_color(s_label_anim_state,
-        cfg->rpm_warn_anim_en ? lv_color_hex(0x06D6A0) : lv_color_hex(0x666666), LV_PART_MAIN);
+        cfg.rpm_warn_anim_en ? lv_color_hex(0x06D6A0) : lv_color_hex(0x666666), LV_PART_MAIN);
     lv_obj_center(s_label_anim_state);
 
     // Multi-gauge linked toggle (shown only in triple-gauge mode): gauges 1/2/3 turn red one by one as RPM rises → stay red, and all gauges flash at the threshold
@@ -203,10 +209,10 @@ void ui_ScreenPageRpmWarn_screen_init(void)
         lv_obj_add_event_cb(btn_linked, on_linked_toggle_click, LV_EVENT_CLICKED, NULL);
 
         s_label_linked_state = lv_label_create(btn_linked);
-        lv_label_set_text(s_label_linked_state, cfg->rpm_warn_linked_en ? "ON" : "OFF");
+        lv_label_set_text(s_label_linked_state, cfg.rpm_warn_linked_en ? "ON" : "OFF");
         lv_obj_set_style_text_font(s_label_linked_state, &ui_font_FontTypoderSize16, LV_PART_MAIN);
         lv_obj_set_style_text_color(s_label_linked_state,
-            cfg->rpm_warn_linked_en ? lv_color_hex(0x06D6A0) : lv_color_hex(0x666666), LV_PART_MAIN);
+            cfg.rpm_warn_linked_en ? lv_color_hex(0x06D6A0) : lv_color_hex(0x666666), LV_PART_MAIN);
         lv_obj_center(s_label_linked_state);
     }
 

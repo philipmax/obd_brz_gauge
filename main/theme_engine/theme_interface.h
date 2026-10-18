@@ -3,13 +3,16 @@
 //  theme_interface.h — Theme Engine Public Interface
 //
 //  The theme system separates UI presentation from core logic:
-//    - Core firmware provides data (OBD/BLE/NVS/vehicle config)
-//    - Theme partition provides UI (pages/layouts/colors/assets)
+//    - Core firmware provides data (signal_store, contracts/signals.json)
+//    - the selected SD theme provides UI (editor theme.bin: pages / layouts / assets)
+//    - SD /OBD/THEMES/<key>/sidecar.json provides rules + overlay fields
+//      extracted from the editor's <id>.gaugeproj.json
 //
-//  System pages (settings/OTA/bluetooth) remain in core firmware.
-//  Theme pages (gauges/data visualization) load from theme partition.
+//  System pages (settings/OTA/bluetooth/...) remain in core firmware.
+//  System pages and the independent SD boot animation stay in core firmware.
 // ============================================================
 
+#include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include "esp_err.h"
@@ -19,156 +22,118 @@
 extern "C" {
 #endif
 
-// ============================================================
-//  Data Snapshot (ABI-stable, version 1.0)
-// ============================================================
+#define THEME_ID_LEN    64   /* max id length in chars (editor limit), without the NUL */
+#define THEME_NAME_LEN  64
 
-// Real-time OBD data snapshot (atomic read from core firmware)
-typedef struct __attribute__((packed)) {
-    uint16_t rpm;              // 0-10000 RPM
-    uint8_t  speed;            // 0-255 km/h
-    int16_t  boost;            // -100 to +250 (in 0.01 bar, e.g. 150 = 1.50 bar)
-    uint8_t  coolant_temp;     // 0-255°C
-    uint8_t  oil_pressure;     // 0-255 PSI
-    int8_t   gear;             // -1=R, 0=N, 1-8=forward, 127=invalid
-    uint8_t  battery_voltage;  // in 0.1V (e.g. 136 = 13.6V)
-    uint8_t  oil_temp;         // 0-255°C
-    uint16_t afr;              // Air-fuel ratio * 100 (e.g. 1470 = 14.70)
-    uint8_t  throttle;         // 0-100%
-    uint8_t  intake_temp;      // 0-255°C (IAT)
-    uint8_t  _reserved[3];     // padding to 16 bytes
-} obd_snapshot_t;  // 16 bytes total
-
-// ============================================================
-//  Theme Engine API
-// ============================================================
-
-typedef enum {
-    THEME_PAGE_TYPE_SYSTEM,   // System page (settings/OTA/bluetooth) from core firmware
-    THEME_PAGE_TYPE_THEME,    // Theme page (gauges/visualization) from theme partition
-} theme_page_type_t;
-
+// Theme metadata (theme.bin manifest)
 typedef struct {
-    const char *page_id;           // "settings" / "main_gauge" / "ota"
-    theme_page_type_t type;
-    lv_obj_t *(*create_fn)(void);  // Page creation function
-} theme_page_entry_t;
-
-// Theme metadata (read from theme_manifest.json)
-typedef struct {
-    char id[32];          // "boost_oil_v2"
-    char name[32];        // "TURBO PRO"
-    char version[16];     // "2.1.0"
-    char author[32];      // "community/steveE"
+    char id[THEME_ID_LEN + 1];
+    char name[THEME_NAME_LEN];
+    char version[16];
+    char author[48];
 } theme_info_t;
 
-// ============================================================
-//  Public API Functions
-// ============================================================
-
 /**
- * Initialize theme engine and load theme from NVS-selected slot
- * Called once at boot, before UI initialization
- *
- * @return ESP_OK on success, ESP_ERR_* on failure (falls back to default theme)
+ * Initialize theme engine and load the selected SD theme.
+ * Called once at boot, before UI initialization.
+ * @return ESP_OK on success, ESP_ERR_* when no usable theme (built-in default UI is used)
  */
 esp_err_t theme_engine_init(void);
 
-/**
- * Load theme from specific slot (0 or 1)
- * Used by OTA to switch themes, or for fallback on corruption
- *
- * @param slot Theme partition slot (only 0 = theme_0 exists)
- * @return ESP_OK on success, ESP_ERR_* on failure
- */
+/** Reload the selected SD package (after an install). Caller must have deleted every theme page object first. */
 esp_err_t theme_load(uint8_t slot);
 
-/**
- * Get currently loaded theme information
- *
- * @param info Output buffer for theme metadata
- * @return ESP_OK if theme loaded, ESP_ERR_INVALID_STATE if none
- */
+/** @return ESP_OK if a theme is loaded, ESP_ERR_INVALID_STATE if none */
 esp_err_t theme_get_info(theme_info_t *info);
 
 /**
- * Create a page by ID (routes to system or theme page based on manifest)
- * Called by UI layer during screen initialization
- *
- * NOTE: Boot pages are NEVER themed:
- *   - "logo" (ui_ScreenPageLogo) - Sky Gauge logo screen
- *   - "intro" (ui_ScreenPageIntro) - RACE AS ONE animation
- *   - Boot video playback (boot_block_player)
- * These always use core firmware implementations to ensure consistent boot experience.
- *
- * @param page_id Page identifier (e.g. "settings", "main_gauge")
- * @return LVGL object for the page, or NULL if not found
+ * Create a theme page by id. Returns a new screen object or NULL.
+ * The returned screen is owned by the caller; delete it (lv_obj_del) when
+ * navigating away — the engine hooks LV_EVENT_DELETE and releases per-page
+ * rule/binding state and its converted images there.
  */
-lv_obj_t* theme_create_page(const char *page_id);
+lv_obj_t *theme_create_page(const char *page_id);
 
-/**
- * Number of theme-declared pages (manifest.pages.theme_pages[]) in the
- * currently loaded theme, in manifest order. 0 if no theme loaded or the
- * theme declares no custom pages.
+/** Staged page creation for boot. Begin/finish require the LVGL task or mutex.
+ * Begin captures an owned layout/rules snapshot. Run reads and converts images
+ * using an isolated cache, without LVGL or the theme lock. After run returns,
+ * finish adopts the result and creates widgets, or discards a stale/failed job.
+ * Finish also cancels a job that was never run. Never finish while run executes.
+ * Load/unload refuses until finish releases the job's hold on the SD package.
  */
+typedef struct theme_page_prepared theme_page_prepared_t;
+theme_page_prepared_t *theme_page_prepare_begin(const char *page_id);
+void theme_page_prepare_run(theme_page_prepared_t *job);
+lv_obj_t *theme_page_prepare_finish(theme_page_prepared_t *job);
+
+/** Number of theme-declared pages (manifest.pages.theme_pages[]), manifest order. */
 uint8_t theme_page_list_count(void);
 
-/**
- * Page id at `index` in the theme's declared page list (0-based, manifest
- * order). Used by the UI layer to drive next/prev navigation across
- * however many pages the active theme declares, instead of a single
- * hardcoded "main_gauge" id.
- *
- * @param index Index into the theme's page list
- * @return page_id string (owned by the theme engine, valid until the next
- *         theme_load()/theme_unload()), or NULL if index is out of range
- */
-const char* theme_page_list_at(uint8_t index);
+/** Page id at index (0-based) or NULL. Valid until the next theme_load()/theme_unload(). */
+const char *theme_page_list_at(uint8_t index);
 
 /**
- * Update all theme pages with new OBD data
- * Called periodically (e.g. every 50ms) by data layer
- *
- * @param obd Real-time OBD data snapshot
+ * Index of the page the UI should open first: the page with id "main_gauge"
+ * when present, else 0. Only meaningful when theme_page_list_count() > 0.
  */
-void theme_update_data(const obd_snapshot_t *obd);
+uint8_t theme_page_default_index(void);
 
 /**
- * Get themed color for a role (from current theme's color palette)
- *
- * @param role Color role (UI_COLOR_BG, UI_COLOR_RING, etc.)
- * @return LVGL color (lv_color_t)
+ * Per-frame update of the live theme page (call from the LVGL task, normally ~16 ms):
+ * reads signal_store once, updates bindings (only changed values touch LVGL),
+ * then evaluates sidecar rules on the same snapshot. Unchanged resolved rules
+ * and alarm suppression reuse the applied look; changes apply the diff.
+ * No-op when no theme page is on screen.
  */
-lv_color_t theme_get_color(uint8_t role);
+void theme_tick(void);
 
 /**
- * Get theme asset (dial/ring image descriptor)
- *
- * @param asset_name "dial" or "ring"
- * @return LVGL image descriptor, or NULL if not available
+ * Gauge sweep (boot / connect animation): ratio in [0,1] drives every binding
+ * to min + ratio * (max - min) of its own display range; < 0 turns it off.
+ * While active, all standard `obd.*` signals are simulated from the same sweep
+ * ratio for rule evaluation, including change triggers. Vehicle-specific `veh.*`
+ * signals remain real because their profile ranges are not uniform.
  */
-const lv_img_dsc_t* theme_get_asset(const char *asset_name);
+void theme_set_sweep(float ratio, uint16_t rpm);
 
 /**
- * Check if a page is provided by theme or system
- *
- * @param page_id Page identifier
- * @return true if theme provides this page, false if system page
+ * System alarms (RPM flash, threshold red) take priority over theme rules:
+ * while suppressed, theme_tick() keeps bindings live but skips rule styling
+ * and the background color is left to the caller.
  */
-bool theme_has_page(const char *page_id);
+void theme_set_rules_suppressed(bool suppressed);
 
 /**
- * Unload current theme and free resources
- * Called before theme switching or system shutdown
+ * Release converted images / caches (before OTA, theme switch, clearing the SD selection).
+ * Theme page objects must already be deleted.
  */
+void theme_release_resources(void);
+
+/** Unload current theme and free all resources. */
 void theme_unload(void);
 
+/* ------------------------------------------------------------
+ *  Sidecar (rules + overlay) — see docs/THEMES.md
+ * ------------------------------------------------------------ */
+
 /**
- * Test function to verify theme engine integration
- * Prints theme info, colors, assets, and protected pages to log
- * Call from ui_init() for debugging
+ * Install a sidecar. `json` is either the reduced sidecar produced by the
+ * device web page, or a full <id>.gaugeproj.json (assets/fonts are skipped by
+ * a streaming filter). Stored on SD at
+ * /OBD/THEMES/<storage_theme_key(theme_id)>/sidecar.json. `report` (optional) receives a short human-readable pairing
+ * report (matched / missing pages and elements, truncated rules).
+ * Takes effect on the next theme page build.
  */
-void theme_engine_test(void);
+esp_err_t theme_sidecar_install(const char *json, size_t len, char *report, size_t report_len);
+
+/** Install a sidecar from a file (SD import); same semantics as above. */
+esp_err_t theme_sidecar_install_file(const char *path, char *report, size_t report_len);
+
+/** Remove the sidecar of theme_id (NULL = current theme). */
+esp_err_t theme_sidecar_remove(const char *theme_id);
+
+/** True when the current theme has a paired sidecar. */
+bool theme_sidecar_present(void);
 
 #ifdef __cplusplus
 }

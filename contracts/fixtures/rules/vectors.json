@@ -29,7 +29,7 @@
   {"name":"T10_color_arc_bar","origin":"ruleEngine.test.ts:147-154","api":"evaluatePageRules","runtime":"none",
    "page":{"id":"p1","elements":[{"id":"arc1","kind":"arc"},{"id":"bar1","kind":"bar"}],
      "rules":[{"id":"r1","enabled":true,"when":{"combine":"all","conditions":[{"source":"obd.rpm","op":">=","value":4000}]},"apply":[{"target":"arc1","set":{"color":"#ff3158"}},{"target":"bar1","set":{"color":"#ff3158"}}]}]},
-   "steps":[{"values":{"obd.rpm":6000},"expect":{"overrides":{"arc1":{"color":"#ff3158","bgColor":"#ff3158"},"bar1":{"color":"#ff3158","bgColor":"#ff3158"}}}}]},
+   "steps":[{"values":{"obd.rpm":6000},"expect":{"overrides":{"arc1":{"color":"#ff3158"},"bar1":{"color":"#ff3158"}}}}]},
   {"name":"T11_tint_image_pointer","origin":"ruleEngine.test.ts:156-163","api":"evaluatePageRules","runtime":"none",
    "page":{"id":"p1","elements":[{"id":"ptr1","kind":"pointer"},{"id":"img1","kind":"image"}],
      "rules":[{"id":"r1","enabled":true,"when":{"combine":"all","conditions":[{"source":"obd.rpm","op":">=","value":4000}]},"apply":[{"target":"ptr1","set":{"color":"#ff3158"}},{"target":"img1","set":{"color":"#ff3158"}}]}]},
@@ -135,5 +135,5 @@
   {"name":"E25_later_action_same_rule_overwrites","origin":"extra: per-action merge order","api":"evaluatePageRules","runtime":"none",
    "page":{"id":"p1","elements":[{"id":"arc1","kind":"arc"}],
      "rules":[{"id":"r1","when":{"conditions":[{"source":"obd.rpm","op":">=","value":1}]},"apply":[{"target":"arc1","set":{"color":"#aaaaaa"}},{"target":"arc1","set":{"color":"#bbbbbb"}}]}]},
-   "steps":[{"values":{"obd.rpm":5},"expect":{"overrides":{"arc1":{"color":"#bbbbbb","bgColor":"#bbbbbb"}}}}]}
+   "steps":[{"values":{"obd.rpm":5},"expect":{"overrides":{"arc1":{"color":"#bbbbbb"}}}}]}
 ]

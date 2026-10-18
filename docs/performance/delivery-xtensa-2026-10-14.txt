@@ -1,0 +1,333 @@
+ESP32-S3 delivery wrappers, actual signal_store compile flags, GCC 14.2.0, no LTO
+
+
+delivery_reference.o:     file format elf32-xtensa-le
+
+
+Disassembly of section .literal.delivery_reference:
+
+00000000 <.literal.delivery_reference>:
+   0:	00000000
+			0: R_XTENSA_32	sig_registry
+   4:	3fe00000
+	...
+			8: R_XTENSA_32	__floatsidf
+			c: R_XTENSA_32	__muldf3
+			10: R_XTENSA_32	__divdf3
+			14: R_XTENSA_32	__adddf3
+			18: R_XTENSA_32	floor
+			1c: R_XTENSA_32	floor
+
+Disassembly of section .text.delivery_reference:
+
+00000000 <delivery_reference>:
+   0:	004136        	entry	a1, 32
+   3:	20a330        	or	a10, a3, a3
+   6:	000081        	l32r	a8, fffc0008 <delivery_reference+0xfffc0008>
+			6: R_XTENSA_SLOT0_OP	.literal.delivery_reference+0x8
+			6: R_XTENSA_ASM_EXPAND	__floatsidf
+   9:	0008e0        	callx8	a8
+   c:	081c      	movi.n	a8, 16
+   e:	5d2827        	blt	a8, a2, 6f <delivery_reference+0x6f>
+			e: R_XTENSA_SLOT0_OP	.text.delivery_reference+0x6f
+  11:	000061        	l32r	a6, fffc0014 <delivery_reference+0xfffc0014>
+			11: R_XTENSA_SLOT0_OP	.literal.delivery_reference
+  14:	908220        	addx2	a8, a2, a2
+  17:	1188c0        	slli	a8, a8, 4
+  1a:	868a      	add.n	a8, a6, a8
+  1c:	180892        	l8ui	a9, a8, 24
+  1f:	522a      	add.n	a5, a2, a2
+  21:	051926        	beqi	a9, 1, 2a <delivery_reference+0x2a>
+			21: R_XTENSA_SLOT0_OP	.text.delivery_reference+0x2a
+  24:	102926        	beqi	a9, 2, 38 <delivery_reference+0x38>
+			24: R_XTENSA_SLOT0_OP	.text.delivery_reference+0x38
+  27:	001106        	j	6f <delivery_reference+0x6f>
+			27: R_XTENSA_SLOT0_OP	.text.delivery_reference+0x6f
+  2a:	88c8      	l32i.n	a12, a8, 32
+  2c:	98d8      	l32i.n	a13, a8, 36
+  2e:	000081        	l32r	a8, fffc0030 <delivery_reference+0xfffc0030>
+			2e: R_XTENSA_SLOT0_OP	.literal.delivery_reference+0xc
+			2e: R_XTENSA_ASM_EXPAND	__muldf3
+  31:	0008e0        	callx8	a8
+  34:	000286        	j	42 <delivery_reference+0x42>
+			34: R_XTENSA_SLOT0_OP	.text.delivery_reference+0x42
+  37:	00          	.byte	00
+  38:	88c8      	l32i.n	a12, a8, 32
+  3a:	98d8      	l32i.n	a13, a8, 36
+  3c:	000081        	l32r	a8, fffc003c <delivery_reference+0xfffc003c>
+			3c: R_XTENSA_SLOT0_OP	.literal.delivery_reference+0x10
+			3c: R_XTENSA_ASM_EXPAND	__divdf3
+  3f:	0008e0        	callx8	a8
+  42:	552a      	add.n	a5, a5, a2
+  44:	1155c0        	slli	a5, a5, 4
+  47:	665a      	add.n	a6, a6, a5
+  49:	190682        	l8ui	a8, a6, 25
+  4c:	051826        	beqi	a8, 1, 55 <delivery_reference+0x55>
+			4c: R_XTENSA_SLOT0_OP	.text.delivery_reference+0x55
+  4f:	162826        	beqi	a8, 2, 69 <delivery_reference+0x69>
+			4f: R_XTENSA_SLOT0_OP	.text.delivery_reference+0x69
+  52:	000646        	j	6f <delivery_reference+0x6f>
+			52: R_XTENSA_SLOT0_OP	.text.delivery_reference+0x6f
+  55:	0000d1        	l32r	a13, fffc0058 <delivery_reference+0xfffc0058>
+			55: R_XTENSA_SLOT0_OP	.literal.delivery_reference+0x4
+  58:	0c0c      	movi.n	a12, 0
+  5a:	000081        	l32r	a8, fffc005c <delivery_reference+0xfffc005c>
+			5a: R_XTENSA_SLOT0_OP	.literal.delivery_reference+0x14
+			5a: R_XTENSA_ASM_EXPAND	__adddf3
+  5d:	0008e0        	callx8	a8
+  60:	000081        	l32r	a8, fffc0060 <delivery_reference+0xfffc0060>
+			60: R_XTENSA_SLOT0_OP	.literal.delivery_reference+0x18
+			60: R_XTENSA_ASM_EXPAND	floor
+  63:	0008e0        	callx8	a8
+  66:	000146        	j	6f <delivery_reference+0x6f>
+			66: R_XTENSA_SLOT0_OP	.text.delivery_reference+0x6f
+  69:	000081        	l32r	a8, fffc006c <delivery_reference+0xfffc006c>
+			69: R_XTENSA_SLOT0_OP	.literal.delivery_reference+0x1c
+			69: R_XTENSA_ASM_EXPAND	floor
+  6c:	0008e0        	callx8	a8
+  6f:	0a2d      	mov.n	a2, a10
+  71:	0b3d      	mov.n	a3, a11
+  73:	f01d      	retw.n
+
+
+delivery_candidate.o:     file format elf32-xtensa-le
+
+
+Disassembly of section .literal.delivery_candidate:
+
+00000000 <.literal.delivery_candidate>:
+   0:	00000000
+			0: R_XTENSA_32	sig_registry
+   4:	00011b47
+   8:	0003d090
+   c:	431bde83
+  10:	51eb851f
+  14:	ed56b010
+  18:	3fe00000
+  1c:	40590000
+  20:	3fc2909a
+	...
+			24: R_XTENSA_32	__floatunsidf
+			28: R_XTENSA_32	__floatsidf
+			2c: R_XTENSA_32	__muldf3
+			30: R_XTENSA_32	__floatsidf
+			34: R_XTENSA_32	__muldf3
+			38: R_XTENSA_32	__floatsidf
+			3c: R_XTENSA_32	__floatsidf
+			40: R_XTENSA_32	__divdf3
+			44: R_XTENSA_32	__floatsidf
+			48: R_XTENSA_32	__divdf3
+			4c: R_XTENSA_32	__floatsidf
+			50: R_XTENSA_32	__adddf3
+			54: R_XTENSA_32	floor
+			58: R_XTENSA_32	floor
+
+Disassembly of section .text.delivery_candidate:
+
+00000000 <delivery_candidate>:
+   0:	006136        	entry	a1, 48
+   3:	081c      	movi.n	a8, 16
+   5:	03ad      	mov.n	a10, a3
+   7:	02a827        	bge	a8, a2, d <delivery_candidate+0xd>
+			7: R_XTENSA_SLOT0_OP	.text.delivery_candidate+0xd
+   a:	004a86        	j	138 <delivery_candidate+0x138>
+			a: R_XTENSA_SLOT0_OP	.text.delivery_candidate+0x138
+   d:	000031        	l32r	a3, fffc0010 <delivery_candidate+0xfffc0010>
+			d: R_XTENSA_SLOT0_OP	.literal.delivery_candidate
+  10:	908220        	addx2	a8, a2, a2
+  13:	1188c0        	slli	a8, a8, 4
+  16:	538a      	add.n	a5, a3, a8
+  18:	180592        	l8ui	a9, a5, 24
+  1b:	722a      	add.n	a7, a2, a2
+  1d:	081926        	beqi	a9, 1, 29 <delivery_candidate+0x29>
+			1d: R_XTENSA_SLOT0_OP	.text.delivery_candidate+0x29
+  20:	022966        	bnei	a9, 2, 26 <delivery_candidate+0x26>
+			20: R_XTENSA_SLOT0_OP	.text.delivery_candidate+0x26
+  23:	002286        	j	b1 <delivery_candidate+0xb1>
+			23: R_XTENSA_SLOT0_OP	.text.delivery_candidate+0xb1
+  26:	004386        	j	138 <delivery_candidate+0x138>
+			26: R_XTENSA_SLOT0_OP	.text.delivery_candidate+0x138
+  29:	190562        	l8ui	a6, a5, 25
+  2c:	441666        	bnei	a6, 1, 74 <delivery_candidate+0x74>
+			2c: R_XTENSA_SLOT0_OP	.text.delivery_candidate+0x74
+  2f:	20c882        	addi	a8, a8, 32
+  32:	0000c1        	l32r	a12, fffc0034 <delivery_candidate+0xfffc0034>
+			32: R_XTENSA_SLOT0_OP	.literal.delivery_candidate+0x14
+  35:	0000d1        	l32r	a13, fffc0038 <delivery_candidate+0xfffc0038>
+			35: R_XTENSA_SLOT0_OP	.literal.delivery_candidate+0x20
+  38:	838a      	add.n	a8, a3, a8
+  3a:	08b8      	l32i.n	a11, a8, 0
+  3c:	000091        	l32r	a9, fffc003c <delivery_candidate+0xfffc003c>
+			3c: R_XTENSA_SLOT0_OP	.literal.delivery_candidate+0x14
+  3f:	01c9      	s32i.n	a12, a1, 0
+  41:	11d9      	s32i.n	a13, a1, 4
+  43:	4a9b97        	bne	a11, a9, 91 <delivery_candidate+0x91>
+			43: R_XTENSA_SLOT0_OP	.text.delivery_candidate+0x91
+  46:	1898      	l32i.n	a9, a8, 4
+  48:	1188      	l32i.n	a8, a1, 4
+  4a:	439987        	bne	a9, a8, 91 <delivery_candidate+0x91>
+			4a: R_XTENSA_SLOT0_OP	.text.delivery_candidate+0x91
+  4d:	d0a782        	movi	a8, 0x7d0
+  50:	3d38a7        	bltu	a8, a10, 91 <delivery_candidate+0x91>
+			50: R_XTENSA_SLOT0_OP	.text.delivery_candidate+0x91
+  53:	000081        	l32r	a8, fffc0054 <delivery_candidate+0xfffc0054>
+			53: R_XTENSA_SLOT0_OP	.literal.delivery_candidate+0x4
+  56:	82aa80        	mull	a10, a10, a8
+  59:	000081        	l32r	a8, fffc005c <delivery_candidate+0xfffc005c>
+			59: R_XTENSA_SLOT0_OP	.literal.delivery_candidate+0x8
+  5c:	aa8a      	add.n	a10, a10, a8
+  5e:	000081        	l32r	a8, fffc0060 <delivery_candidate+0xfffc0060>
+			5e: R_XTENSA_SLOT0_OP	.literal.delivery_candidate+0xc
+  61:	a2aa80        	muluh	a10, a10, a8
+  64:	e5a1a0        	extui	a10, a10, 17, 15
+  67:	000081        	l32r	a8, fffc0068 <delivery_candidate+0xfffc0068>
+			67: R_XTENSA_SLOT0_OP	.literal.delivery_candidate+0x24
+			67: R_XTENSA_ASM_EXPAND	__floatunsidf
+  6a:	0008e0        	callx8	a8
+  6d:	0a2d      	mov.n	a2, a10
+  6f:	0b3d      	mov.n	a3, a11
+  71:	003ec6        	j	170 <delivery_candidate+0x170>
+			71: R_XTENSA_SLOT0_OP	.text.delivery_candidate+0x170
+  74:	000081        	l32r	a8, fffc0074 <delivery_candidate+0xfffc0074>
+			74: R_XTENSA_SLOT0_OP	.literal.delivery_candidate+0x28
+			74: R_XTENSA_ASM_EXPAND	__floatsidf
+  77:	0008e0        	callx8	a8
+  7a:	85c8      	l32i.n	a12, a5, 32
+  7c:	95d8      	l32i.n	a13, a5, 36
+  7e:	000081        	l32r	a8, fffc0080 <delivery_candidate+0xfffc0080>
+			7e: R_XTENSA_SLOT0_OP	.literal.delivery_candidate+0x2c
+			7e: R_XTENSA_ASM_EXPAND	__muldf3
+  81:	0008e0        	callx8	a8
+  84:	0a2d      	mov.n	a2, a10
+  86:	0b3d      	mov.n	a3, a11
+  88:	022666        	bnei	a6, 2, 8e <delivery_candidate+0x8e>
+			88: R_XTENSA_SLOT0_OP	.text.delivery_candidate+0x8e
+  8b:	0034c6        	j	162 <delivery_candidate+0x162>
+			8b: R_XTENSA_SLOT0_OP	.text.delivery_candidate+0x162
+  8e:	003786        	j	170 <delivery_candidate+0x170>
+			8e: R_XTENSA_SLOT0_OP	.text.delivery_candidate+0x170
+  91:	772a      	add.n	a7, a7, a2
+  93:	1177c0        	slli	a7, a7, 4
+  96:	737a      	add.n	a7, a3, a7
+  98:	000081        	l32r	a8, fffc0098 <delivery_candidate+0xfffc0098>
+			98: R_XTENSA_SLOT0_OP	.literal.delivery_candidate+0x30
+			98: R_XTENSA_ASM_EXPAND	__floatsidf
+  9b:	0008e0        	callx8	a8
+  9e:	87c8      	l32i.n	a12, a7, 32
+  a0:	97d8      	l32i.n	a13, a7, 36
+  a2:	000081        	l32r	a8, fffc00a4 <delivery_candidate+0xfffc00a4>
+			a2: R_XTENSA_SLOT0_OP	.literal.delivery_candidate+0x34
+			a2: R_XTENSA_ASM_EXPAND	__muldf3
+  a5:	0008e0        	callx8	a8
+  a8:	0a2d      	mov.n	a2, a10
+  aa:	0b3d      	mov.n	a3, a11
+  ac:	002546        	j	145 <delivery_candidate+0x145>
+			ac: R_XTENSA_SLOT0_OP	.text.delivery_candidate+0x145
+  af:	00          	.byte	00
+  b0:	00          	.byte	00
+  b1:	190562        	l8ui	a6, a5, 25
+  b4:	482666        	bnei	a6, 2, 100 <delivery_candidate+0x100>
+			b4: R_XTENSA_SLOT0_OP	.text.delivery_candidate+0x100
+  b7:	20c882        	addi	a8, a8, 32
+  ba:	0000d1        	l32r	a13, fffc00bc <delivery_candidate+0xfffc00bc>
+			ba: R_XTENSA_SLOT0_OP	.literal.delivery_candidate+0x1c
+  bd:	838a      	add.n	a8, a3, a8
+  bf:	0c0c      	movi.n	a12, 0
+  c1:	0898      	l32i.n	a9, a8, 0
+  c3:	01c9      	s32i.n	a12, a1, 0
+  c5:	11d9      	s32i.n	a13, a1, 4
+  c7:	04f956        	bnez	a9, 11a <delivery_candidate+0x11a>
+			c7: R_XTENSA_SLOT0_OP	.text.delivery_candidate+0x11a
+  ca:	1898      	l32i.n	a9, a8, 4
+  cc:	1188      	l32i.n	a8, a1, 4
+  ce:	489987        	bne	a9, a8, 11a <delivery_candidate+0x11a>
+			ce: R_XTENSA_SLOT0_OP	.text.delivery_candidate+0x11a
+  d1:	000091        	l32r	a9, fffc00d4 <delivery_candidate+0xfffc00d4>
+			d1: R_XTENSA_SLOT0_OP	.literal.delivery_candidate+0x10
+  d4:	318fa0        	srai	a8, a10, 31
+  d7:	b29a90        	mulsh	a9, a10, a9
+  da:	219590        	srai	a9, a9, 5
+  dd:	c09980        	sub	a9, a9, a8
+  e0:	a08990        	addx4	a8, a9, a9
+  e3:	a08880        	addx4	a8, a8, a8
+  e6:	1188e0        	slli	a8, a8, 2
+  e9:	c08a80        	sub	a8, a10, a8
+  ec:	058f80        	extui	a8, a8, 31, 1
+  ef:	c0a980        	sub	a10, a9, a8
+  f2:	000081        	l32r	a8, fffc00f4 <delivery_candidate+0xfffc00f4>
+			f2: R_XTENSA_SLOT0_OP	.literal.delivery_candidate+0x38
+			f2: R_XTENSA_ASM_EXPAND	__floatsidf
+  f5:	0008e0        	callx8	a8
+  f8:	0a2d      	mov.n	a2, a10
+  fa:	0b3d      	mov.n	a3, a11
+  fc:	001c06        	j	170 <delivery_candidate+0x170>
+			fc: R_XTENSA_SLOT0_OP	.text.delivery_candidate+0x170
+  ff:	00          	.byte	00
+ 100:	000081        	l32r	a8, fffc0100 <delivery_candidate+0xfffc0100>
+			100: R_XTENSA_SLOT0_OP	.literal.delivery_candidate+0x3c
+			100: R_XTENSA_ASM_EXPAND	__floatsidf
+ 103:	0008e0        	callx8	a8
+ 106:	85c8      	l32i.n	a12, a5, 32
+ 108:	95d8      	l32i.n	a13, a5, 36
+ 10a:	000081        	l32r	a8, fffc010c <delivery_candidate+0xfffc010c>
+			10a: R_XTENSA_SLOT0_OP	.literal.delivery_candidate+0x40
+			10a: R_XTENSA_ASM_EXPAND	__divdf3
+ 10d:	0008e0        	callx8	a8
+ 110:	0a2d      	mov.n	a2, a10
+ 112:	0b3d      	mov.n	a3, a11
+ 114:	2d1626        	beqi	a6, 1, 145 <delivery_candidate+0x145>
+			114: R_XTENSA_SLOT0_OP	.text.delivery_candidate+0x145
+ 117:	001546        	j	170 <delivery_candidate+0x170>
+			117: R_XTENSA_SLOT0_OP	.text.delivery_candidate+0x170
+ 11a:	772a      	add.n	a7, a7, a2
+ 11c:	1177c0        	slli	a7, a7, 4
+ 11f:	000081        	l32r	a8, fffc0120 <delivery_candidate+0xfffc0120>
+			11f: R_XTENSA_SLOT0_OP	.literal.delivery_candidate+0x44
+			11f: R_XTENSA_ASM_EXPAND	__floatsidf
+ 122:	0008e0        	callx8	a8
+ 125:	337a      	add.n	a3, a3, a7
+ 127:	83c8      	l32i.n	a12, a3, 32
+ 129:	93d8      	l32i.n	a13, a3, 36
+ 12b:	000081        	l32r	a8, fffc012c <delivery_candidate+0xfffc012c>
+			12b: R_XTENSA_SLOT0_OP	.literal.delivery_candidate+0x48
+			12b: R_XTENSA_ASM_EXPAND	__divdf3
+ 12e:	0008e0        	callx8	a8
+ 131:	0a2d      	mov.n	a2, a10
+ 133:	0b3d      	mov.n	a3, a11
+ 135:	000a46        	j	162 <delivery_candidate+0x162>
+			135: R_XTENSA_SLOT0_OP	.text.delivery_candidate+0x162
+ 138:	000081        	l32r	a8, fffc0138 <delivery_candidate+0xfffc0138>
+			138: R_XTENSA_SLOT0_OP	.literal.delivery_candidate+0x4c
+			138: R_XTENSA_ASM_EXPAND	__floatsidf
+ 13b:	0008e0        	callx8	a8
+ 13e:	0a2d      	mov.n	a2, a10
+ 140:	0b3d      	mov.n	a3, a11
+ 142:	000a86        	j	170 <delivery_candidate+0x170>
+			142: R_XTENSA_SLOT0_OP	.text.delivery_candidate+0x170
+ 145:	0000d1        	l32r	a13, fffc0148 <delivery_candidate+0xfffc0148>
+			145: R_XTENSA_SLOT0_OP	.literal.delivery_candidate+0x18
+ 148:	0c0c      	movi.n	a12, 0
+ 14a:	02ad      	mov.n	a10, a2
+ 14c:	03bd      	mov.n	a11, a3
+ 14e:	000081        	l32r	a8, fffc0150 <delivery_candidate+0xfffc0150>
+			14e: R_XTENSA_SLOT0_OP	.literal.delivery_candidate+0x50
+			14e: R_XTENSA_ASM_EXPAND	__adddf3
+ 151:	0008e0        	callx8	a8
+ 154:	000081        	l32r	a8, fffc0154 <delivery_candidate+0xfffc0154>
+			154: R_XTENSA_SLOT0_OP	.literal.delivery_candidate+0x54
+			154: R_XTENSA_ASM_EXPAND	floor
+ 157:	0008e0        	callx8	a8
+ 15a:	0a2d      	mov.n	a2, a10
+ 15c:	0b3d      	mov.n	a3, a11
+ 15e:	000386        	j	170 <delivery_candidate+0x170>
+			15e: R_XTENSA_SLOT0_OP	.text.delivery_candidate+0x170
+ 161:	00          	.byte	00
+ 162:	02ad      	mov.n	a10, a2
+ 164:	03bd      	mov.n	a11, a3
+ 166:	000081        	l32r	a8, fffc0168 <delivery_candidate+0xfffc0168>
+			166: R_XTENSA_SLOT0_OP	.literal.delivery_candidate+0x58
+			166: R_XTENSA_ASM_EXPAND	floor
+ 169:	0008e0        	callx8	a8
+ 16c:	0a2d      	mov.n	a2, a10
+ 16e:	0b3d      	mov.n	a3, a11
+ 170:	f01d      	retw.n

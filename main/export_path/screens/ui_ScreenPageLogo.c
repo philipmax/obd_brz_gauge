@@ -12,21 +12,7 @@ void ui_ScreenPageLogo_screen_init(void)
     lv_obj_set_style_radius(ui_ScreenPageLogo, 360, LV_PART_MAIN | LV_STATE_DEFAULT);
     ui_helpers_style_screen_bg(ui_ScreenPageLogo);
     lv_obj_set_style_bg_opa(ui_ScreenPageLogo, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-#if USE_CUSTOM_BOOT_LOGO == 1
-    LV_IMG_DECLARE(imgBootLogoCustom);
-    // Customer-defined boot image (static picture, centered)
-    imageLogo = lv_img_create(ui_ScreenPageLogo);
-    lv_img_set_src(imageLogo, &imgBootLogoCustom);
-    lv_obj_align(imageLogo, LV_ALIGN_CENTER, 0, 0);
-
-    // White border ring (consistent with the other pages)
-    lv_obj_t *spinnerLogo = ui_helpers_create_ring(ui_ScreenPageLogo, 10);   // white ring: static circular border
-#elif USE_GIF_LOGO == 1
-    imageLogo = lv_gif_create(ui_ScreenPageLogo);
-    lv_gif_set_src(imageLogo, &gifSnake400);
-    lv_obj_align(imageLogo, LV_ALIGN_CENTER, 0, 0);
-#else
-    // SKY GAUGE text logo using Conthrax font
+    // SKY GAUGE text logo using the bundled Typoder fonts
     lv_obj_t *label_sky = lv_label_create(ui_ScreenPageLogo);
     lv_label_set_text(label_sky, "SKY");
     lv_obj_set_style_text_font(label_sky, &ui_font_FontTypoderSize56, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -41,11 +27,8 @@ void ui_ScreenPageLogo_screen_init(void)
     lv_obj_set_style_text_letter_space(label_gauge, 12, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_align(label_gauge, LV_ALIGN_CENTER, 0, 30);
 
-    imageLogo = NULL; // No image logo anymore
-
     // White border ring (same as Gear page style)
-    lv_obj_t *spinnerLogo = ui_helpers_create_ring(ui_ScreenPageLogo, 10);   // white ring: static circular border, replaces the rotating spinner, removes the arc seam gap
-#endif
+    ui_helpers_create_ring(ui_ScreenPageLogo, 10);   // static circular border, replaces the rotating spinner
     lv_obj_add_event_cb(ui_ScreenPageLogo, ui_event_logo_background, LV_EVENT_ALL, NULL);
 }
 

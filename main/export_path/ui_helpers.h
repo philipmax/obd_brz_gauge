@@ -14,14 +14,6 @@ extern "C" {
 
 void _ui_screen_change(lv_obj_t ** target, lv_scr_load_anim_t fademode, int spd, int delay, void (*target_init)(void));
 
-/** Describes an animation*/
-typedef struct _ui_anim_user_data_t {
-    lv_obj_t * target;
-    lv_img_dsc_t ** imgset;
-    int32_t imgset_size;
-    int32_t val;
-} ui_anim_user_data_t;
-
 // ---- Project-custom helpers (not SquareLine generated; styles shared by multiple screens) ----
 
 lv_obj_t * ui_helpers_create_ring(lv_obj_t * parent, uint8_t border_width);

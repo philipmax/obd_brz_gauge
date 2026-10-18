@@ -7,55 +7,61 @@
 extern "C" {
 #endif
 
-// Gear enum
-typedef enum {
-    GEAR_NEUTRAL, // Neutral or unrecognized
-    GEAR_1,
-    GEAR_2,
-    GEAR_3,
-    GEAR_4,
-    GEAR_5,
-    GEAR_6,
-    GEAR_7,   // 7-speed such as Porsche 997.2 PDK
-    GEAR_8,   // 8-speed such as BMW ZF 8HP
-} enGear;
+/* --------------------------------------------------------------------------
+ * obd_data_cache - legacy facade over signal_store.
+ *
+ * Setters take the historical units and sentinels, convert to the registry's
+ * internal units (contracts/signals.json) and write signal_store; a sentinel
+ * invalidates the signal. The snapshot reads signal_store and maps invalid
+ * signals back to the legacy sentinels. New code should use signal_store
+ * directly.
+ * -------------------------------------------------------------------------- */
+
+#define OBD_GEAR_UNKNOWN  127   /* snapshot.gear when obd.gear is invalid */
+
+typedef struct {
+    uint16_t rpm;
+    uint8_t speed;
+    int8_t gear;              /* -1 R, 0 N, 1..8, OBD_GEAR_UNKNOWN = invalid */
+} obd_motion_snapshot_t;
 
 typedef struct {
     uint16_t rpm;
     uint8_t  speed;
-    int16_t  coolant_temp;
-    int16_t  oil_temp;
-    int16_t  intake_temp;
-    int16_t  load_pct;
-    int16_t  tps;
-    int32_t  bat_mv;
-    int16_t  oil_pressure_x10;
-    int16_t  boost_x10;
-    int8_t   gear;
-    int16_t  afr_x100;
+    int16_t  coolant_temp;      /* °C, -40 = invalid */
+    int16_t  oil_temp;          /* °C, -100 = invalid */
+    int16_t  intake_temp;       /* °C, -40 = invalid */
+    int16_t  load_pct;          /* %, -1 = invalid */
+    int16_t  tps;               /* %, -1 = invalid */
+    int32_t  bat_mv;            /* mV, -1 = invalid */
+    int16_t  oil_pressure_x10;  /* 0.1 bar, -1 = invalid */
+    int16_t  boost_x10;         /* 0.1 bar gauge, -32768 = invalid */
+    int8_t   gear;              /* -1 R, 0 N, 1..8, OBD_GEAR_UNKNOWN = invalid */
+    int16_t  afr_x100;          /* AFR x100, -1 = invalid */
 } obd_data_snapshot_t;
 
 void obd_data_set_rpm(uint16_t rpm);
-// RPM override layer: for multi-gauge linkage tests. When enabled, get_rpm returns val; disabling restores the real value.
+// Read only RPM (including the multi-gauge override) without building a full snapshot.
+uint16_t obd_data_get_rpm(void);
+// RPM override layer: for multi-gauge linkage tests. While enabled the snapshot
+// disabling restores the real value.
 void obd_data_rpm_override_set(bool en, uint16_t val);
-void obd_data_reset_temp_cache(void);
-void obd_data_set_oil_temp_invalid(void);
 void obd_data_set_speed(uint8_t kmh);
 void obd_data_set_coolant_temp(int16_t temp);
-void obd_data_set_oil_temp(int16_t temp);   // actual oil temp °C (SSM 22 10 17, A-40)
+void obd_data_set_oil_temp(int16_t temp);          // °C; values outside [-20, 150] are ignored (hold)
 void obd_data_set_intake_temp(int16_t temp);
-void obd_data_set_load_pct(int16_t pct);    // engine load 0~100%
-void obd_data_set_tps(int16_t pct);         // throttle opening 0~100%
-void obd_data_set_bat_mv(int32_t mv);        // battery voltage mV (e.g. 12000 = 12.0V)
-void obd_data_set_oil_pressure_x10(int16_t pressure_x10); // oil pressure, 0.1bar, -1=invalid
-void obd_data_set_boost_x10(int16_t boost_x10); // boost gauge pressure, 0.1bar (can be negative), -32768=invalid
-void obd_data_set_gear(int8_t gear);               // direct gear value: -1=R, 0=N, 1+=forward gear, 127=invalid
-void obd_data_set_afr_x100(int16_t afr_x100);      // air-fuel ratio AFR, ×100 (1470=14.7:1), -1=invalid
-uint16_t obd_data_get_rpm(void);
-int16_t  obd_data_get_coolant_temp(void);
-int16_t  obd_data_get_intake_temp(void);
+void obd_data_set_load_pct(int16_t pct);           // 0~100 %, -1 = invalid
+void obd_data_set_tps(int16_t pct);                // 0~100 %, -1 = invalid
+void obd_data_set_oil_pressure_x10(int16_t pressure_x10); // 0.1 bar, <0 = invalid
+void obd_data_set_boost_x10(int16_t boost_x10);    // 0.1 bar gauge, -32768 = invalid
+void obd_data_set_afr_x100(int16_t afr_x100);      // AFR x100, -1 = invalid
+// Compact coherent read for the primary RPM/speed/gear pages.
+void obd_data_get_motion_snapshot(obd_motion_snapshot_t *out);
 void     obd_data_get_snapshot(obd_data_snapshot_t *out);
-enGear calculate_gear(float rpm, float speed);
+// One coherent read of the requested SIG_OBD_* slot bits (1u << slot).
+// Unrequested fields use legacy invalid sentinels; RPM override is applied only
+// when RPM is requested. Non-OBD bits are ignored; an empty mask reads nothing.
+void obd_data_get_snapshot_mask(obd_data_snapshot_t *out, uint16_t requested);
 
 #ifdef __cplusplus
 }

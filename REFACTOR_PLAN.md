@@ -2,7 +2,7 @@
 
 - 日期：2026-10-11
 - 分支：`rebuild`（从 `origin/main` 4b056c0 切出）
-- 状态：计划草案 v2，尚未开始实施
+- 状态：代码/架构层面已完成（见第 12 节），尚未上板验证
 - 依据：对固件仓库和 `obd_theme_store`（只读）的多轮代码调研。所有结论都给了文件/行号依据；标「推断」或「需上板验证」的除外。
 
 ---
@@ -228,7 +228,7 @@ P0 基线与清理 ─▶ P1 契约与测试基建 ─▶ P2 存储底座 ─┬
 | 内置 `obd2.generic`：由 JSON 生成 C 常量 | S |
 | 校验器：服务号白名单（只允许 01/09/21/22 和受控裸帧；拒绝 04、0x10/0x11/0x27/0x2E/0x31 等）；AT 白名单（SH/CRA/CEA/CAF/ST/SP 子集，禁止 ATPP/ATBRD/ATZ 插入）；数量和大小上限 | L |
 | 生命周期：INSTALLED → PENDING → ACTIVE，失败为 FAILED。验车只在 ELM 已连接且总线醒着（ATRV ≥13.0V 或已有正响应）时计时，窗口 20 秒，K 个 PID（K=min(3,n)）有响应，有 rpm 时 rpm 必须在内。连续 3 次启动仍未通过就回滚到上一个，再不行回滚到 generic；崩溃计数进入安全模式；手动复位入口有开机长按、BOOT 键、SD 上的 `RESET.TXT`、设置页 | M |
-| 转换器：`tools/vehicles/`（`dump_legacy.c` 在 host 上编译旧表导出中间格式，再由 `legacy_to_v1.py` 转换），把 17 个旧车型转成 16 个 JSON（ZD8 和 ZD8 OBD 合并）放进 `vehicles/catalog/`；**不内嵌进固件**（决定 5） | S |
+| 转换器：`tools/vehicles/`（`dump_legacy.py` 从旧表导出中间 JSON，再由 `legacy_to_v1.py` 转换），把 17 个旧车型转成 17 个 JSON 放进 `vehicles/catalog/`；**不内嵌进固件**（决定 5） | S |
 | golden 请求序列测试：17 个车型逐一对比新引擎和现行固件发出的 AT/请求序列；ZC6 的 RPM 刷新率做实车 A/B 对比 | M |
 | SD 投放 `/OBD/IMPORT`：`*.vehicle.json`、`*.gaugeproj.json`、`*.bin`；处理结果改名为 `.ok`/`.err`（失败另写 `.err.txt`），追加 `IMPORT.LOG`（CRLF）；`ACTIVATE.TXT` 和 `RESET.TXT` 两个指令文件；投放的文件只安装、不自动激活；OTA 模式期间暂停扫描 | M |
 | 设备自带网页（SoftAP）：单文件 vanilla JS，gzip 后 ≤48KB，超了构建失败；`GET /` 只在请求 `Accept: text/html` 时返回页面，否则仍返回 204；`/generate_204`、`/connectivity-check` 原样保留；`/api/v1/{info,vehicles,theme/sidecar,fs/put,fs/list,logs,sd,time}`，统一错误码；网页自己的 JS 用 32KB 分块上传。**设备网页只在 OTA 模式下可用**（进 OTA 会释放 BT，退出必须重启），所以导入完成后屏幕上提供「应用并重启」，验车计时从重启后 ELM 链路建立时开始 | L |
@@ -414,34 +414,25 @@ P0 基线与清理 ─▶ P1 契约与测试基建 ─▶ P2 存储底座 ─┬
   - `theme_store/` 和 `tools/gen_theme_store.py`（没有任何消费方）。
 - **构建配置：**
   - `main/export_path/CMakeLists.txt`、`filelist.txt`（SquareLine 导出的 stub，没被引用）；
-  - `main/CMakeLists.txt:1-2` 里定义了却从没用过的 GLOB 变量；
   - LVGL 的 examples/demos 编译项；用不到的 LVGL 控件开关；
   - `idf_component.yml` 里的 `knob`/`button`。
 - **SquareLine 残留：**
-  - `components/ui_comp_hook.c`、`ui_events.h`；
-  - `ui.h` 里约 25 行悬空的 `LV_IMG_DECLARE`/`LV_FONT_DECLARE`；
-  - `ui.c` 里不存在的 ScreenPageMain 和 EasterEgg 相关对象；`ui____initial_actions0`；
-  - `ui_helpers.c` 里 38 个没有调用方的 `_ui_*` 辅助函数（`_ui_screen_change` 保留）。
-- **不可达的页面：** `ui_ScreenPageOilWarn`，开机会创建但没有任何入口能切过去，功能已被 ChartAlarm 页取代；它写的 NVS 字段要保留位置，只是废弃不用。
+  - 早期列出的 `ui_comp_hook.c`、`ui_events.h`、`ScreenPageMain` 和 `ui____initial_actions0` 当前均不存在；
+  - 当前 `ui.h` 的图片/字体声明都有使用点；`ScreenPageEasterEgg` 已改作设备信息页，仍参与导航和定时更新；
+  - `ui_helpers.h` 里的未使用 `ui_anim_user_data_t` 已删除；当前 `_ui_screen_change` 和项目自定义 helper 均有调用方。
+- **不可达的页面：** `ui_ScreenPageOilWarn` 当前源码中已不存在；其退役 NVS 槽位 `rsv_brake_temp_warn_c` 仍保留以兼容旧配置布局。
 - **没有调用方的函数和变量：**
-  - `obd_data_cache.c` 里 10 个单项 getter；
-  - 里程统计整条链路：数据只在运行时累计、不持久化，也没有读取方；
-  - 油温诊断和校准 API；`elm327_ble_resume_after_ota`；
-  - `racechrono_ble_diy_get_adv_name/is_connected/set_ota_mode`、`device_identity_get`、`app_event_queue`、`ui_disp_item_scale`；
-  - `TCA9554` 示例代码里没用到的 API；`generate_wifi_password`；
-  - `ESPNOW_FORCE_SLAVE` 调试宏；
-  - 只写不读的全局变量（`g_lvgl_task_handle`、`imageLogo` 等）；
-  - `app_event.h` 里 6 个没有发送方的事件类型。
-- **主题引擎：** `theme_test.c` 和 `ui.c:1269` 的调用；系统页注册的空壳（`THEME_PAGE_TYPE_SYSTEM`、`create_fn`）。
+  - 早期列出的 OBD 单项 getter 和里程统计链路当前均已不存在；`obd_data_cache` 仅保留 RPM、motion 和完整快照读取；
+  - 早期列出的油温诊断/校准、OTA resume、RaceChrono 辅助 API、`ui_disp_item_scale`、`generate_wifi_password`、`ESPNOW_FORCE_SLAVE` 及只写全局变量候选当前均未在源码中定义；
+  - `device_identity_get` 被 API v1 handler 使用；TCA9554 的 `EXIO_Init`/`Set_EXIO` 被板级代码使用，均保留；
+  - `app_event` 当前的 3 种 ESP-NOW 事件都有实际发送方和 UI 消费方，保留事件队列；此前“6 个没有发送方”的判断已过期。
+- **主题引擎：** 旧清单中的 `theme_test.c`、`ui.c:1269` 调用、`THEME_PAGE_TYPE_SYSTEM` 和 `create_fn` 在当前源码中均不存在；全仓检索未发现对应实现或调用点，不再作为待删候选。
 - **开机动画：**
-  - `boot_media_mount` 里的空壳 API（unmount/recover/commit）；
-  - `boot_block_player` 的 `set_paths`、`s_*_path` 和两个没人用的 getter。
+  - 旧版 `boot_media_mount` 空壳 API（unmount/recover/commit）和 `boot_block_player` 路径配置/getter 已不在当前代码中；当前 `boot_media_*` 原始分区 API 被开机播放、上传和设备信息接口使用，不是删除候选。
 - **车型相关：**
-  - 没有任何 override 引用的 4 个油温公式；`CH_BOOST`/`CH_INTAKE` 两个没用到的通道；
-  - override 里从不被读取的 `forced_protocol`/`has_boost` 字段；
-  - `on_parsed_fuel_level`；`can_num`/`can_den`/`can_off`；
-  - 永远走不到的 0x140/0x360/0x0D1 硬编码路径。
-- **ST77916 驱动：** `esp_lcd_st77916.c` 里约 466 行被注释掉的初始化表（整张表运行时也到不了）。
+  - 早期列出的油温公式、`CH_BOOST`/`CH_INTAKE`、`on_parsed_fuel_level`、`can_num`/`can_den`/`can_off` 和 0x140/0x360/0x0D1 硬编码路径均不在当前固件源码中；
+  - `forced_protocol`/`has_boost` 仍由 `tools/vehicles/` 的旧车型导出、转换和 golden 序列工具使用，不能按无用字段删除。
+- **ST77916 驱动：** 旧清单提到的 `esp_lcd_st77916.c` 注释初始化表在当前路径/源码中不存在；`ST77916.c` 中三个按硬件配置编译的初始化表仍分别服务 V1、V2_NEW、V3，不是死代码。
 
 ### 6.2 被重构取代，在对应阶段完成后删除
 
@@ -450,11 +441,11 @@ P0 基线与清理 ─▶ P1 契约与测试基建 ─▶ P2 存储底座 ─┬
   - 油温枚举链；12 槽 switch；
   - 按车型名写死的分支（`strncmp("ZN/C6")`）。
   - 合计约 1300 行以上。
-- **P4/P5 完成后：**
-  - `tools/theme_packer/pack_theme.py`：和编辑器的打包器重复，而且字节序相反。删除，或改成大端后只留作开发工具；
-  - `tools/convert_rpm_flash.py` 和 `images/imgRpmFlash1-3.c`、`imgBootLogoCustom.c`、`gifSnake400.c`（约 10MB 源码），以及 `ui.h` 里的 `USE_CUSTOM_*`、`USE_GIF_*` 开关。这些是有文档的「客户定制」编译开关，迁到 SD 之后再删，同时改 DEVELOPMENT.md；
-  - `make_boot_block.py`，由 `make_video.py` 取代；
-  - 主题引擎里只认 `dial`/`ring` 的 `theme_get_asset` 映射，以及 `dial_background` 自动铺底（编辑器从不生成这个名字）；
+- **P4/P5 完成后（已完成，见下）：**
+  - `tools/theme_packer/pack_theme.py`：和编辑器的打包器重复，而且字节序相反。已删除——运行时主题统一用编辑器导出的 theme.bin；
+  - `tools/convert_rpm_flash.py` 和 `images/imgRpmFlash1-3.c`、`imgBootLogoCustom.c`、`gifSnake400.c`（约 10MB 源码），以及 `ui.h` 里的 `USE_CUSTOM_*`、`USE_GIF_*` 开关。已删除，RPM 自定义闪烁改成主题规则，同时改了 DEVELOPMENT.md；
+  - `make_boot_block.py`，已删除，由 `make_video.py` 取代；
+  - 主题引擎里只认 `dial`/`ring` 的 `theme_get_asset` 映射和 `dial_background` 自动铺底已从当前源码移除（全仓无对应符号/逻辑）；
   - 5–6 套平行的信号枚举（`CH_*`、`DISP_ITEM_*`、`obd.*` strcmp 链、`obd_snapshot_t`），统一到信号注册表。
 - **P2 完成后：** CMake 的 SPIFFS bootmedia 规则；两份重复的 flash 写入实现；两份重复的 SHA 辅助函数。
 
@@ -504,7 +495,7 @@ P0 基线与清理 ─▶ P1 契约与测试基建 ─▶ P2 存储底座 ─┬
 | 1 | 主题快照把 0.1bar 换成 PSI 时多除了 10（5bar 显示成 7PSI），需实车确认 | `ui.c` `ui_build_theme_snapshot` |
 | 2 | manifest 是不以 NUL 结尾的 16KB 缓冲，却交给 `cJSON_Parse`，会越界读 | `theme_loader.c:668` |
 | 3 | 编辑器的 `rgba8888` 是 4B/px，固件当成 3B/px 的 `TRUE_COLOR_ALPHA` 用，透明图会花屏。改为转换成 `RGB565A8`（见 5.7） | `theme_loader.c:739-741` |
-| 4 | `pack_theme.py` 按小端写 RGB565，和 `LV_COLOR_16_SWAP` 要求的大端相反 | `pack_theme.py:61` |
+| 4 | （已失效）`pack_theme.py` 按小端写 RGB565，和 `LV_COLOR_16_SWAP` 要求的大端相反——该脚本已随 P4/P5 删除，运行时主题统一用编辑器导出的 theme.bin，字节序由编辑器负责 | 已删除：`pack_theme.py:61` |
 | 5 | `theme_json_int` 对负数取整差 1（-120 变成 -119） | `theme_loader.c:898-904` |
 | 6 | 主题页左右滑动时旧屏对象不释放（`auto_del=false`） | `ui.c:957,969` |
 | 7 | CMake 生成的 bootmedia 是 SPIFFS 镜像，固件读的却是 raw 格式，所以按 release 刷完没有开机视频 | `main/CMakeLists.txt:104` |
@@ -616,9 +607,14 @@ P0 基线与清理 ─▶ P1 契约与测试基建 ─▶ P2 存储底座 ─┬
 | P0 | 固件死代码清理（6.1，app/bsp/theme 和 UI 两批） | ✅ |
 | P0 | 局部 bug 修复（第 7 节 #1、#2、#5、#10、#11、#16、#17、#19） | ✅ |
 | P1 | 契约文件、host 测试基建、`gen_layout.py`、`check_bss.py`、CI | ✅ |
-| P3/P4 | 纯 C 核心：规则引擎（对 38 组黄金向量）、车型 RPN 执行器与校验器、车型转换器 | 🔄 |
-| P0 | 上板基线测量 | ⏳（需要硬件，由你执行） |
-| P2–P6 | 分区 v2、SD、视频、集成、发布 | ⏳ |
+| P3/P4 | 纯 C 核心：规则引擎（对 38 组黄金向量）、车型 RPN 执行器与校验器、车型转换器（17 个 JSON） | ✅ |
+| P2–P6 | 分区 v2、SD 存储（导入/导出/主题库/开机视频）、ESP-NOW v6、设备网页、OTA、发布 | ✅ |
+| 全部 | 7 套 host 单测共 22 项全部通过（rules 5/5、vehicle 8/8、engine 1/1、espnow 1/1、media 1/1、theme 5/5、signal_store 1/1） | ✅ |
+| P0 | 上板基线测量、实车验证 | ⏳（需要硬件，由你执行） |
+
+代码/架构层面的重构已经完成：未内置的车型按需从 SD / App / 车型页安装；
+主题运行时统一吃编辑器 theme.bin；开机动画走新的 SD/bootmedia 视频格式；
+固件尚未在 `idf.py build` 下编译过，也没有上过真实硬件——下一步是上板测试。
 
 ## 附录 A：调研中产生的辅助材料
 

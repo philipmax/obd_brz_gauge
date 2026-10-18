@@ -250,7 +250,7 @@ static void test_actions_and_element_table(void)
     tr_inputs_t in = inputs(v, 0);
     tr_eval(p, &in);
     const tr_override_t *o = tr_result_override(p, 0);
-    CHECK(o && o->props == (TR_PROP_COLOR | TR_PROP_BG_COLOR) && o->color == 0x00FF00);
+    CHECK(o && o->props == TR_PROP_COLOR && o->color == 0x00FF00);
     o = tr_result_override(p, 1);
     CHECK(o && o->props == TR_PROP_VISIBLE && o->visible == 1);
     o = tr_result_override(p, 2);
@@ -263,6 +263,48 @@ static void test_actions_and_element_table(void)
     v[0] = -1;   // rule off → back to base: nothing touched
     tr_eval(p, &in);
     CHECK(tr_result_override(p, 0) == NULL && tr_result_override(p, 3) == NULL);
+    tr_program_free(p);
+}
+
+static void test_action_animation(void)
+{
+    tr_compile_cfg_t cfg = cfg_default();
+    cfg.elements = k_elems;
+    cfg.n_elements = 4;
+    tr_program_t *p = compile_str(
+        "{\"rules\":[{\"id\":\"fade\",\"trigger\":{\"type\":\"change\",\"source\":\"obd.speed\"},"
+        "\"apply\":[{\"target\":\"arc1\",\"set\":{\"color\":\"#ffffff\"},"
+        "\"animation\":{\"mode\":\"keyframes\",\"durationMs\":1000,"
+        "\"keyframes\":[{\"at\":0,\"value\":0},{\"at\":50,\"value\":80},{\"at\":100,\"value\":100}]}}]}]}",
+        &cfg, NULL);
+    CHECK(p->rules[0].transient_hold_ms == 1000.0);
+    CHECK(p->rules[0].actions[0].animation.mode == 2);
+    CHECK(p->rules[0].actions[0].animation.n_frames == 3);
+
+    double v[TU_N_SOURCES] = { 0 };
+    tr_inputs_t in = inputs(v, 1000.0);
+    in.changed_mask = UINT64_C(1) << 1;
+    const tr_result_t *res = tr_eval(p, &in);
+    const tr_override_t *o = tr_result_override(p, 0);
+    CHECK(res->n_active == 1 && o && o->animated_color);
+    CHECK(o && o->animation_progress == 0.0);
+
+    in.changed_mask = 0;
+    in.elapsed_ms = 1250.0;
+    res = tr_eval(p, &in);
+    o = tr_result_override(p, 0);
+    CHECK(res->n_active == 1 && o && fabs(o->animation_progress - 0.4) < 1e-9);
+
+    in.elapsed_ms = 2000.0;
+    res = tr_eval(p, &in);
+    CHECK(res->n_active == 0 && tr_result_override(p, 0) == NULL);
+    tr_program_free(p);
+
+    p = compile_str(
+        "{\"rules\":[{\"id\":\"timer\",\"trigger\":{\"type\":\"timer\",\"intervalMs\":250}}]}",
+        &cfg, NULL);
+    in = inputs(v, -100.0);
+    CHECK(tr_eval(p, &in)->n_active == 0);
     tr_program_free(p);
 }
 
@@ -430,6 +472,7 @@ int main(void)
     test_legacy_and_values();
     test_nan_inputs();
     test_actions_and_element_table();
+    test_action_animation();
     test_change_mask_and_ids();
     test_change_unmasked();
     test_alloc_and_errors();

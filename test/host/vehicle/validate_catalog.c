@@ -2,12 +2,15 @@
  * validate_catalog — run the device validator and compiler over profile
  * files on the host.
  *
- *   validate_catalog [--signals contracts/signals.json] [--quiet] <dir|file>...
+ *   validate_catalog [--strict] [--quiet] <dir|file>...
  *
- * A directory is treated as a catalog: every *.json in it is checked, the
- * file name must be "<id>.json" and ids must be unique. Each profile must
- * validate with zero errors, compile, pass vp_profile_check(), and every
- * formula is smoke-evaluated. Exit status 0 only if everything passes.
+ * Uses the firmware configuration (vp_validate_default_cfg()). A directory
+ * is treated as a catalog: every *.json in it is checked, the file name
+ * must be "<id>.vehicle.json" and ids must be unique. Each profile must
+ * validate with zero errors, compile, pass vp_profile_check(), fit the
+ * import limits (JSON <= VP_MAX_JSON_BYTES, blob <= VT_VEH_BLOB_MAX), and
+ * every formula is smoke-evaluated. --strict also fails on warnings.
+ * Exit status 0 only if everything passes.
  */
 #include <dirent.h>
 #include <stdio.h>
@@ -24,6 +27,7 @@
 
 static vp_validate_cfg_t s_cfg;
 static int s_quiet;
+static int s_strict;
 static char s_ids[MAX_FILES][32];
 static int s_n_ids;
 
@@ -57,7 +61,11 @@ static int check_file(const char *path, int catalog_mode)
     }
     vp_issues_init(&l, store, MAX_ISSUES);
     vp_validate_json(text, len, &s_cfg, &l);
-    if (l.n_errors) fail = 1;
+    if (l.n_errors || (s_strict && l.n_warnings)) fail = 1;
+    if (len > VP_MAX_JSON_BYTES) {
+        printf("    JSON is %u bytes, limit %u\n", (unsigned)len, (unsigned)VP_MAX_JSON_BYTES);
+        fail = 1;
+    }
     if (l.count && (fail || !s_quiet)) vt_print_issues(&l, "    ");
 
     if (!fail) {
@@ -69,6 +77,9 @@ static int check_file(const char *path, int catalog_mode)
             fail = 1;
         } else if (!vp_profile_check(p, p->total_size)) {
             printf("    compiled blob fails vp_profile_check\n");
+            fail = 1;
+        } else if (p->total_size > VT_VEH_BLOB_MAX) {
+            printf("    blob is %u bytes, NVS limit %u\n", (unsigned)p->total_size, (unsigned)VT_VEH_BLOB_MAX);
             fail = 1;
         }
     }
@@ -88,7 +99,7 @@ static int check_file(const char *path, int catalog_mode)
         if (catalog_mode) {
             char want[48];
             int k;
-            snprintf(want, sizeof(want), "%s.json", p->id);
+            snprintf(want, sizeof(want), "%s.vehicle.json", p->id);
             if (strcmp(base, want) != 0) {
                 printf("    file name must be %s\n", want);
                 fail = 1;
@@ -149,18 +160,13 @@ static int check_dir(const char *dir, int *files, int *failed)
 
 int main(int argc, char **argv)
 {
-    vt_registry_t reg = { NULL, 0, NULL };
     int i, files = 0, failed = 0, bad_args = 0;
 
-    s_cfg.registry = vt_default_registry;
-    s_cfg.n_registry = vt_default_registry_count;
+    s_cfg = *vp_validate_default_cfg();
     for (i = 1; i < argc; i++) {
         struct stat st;
-        if (!strcmp(argv[i], "--signals") && i + 1 < argc) {
-            if (vt_registry_load(argv[++i], &reg) != 0) return 2;
-            s_cfg.registry = reg.defs;
-            s_cfg.n_registry = reg.n;
-            printf("signal registry: %s (%u obd.* keys)\n", argv[i], (unsigned)reg.n);
+        if (!strcmp(argv[i], "--strict")) {
+            s_strict = 1;
             continue;
         }
         if (!strcmp(argv[i], "--quiet")) {
@@ -178,10 +184,9 @@ int main(int argc, char **argv)
         }
     }
     if (files == 0 && bad_args == 0) {
-        fprintf(stderr, "usage: %s [--signals signals.json] [--quiet] <dir|file>...\n", argv[0]);
+        fprintf(stderr, "usage: %s [--strict] [--quiet] <dir|file>...\n", argv[0]);
         return 2;
     }
     printf("validate_catalog: %d files, %d ok, %d failed\n", files, files - failed, failed);
-    vt_registry_free(&reg);
     return (failed || bad_args) ? 1 : 0;
 }

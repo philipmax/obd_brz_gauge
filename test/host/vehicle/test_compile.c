@@ -124,6 +124,9 @@ static void test_layout(void)
     VT_CHECK_FLT(sig[3].valid_lo, -20, 0);
     VT_CHECK_INT(sig[5].flags, VP_SIG_F_CLAMP);
     VT_CHECK_FLT(sig[5].clamp_hi, 20, 0);
+    VT_CHECK_INT(sig[0].num_id, 0x0001);              /* contracts/signals.json */
+    VT_CHECK(!strcmp(sig[0].unit, "rpm"));             /* registry default unit */
+    VT_CHECK(!strcmp(sig[5].unit, "bar"));
     VT_CHECK_INT(sig[6].num_id, reg_id("obd.gear"));
     VT_CHECK_INT(sig[6].fallback, VP_DERIVE_RATIO);
     VT_CHECK_INT(sig[7].num_id, VP_VEH_NUM_ID_BASE);
@@ -207,7 +210,7 @@ static void test_eval(void)
     {
         const uint8_t d[2] = { 0x1A, 0xF8 };
         VT_CHECK_INT(vp_profile_eval_source(p, sig[0].src_first, d, 2, &v), VP_RPN_OK);
-        VT_CHECK_FLT(v, 1727.5, 0);
+        VT_CHECK_FLT(v, 1726, 0);   /* 0x1AF8 = 6904 */
         VT_CHECK_INT(vp_profile_eval_source(p, sig[0].src_first, d, 1, &v), VP_RPN_ERR_DATA);
     }
     {
@@ -457,21 +460,9 @@ static void test_builtin(const char *generic_path)
 
 int main(int argc, char **argv)
 {
-    const char *generic_path = NULL;
-    vt_registry_t reg = { NULL, 0, NULL };
-    int i;
+    const char *generic_path = argc > 1 ? argv[1] : NULL;
 
-    s_cfg.registry = vt_default_registry;
-    s_cfg.n_registry = vt_default_registry_count;
-    for (i = 1; i < argc; i++) {
-        if (!strcmp(argv[i], "--signals") && i + 1 < argc) {
-            if (vt_registry_load(argv[++i], &reg) != 0) return 2;
-            s_cfg.registry = reg.defs;
-            s_cfg.n_registry = reg.n;
-        } else {
-            generic_path = argv[i];
-        }
-    }
+    s_cfg = *vp_validate_default_cfg();
     s_full_text = vt_read_file(VT_FIXTURE_DIR "/good_full.json", NULL);
     if (!s_full_text) {
         fprintf(stderr, "cannot read fixtures from %s\n", VT_FIXTURE_DIR);
@@ -486,6 +477,5 @@ int main(int argc, char **argv)
     test_builtin(generic_path);
     printf("%s test_builtin\n", vt_failures ? "?" : "PASS");
     free(s_full_text);
-    vt_registry_free(&reg);
     return VT_SUMMARY("test_compile");
 }

@@ -1,0 +1,99 @@
+{
+  "id": "mini.jcw_f56",
+  "legacy": {
+    "rev": "4b056c0",
+    "idx": 10,
+    "name": "JCW F56"
+  },
+  "init": ["ATZ", "ATE0", "ATL0", "ATS1", "ATH0", "ATAT1", "ATST19", "ATSP0", "ATSH7E0"],
+  "gap_ms": 30,
+  "requests": [
+    {
+      "sig": "obd.rpm",
+      "src": 0,
+      "hdr": "7E0",
+      "tx": "010C",
+      "class": "fast"
+    },
+    {
+      "sig": "obd.intake_temp",
+      "src": 0,
+      "hdr": "7E0",
+      "tx": "010F",
+      "class": "round"
+    },
+    {
+      "sig": "obd.speed",
+      "src": 0,
+      "hdr": "7E0",
+      "tx": "010D",
+      "class": "round"
+    },
+    {
+      "sig": "obd.coolant_temp",
+      "src": 0,
+      "hdr": "7E0",
+      "tx": "0105",
+      "class": "round"
+    },
+    {
+      "sig": "obd.load",
+      "src": 0,
+      "hdr": "7E0",
+      "tx": "0104",
+      "class": "round"
+    },
+    {
+      "sig": "obd.throttle",
+      "src": 0,
+      "hdr": "7E0",
+      "tx": "0111",
+      "class": "round"
+    },
+    {
+      "sig": "obd.oil_temp",
+      "src": 0,
+      "hdr": "7E0",
+      "tx": "225822",
+      "class": "round"
+    },
+    {
+      "sig": "obd.oil_temp",
+      "src": 1,
+      "hdr": "7E0",
+      "tx": "015C",
+      "class": "round"
+    },
+    {
+      "sig": "obd.battery_voltage",
+      "src": 0,
+      "hdr": "7E0",
+      "tx": "0142",
+      "class": "round"
+    },
+    {
+      "sig": "obd.boost",
+      "src": 0,
+      "hdr": "7E0",
+      "tx": "010B",
+      "class": "round"
+    },
+    {
+      "sig": "obd.afr",
+      "src": 0,
+      "hdr": "7E0",
+      "tx": "0144",
+      "class": "round"
+    }
+  ],
+  "requires": [],
+  "monitor": null,
+  "can": [],
+  "drivetrain": {
+    "fd": 3.824,
+    "tire_m": 0.308,
+    "gears": [3.923, 2.136, 1.276, 0.921, 0.756, 0.628],
+    "tol": 0.15
+  },
+  "notes": ["ATSP0: bus.proto is 0. Legacy sent ATSP with the saved or auto-detected protocol (nvs_user_cfg_t.protocol); v1 does the same (vp_engine_cfg_t.proto).", "obd.boost: legacy truncated (MAP-100)/10 to 0.1 bar; v1 stores 0.01 bar."]
+}

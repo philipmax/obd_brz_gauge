@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
-# One-click release: commit source → build → package release bins + latest.json → commit → push.
+# One-click release: commit source → reconfigure + build → package release bins
+# + latest.json → commit artifacts (build:) → push.
 #
 # Usage:  ./tools/release.sh "feat: your change message"
 #
 # Notes:
+#   - The source is committed FIRST and the build is reconfigured so CMake re-reads
+#     HEAD: the firmware's build tag / count and latest.json then all name the
+#     source commit N. The artifacts follow in a separate `build:` commit (N+1),
+#     as AGENTS.md requires. gen_release.py refuses a firmware whose embedded
+#     build tag differs from HEAD (the old "one release behind" bug).
+#   - With a clean tree the source commit is skipped and HEAD is released as is.
 #   - `--no-verify` skips the global git hooks (PythonPep8 at GIS-lm-build/git-hooks).
-#   - The source MUST be committed before building: gen_release.py derives
-#     firmware.count / build_tag from the current git HEAD.
-#   - Steps are skipped safely: if there is nothing to commit, the commit is skipped.
 #   - ESP-IDF is auto-activated. `idf.py` here is a shell *alias* (not a real
 #     binary), so the script sources the eim activation script and calls idf.py
 #     through its python interpreter directly — no manual env activation needed.
-#
-# FIXED: Issues from REFACTOR_PLAN.md §7 #12:
-#   - Build artifacts are committed in the SAME commit as the source (fixes one-version lag)
-#   - Build uses HEAD count consistently (source commit happens BEFORE build)
 set -euo pipefail
 
 MSG="${1:-feat: update}"
@@ -74,45 +74,42 @@ else
     fi
 fi
 
-# ---- 1. Stage ALL changes (source + any generated files) ----
+idf() {
+    if [ "$IDF_PY" = "idf.py" ]; then idf.py "$@"; else "$IDF_PY" "$IDF_TOOL" "$@"; fi
+}
+
+# ---- 1. Commit the source (never the build artifacts) ----
 git add -A
-
-# Check if there's anything to release
+git reset -q -- build/ firmware/release/ 2>/dev/null || true
 if git diff --cached --quiet; then
-    echo "Nothing to commit — working tree is clean."
-    exit 0
-fi
-
-# ---- 2. Build BEFORE committing, so build artifacts go in the same commit ----
-# (Fixes one-version lag: build reads current HEAD, and we commit everything together)
-if [ "$IDF_PY" = "idf.py" ]; then
-    idf.py build
+    echo "No source changes — releasing HEAD as is."
 else
-    "$IDF_PY" "$IDF_TOOL" build
+    git commit --no-verify -m "$MSG"
 fi
 
-# ---- 3. Copy build/*.bin → firmware/release/ and write latest.json ----
+# ---- 2. Build from HEAD (reconfigure: CMake reads the git count at configure time) ----
+idf reconfigure build
+
+# ---- 3. Copy build/*.bin → firmware/release/ and write latest.json (checks the build tag) ----
 python3 tools/gen_release.py
 
-# ---- 4. Force-add whitelisted build artifacts (they're in .gitignore by default) ----
-# Per REFACTOR_PLAN.md P0: only these 4 build outputs are tracked for the web flasher.
+# ---- 4. Commit the whitelisted build artifacts (.gitignore keeps build/* out by default) ----
 git add -f \
     build/obd_brz_gauge.bin \
     build/bootloader/bootloader.bin \
     build/partition_table/partition-table.bin \
-    build/ota_data_initial.bin 2>/dev/null || true
-
-# Also add firmware/release/ (where gen_release.py copies them)
+    build/ota_data_initial.bin \
+    build/bootmedia.bin
 git add firmware/release/
+SRC_COUNT="$(git rev-list --count HEAD)"
+SRC_HASH="$(git rev-parse --short=12 HEAD)"
+if git diff --cached --quiet; then
+    echo "Artifacts unchanged — nothing to commit."
+else
+    git commit --no-verify -m "build: release firmware count ${SRC_COUNT} (${SRC_HASH})"
+fi
 
-# ---- 5. Commit everything (source + build artifacts) in ONE commit ----
-# This ensures the firmware's embedded count matches the commit it's built from.
-git commit --no-verify -m "$MSG"
-
-# ---- 6. Push ----
+# ---- 5. Push ----
 git push --no-verify
 
-FINAL_HASH="$(git rev-parse --short HEAD)"
-FINAL_COUNT="$(git rev-list --count HEAD)"
-echo "✓ Released: $FINAL_HASH  count=$FINAL_COUNT"
-echo "  Firmware build tag and commit count are now consistent."
+echo "✓ Released firmware count=${SRC_COUNT} git=${SRC_HASH} (artifacts at $(git rev-parse --short HEAD))"

@@ -1,0 +1,63 @@
+Command queue copy evidence — 2026-10-14
+ESP-IDF 5.5.3 / Xtensa GCC 14.2.0
+baseline vp_engine.c SHA256 531291fcdc99bac923c62e10223c0e7709b873dab4c3312a02d518c89e47261e
+production vp_engine.c SHA256 cac95d32764bab76ff4b4a1927525397df72bedf336631595fbb8cdc952a9a6f
+
+normal before text	   data	    bss	    dec	    hex	filename
+  12288	      0	      0	  12288	   3000	/tmp/queue-copy-normal-before.o
+normal before engine sizeof 5016
+normal after text	   data	    bss	    dec	    hex	filename
+  12285	      0	      0	  12285	   2ffd	/tmp/queue-copy-normal-after.o
+normal static frame changes {}
+/Users/parklu/personProject/obd_brz_gauge/main/vehicle/vp_engine.c:310:20:q_push	48	static
+/Users/parklu/personProject/obd_brz_gauge/main/vehicle/vp_engine.c:1792:10:vp_engine_run	128	static
+normal after engine sizeof 5016
+stats before text	   data	    bss	    dec	    hex	filename
+  12288	      0	      0	  12288	   3000	/tmp/queue-copy-stats-before.o
+stats before engine sizeof 5016
+stats after text	   data	    bss	    dec	    hex	filename
+  12285	      0	      0	  12285	   2ffd	/tmp/queue-copy-stats-after.o
+stats static frame changes {}
+/Users/parklu/personProject/obd_brz_gauge/main/vehicle/vp_engine.c:310:20:q_push	48	static
+/Users/parklu/personProject/obd_brz_gauge/main/vehicle/vp_engine.c:1792:10:vp_engine_run	128	static
+stats after engine sizeof 5016
+no-slot before text	   data	    bss	    dec	    hex	filename
+  12288	      0	      0	  12288	   3000	/tmp/queue-copy-no-slot-before.o
+no-slot before engine sizeof 5016
+no-slot after text	   data	    bss	    dec	    hex	filename
+  12285	      0	      0	  12285	   2ffd	/tmp/queue-copy-no-slot-after.o
+no-slot static frame changes {}
+/Users/parklu/personProject/obd_brz_gauge/main/vehicle/vp_engine.c:310:20:q_push	48	static
+/Users/parklu/personProject/obd_brz_gauge/main/vehicle/vp_engine.c:1792:10:vp_engine_run	128	static
+no-slot after engine sizeof 5016
+normal: q_push snprintf relocation removed; memset retained; overflow elog retained
+stats: q_push snprintf relocation removed; memset retained; overflow elog retained
+no-slot: q_push snprintf relocation removed; memset retained; overflow elog retained
+
+baseline reference passed
+copy20 compiled then rejected (1)
+truncate18 compiled then rejected (1)
+dirty-tail compiled then rejected (1)
+req-zero compiled then rejected (1)
+bad-wrap compiled then rejected (1)
+drop-mutates compiled then rejected (1)
+
+engine: 100% tests passed, 0 tests failed out of 3
+espnow: 100% tests passed, 0 tests failed out of 4
+media: 100% tests passed, 0 tests failed out of 7
+rules: 100% tests passed, 0 tests failed out of 6
+theme: 100% tests passed, 0 tests failed out of 6
+vehicle: 100% tests passed, 0 tests failed out of 12
+signal_store: 100% tests passed, 0 tests failed out of 4
+storage: 100% tests passed, 0 tests failed out of 2
+TOTAL: 44
+
+normal complete ESP32-S3 firmware: app size 0x2857b0; SHA256 a911145c00b172839592340983ac75ae107cee8cc8c334675b68a26127fd1e73
+
+stats complete ESP32-S3 firmware: app size 0x286020; SHA256 73ebbffcf3f68310af5635377943ac38c39ec031475756a279e905cfd563835c
+
+no-slot complete ESP32-S3 firmware: app size 0x276170; SHA256 d89d8f6ab8bde13b4f72dcef5a139353ed73e8e9c76535a98752d6a82a7db28f
+
+Only the non-full push/pop/checksum path was timed on the host.
+Target object totals do not establish linked-image savings or real-device speedup.
+All emitted static frame dictionaries and engine sizeof are unchanged.

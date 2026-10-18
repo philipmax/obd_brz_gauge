@@ -145,6 +145,12 @@ static double js_max(double a, double b)
     return a > b ? a : b;
 }
 
+static double js_min(double a, double b)
+{
+    if (isnan(a) || isnan(b)) return NAN;
+    return a < b ? a : b;
+}
+
 // ---------------- public helpers ----------------
 
 bool tr_parse_color(const char *s, uint32_t *rgb)
@@ -312,8 +318,38 @@ static uint8_t color_props(tr_kind_t kind)
     case TR_KIND_IMAGE:
     case TR_KIND_POINTER: return TR_PROP_TINT;
     case TR_KIND_ARC:
-    case TR_KIND_BAR:     return TR_PROP_COLOR | TR_PROP_BG_COLOR;
+    case TR_KIND_BAR:     return TR_PROP_COLOR;
     default:              return TR_PROP_COLOR;
+    }
+}
+
+static void parse_animation(const cJSON *json, tr_animation_t *out)
+{
+    if (!cJSON_IsObject(json)) return;
+    const cJSON *mode = jget(json, "mode");
+    if (!cJSON_IsString(mode) || !mode->valuestring) return;
+    if (strcmp(mode->valuestring, "fade") == 0) out->mode = 1;
+    else if (strcmp(mode->valuestring, "keyframes") == 0) out->mode = 2;
+    else if (strcmp(mode->valuestring, "strobe") == 0) out->mode = 3;
+    else return;
+    out->duration_ms = js_max(100.0, js_num_or(jget(json, "durationMs"), 1000.0));
+    out->frequency_hz = js_max(0.5, js_num_or(jget(json, "frequencyHz"), 4.0));
+    if (out->frequency_hz > 8.0) out->frequency_hz = 8.0;
+    const cJSON *frames = jget(json, "keyframes");
+    if (out->mode != 2 || !cJSON_IsArray(frames)) return;
+    for (const cJSON *f = frames->child; f && out->n_frames < TR_MAX_KEYFRAMES; f = f->next) {
+        const cJSON *at = jget(f, "at");
+        const cJSON *value = jget(f, "value");
+        if (!cJSON_IsNumber(at) || !cJSON_IsNumber(value)) continue;
+        out->frame_at[out->n_frames] = js_max(0.0, js_min(100.0, at->valuedouble)) / 100.0;
+        out->frame_value[out->n_frames] = js_max(0.0, js_min(100.0, value->valuedouble)) / 100.0;
+        out->n_frames++;
+    }
+    // Editor defaults to a linear 0..100 curve when no usable frames exist.
+    if (!out->n_frames) {
+        out->n_frames = 2;
+        out->frame_at[0] = out->frame_value[0] = 0.0;
+        out->frame_at[1] = out->frame_value[1] = 1.0;
     }
 }
 
@@ -330,6 +366,7 @@ static bool build_action(builder_t *b, const cJSON *act)
     const cJSON *text = jget(set, "text");
     const cJSON *visible = jget(set, "visible");
     const cJSON *asset = jget(set, "asset");
+    const cJSON *animation = jget(act, "animation");
 
     if (b->dry) {
         b->n_actions++;
@@ -341,6 +378,7 @@ static bool build_action(builder_t *b, const cJSON *act)
     }
 
     tr_action_t *a = &b->actions[b->n_actions++];
+    parse_animation(animation, &a->animation);
     a->target = target_index(b, target->valuestring);
     tr_kind_t kind = (tr_kind_t)b->targets[a->target].kind;
 
@@ -473,6 +511,11 @@ static void build_rule(builder_t *b, const cJSON *jr)
     r->conds = r->n_conds ? &b->conds[cond_base] : NULL;
     r->n_actions = (uint8_t)kept;
     r->actions = kept ? &b->actions[act_base] : NULL;
+    for (uint8_t j = 0; j < r->n_actions; j++) {
+        const tr_animation_t *anim = &r->actions[j].animation;
+        if (anim->mode && anim->duration_ms > r->transient_hold_ms)
+            r->transient_hold_ms = anim->duration_ms;
+    }
 }
 
 static void build_page(builder_t *b, const cJSON *page)

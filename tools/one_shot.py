@@ -10,7 +10,7 @@ one_shot.py —— 一键全流程：起伪 ELM327 服务器 → 你录一遍 �
   2. 打印手机 Car Scanner 的操作指引
   3. 等你录完、导出 CSV，回来粘贴路径（或直接回车自动找）；中途 Ctrl+C 也会停服务器并尝试分析
   4. 停掉服务器（触发它导出 probe_log / elm_pids）
-  5. 调 analyze_proble.py auto 一条命令出 pids_full.csv
+  5. 调 analyze_probe.py auto 一条命令出 pids_full.csv
 """
 
 import glob
@@ -100,7 +100,7 @@ def main():
         else:
             if interrupted:
                 print("\n还没导出 Car Scanner 的 CSV。先把记录导出到本目录，然后跑：")
-                print(f"   python3 analyze_proble.py auto "
+                print(f"   python3 analyze_probe.py auto "
                       f"--probe {os.path.basename(plog)} --app <导出的.csv>")
                 sys.exit(0)
             app_csv = input("没找到候选 CSV，请手动粘贴路径: ").strip()
@@ -112,7 +112,7 @@ def main():
     # 4) 一键分析
     print(f"\n[4/4] 分析中... probe={os.path.basename(plog)}, app={os.path.basename(app_csv)}\n")
     r = subprocess.run(
-        [sys.executable, os.path.join(HERE, "analyze_proble.py"), "auto",
+        [sys.executable, os.path.join(HERE, "analyze_probe.py"), "auto",
          "--probe", plog, "--app", app_csv, "--pids", pids])
     sys.exit(r.returncode)
 

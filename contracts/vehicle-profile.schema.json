@@ -9,9 +9,7 @@
     "schema",
     "id",
     "rev",
-    "name",
-    "bus",
-    "signals"
+    "name"
   ],
   "properties": {
     "schema": {
@@ -78,7 +76,8 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 12,
-          "description": "ATSPn: 0 = automatic, 1..9, 10..12 = A..C."
+          "default": 0,
+          "description": "ATSPn: omitted = 0; reuse the saved or already-detected protocol, then auto-detect when none is available. 1..9 and 10..12 select A..C explicitly."
         },
         "hdr": {
           "$ref": "#/$defs/txHeader"
@@ -191,11 +190,20 @@
     },
     "signals": {
       "type": "array",
-      "minItems": 1,
+      "minItems": 0,
       "maxItems": 48,
       "items": {
         "$ref": "#/$defs/signal"
       }
+    },
+    "defaults": {
+      "type": "string",
+      "enum": [
+        "obd2",
+        "none"
+      ],
+      "default": "obd2",
+      "description": "Omitted standard signals inherit Generic OBD2 sourced definitions. Explicit declarations replace the whole signal; ratio gear and drivetrain are never inherited. Firmware validates effective limits after expansion."
     }
   },
   "allOf": [
@@ -353,6 +361,29 @@
                 "minItems": 1
               }
             }
+          }
+        }
+      }
+    },
+    {
+      "title": "defaults none requires a nonempty explicit signals array",
+      "if": {
+        "required": [
+          "defaults"
+        ],
+        "properties": {
+          "defaults": {
+            "const": "none"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "signals"
+        ],
+        "properties": {
+          "signals": {
+            "minItems": 1
           }
         }
       }
@@ -880,12 +911,6 @@
           "type": "string",
           "pattern": "^[\\x20-\\x7E]{1,7}$"
         },
-        "decimals": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 3,
-          "description": "veh.* only: internal value = R(v * 10^decimals). Default 0."
-        },
         "rate": {
           "enum": [
             "round",
@@ -955,36 +980,62 @@
         },
         "notes": {
           "$ref": "#/$defs/notes"
+        },
+        "disabled": {
+          "type": "boolean",
+          "default": false
         }
       },
       "allOf": [
         {
-          "title": "derive: ratio has no sources, every other signal needs src",
+          "title": "disabled signals suppress inheritance and allow only id, disabled and notes",
           "if": {
             "required": [
-              "derive"
+              "disabled"
             ],
             "properties": {
-              "derive": {
-                "const": "ratio"
+              "disabled": {
+                "const": true
               }
             }
           },
           "then": {
-            "not": {
-              "anyOf": [
-                {
-                  "required": [
-                    "src"
-                  ]
-                }
+            "propertyNames": {
+              "enum": [
+                "id",
+                "disabled",
+                "notes"
               ]
             }
           },
           "else": {
-            "required": [
-              "src"
-            ]
+            "title": "derive: ratio has no sources, every other signal needs src",
+            "if": {
+              "required": [
+                "derive"
+              ],
+              "properties": {
+                "derive": {
+                  "const": "ratio"
+                }
+              }
+            },
+            "then": {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "src"
+                    ]
+                  }
+                ]
+              }
+            },
+            "else": {
+              "required": [
+                "src"
+              ]
+            }
           }
         },
         {
@@ -1052,22 +1103,6 @@
                 "not": {
                   "const": "every"
                 }
-              }
-            }
-          }
-        },
-        {
-          "title": "decimals only for veh.*",
-          "if": {
-            "required": [
-              "decimals"
-            ]
-          },
-          "then": {
-            "properties": {
-              "id": {
-                "type": "string",
-                "pattern": "^veh\\."
               }
             }
           }

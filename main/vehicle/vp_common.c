@@ -2,6 +2,10 @@
 
 #include <string.h>
 
+#ifdef ESP_PLATFORM
+#include "esp_rom_crc.h"
+#endif
+
 static int hex_nibble(char c)
 {
     if (c >= '0' && c <= '9') return c - '0';
@@ -199,6 +203,12 @@ bool vp_ascii_ok(const char *s, size_t max)
 
 uint32_t vp_crc32(uint32_t crc, const void *data, size_t len)
 {
+#ifdef ESP_PLATFORM
+    /* ESP32 size_t and the ROM length are both 32-bit. Preserve empty-input
+     * semantics without passing a possibly NULL pointer to the ROM API. */
+    if (!len) return crc;
+    return esp_rom_crc32_le(crc, (const uint8_t *)data, (uint32_t)len);
+#else
     const uint8_t *p = (const uint8_t *)data;
     size_t i;
     int b;
@@ -211,4 +221,5 @@ uint32_t vp_crc32(uint32_t crc, const void *data, size_t len)
         }
     }
     return ~crc;
+#endif
 }

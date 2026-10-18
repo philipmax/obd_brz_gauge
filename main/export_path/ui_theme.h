@@ -41,10 +41,7 @@ typedef enum {
 } ui_color_role_t;
 
 // Semantic colors — identical across ALL themes. Do not theme these.
-#define UI_SEM_ALERT   0xFF4D4D   // alarm / over-threshold text
 #define UI_SEM_FLASH   0xFF0000   // full-screen RPM flash background
-#define UI_SEM_ON      0x06D6A0   // toggle ON / positive state
-#define UI_SEM_WARN    0xFFD166   // caution (oil pressure etc.)
 
 // Bezel (outer ring) style. Reserved for future variants — today only the
 // ring color is themed (see ui_helpers_create_ring). Extend here later with

@@ -3,132 +3,132 @@
   "id": "porsche.997_1",
   "rev": 1,
   "name": "POS 997.1",
-  "drivetrain": {
-    "final_drive": 3.89,
-    "tire_radius_m": 0.335,
-    "gear_tolerance": 0.15,
-    "gears": [
-      {
-        "gear": 1,
-        "ratio": 3.67
-      },
-      {
-        "gear": 2,
-        "ratio": 2.05
-      },
-      {
-        "gear": 3,
-        "ratio": 1.46
-      },
-      {
-        "gear": 4,
-        "ratio": 1.13
-      },
-      {
-        "gear": 5,
-        "ratio": 0.97
-      },
-      {
-        "gear": 6,
-        "ratio": 0.84
-      }
-    ]
+  "origin": {
+    "from": "legacy 4b056c0",
+    "legacy_idx": 13,
+    "legacy_name": "POS 997.1"
   },
   "bus": {
-    "protocol": 6,
-    "_protocol_note": "ISO 15765-4 CAN 11-bit 500k"
+    "proto": 6
+  },
+  "drivetrain": {
+    "fd": 3.89,
+    "tire_m": 0.335,
+    "gears": [3.67, 2.05, 1.46, 1.13, 0.97, 0.84],
+    "tol": 0.15
   },
   "signals": [
     {
-      "key": "obd.rpm",
+      "id": "obd.rpm",
+      "rate": "every",
       "src": [
         {
-          "req": "01 0C",
-          "scale": 0.25,
-          "offset": 0.0
+          "req": "010C",
+          "len": 2,
+          "expr": "(A*256+B)/4",
+          "rpn": [["A", 0], ["k", 256], "*", ["A", 1], "+", ["k", 4], "/"]
         }
       ]
     },
     {
-      "key": "obd.speed",
+      "id": "obd.intake_temp",
       "src": [
         {
-          "req": "01 0D",
-          "scale": 1.0,
-          "offset": 0.0
+          "req": "010F",
+          "len": 1,
+          "expr": "A-40",
+          "rpn": [["A", 0], ["k", 40], "-"]
         }
       ]
     },
     {
-      "key": "obd.coolant_temp",
+      "id": "obd.speed",
+      "post": {
+        "zero_le": 2
+      },
       "src": [
         {
-          "req": "01 05",
-          "scale": 1.0,
-          "offset": -40.0
+          "req": "010D",
+          "len": 1,
+          "expr": "A",
+          "rpn": [["A", 0]]
         }
       ]
     },
     {
-      "key": "obd.tps",
+      "id": "obd.coolant_temp",
       "src": [
         {
-          "req": "01 11",
-          "scale": 0.39215686274509803,
-          "offset": 0.0
+          "req": "0105",
+          "len": 1,
+          "expr": "A-40",
+          "rpn": [["A", 0], ["k", 40], "-"]
         }
       ]
     },
     {
-      "key": "obd.load",
+      "id": "obd.load",
       "src": [
         {
-          "req": "01 04",
-          "scale": 0.39215686274509803,
-          "offset": 0.0
+          "req": "0104",
+          "len": 1,
+          "expr": "A*100/255",
+          "rpn": [["A", 0], ["k", 100], "*", ["k", 255], "/"]
         }
       ]
     },
     {
-      "key": "obd.intake_temp",
+      "id": "obd.throttle",
       "src": [
         {
-          "req": "01 0F",
-          "scale": 1.0,
-          "offset": -40.0
+          "req": "0111",
+          "len": 1,
+          "expr": "A*100/255",
+          "rpn": [["A", 0], ["k", 100], "*", ["k", 255], "/"]
         }
       ]
     },
     {
-      "key": "obd.battery",
+      "id": "obd.oil_temp",
+      "valid": [-20, 150],
+      "filter": "temp_hyst",
       "src": [
         {
-          "req": "01 42",
-          "scale": 0.001,
-          "offset": 0.0
+          "req": "015C",
+          "len": 1,
+          "valid": [-40, 215],
+          "expr": "A-40",
+          "rpn": [["A", 0], ["k", 40], "-"]
         }
       ]
     },
     {
-      "key": "obd.oil_temp",
+      "id": "obd.battery_voltage",
+      "unit": "mV",
       "src": [
         {
-          "req": "01 5C",
-          "scale": 1.0,
-          "offset": -40.0,
-          "bytes": 1,
-          "byte_index": 0
+          "req": "0142",
+          "len": 2,
+          "expr": "A*256+B",
+          "rpn": [["R", 0, 16, "be"]]
         }
       ]
     },
     {
-      "key": "obd.oil_pressure",
+      "id": "obd.afr",
       "src": [
         {
-          "req": "adc",
-          "_note": "external ADS1115 sensor"
+          "req": "0144",
+          "len": 2,
+          "valid": [8, 22],
+          "expr": "(A*256+B)*14.7/32768",
+          "rpn": [["R", 0, 16, "be"], ["k", 14.7], "*", ["k", 32768], "/"]
         }
       ]
+    },
+    {
+      "id": "obd.gear",
+      "derive": "ratio"
     }
   ]
 }

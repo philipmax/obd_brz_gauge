@@ -1,0 +1,26 @@
+ESP-IDF 5.5.3 / Xtensa GCC 14.2.0; compile_commands.json flags from the three target trees.
+size text includes readonly data; .su reports static frames, not maximum task stack depth.
+normal before text	   data	    bss	    dec	    hex	filename
+  12317	      0	      0	  12317	   301d	/tmp/poll-plan-normal-before.o
+normal before engine sizeof 5016
+normal after text	   data	    bss	    dec	    hex	filename
+  12288	      0	      0	  12288	   3000	/tmp/poll-plan-normal-after.o
+normal all emitted static frame sizes unchanged
+REPO/main/vehicle/vp_engine.c:1789:10:vp_engine_run	128	static
+normal after engine sizeof 5016
+stats before text	   data	    bss	    dec	    hex	filename
+  12317	      0	      0	  12317	   301d	/tmp/poll-plan-stats-before.o
+stats before engine sizeof 5016
+stats after text	   data	    bss	    dec	    hex	filename
+  12288	      0	      0	  12288	   3000	/tmp/poll-plan-stats-after.o
+stats all emitted static frame sizes unchanged
+REPO/main/vehicle/vp_engine.c:1789:10:vp_engine_run	128	static
+stats after engine sizeof 5016
+no-slot before text	   data	    bss	    dec	    hex	filename
+  12317	      0	      0	  12317	   301d	/tmp/poll-plan-no-slot-before.o
+no-slot before engine sizeof 5016
+no-slot after text	   data	    bss	    dec	    hex	filename
+  12288	      0	      0	  12288	   3000	/tmp/poll-plan-no-slot-after.o
+no-slot all emitted static frame sizes unchanged
+REPO/main/vehicle/vp_engine.c:1789:10:vp_engine_run	128	static
+no-slot after engine sizeof 5016

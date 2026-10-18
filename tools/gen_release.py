@@ -15,13 +15,15 @@ It does two things:
 
 The companion app compares `firmware.count` here against the device's own
 manifest to decide whether an update is available. `count` comes from the
-current git HEAD, so remember to `git commit` your code *before* building
-(see docs/DEVELOPMENT.md).
+current git HEAD, so the source must be committed *before* building, and the
+build reconfigured so CMake re-reads HEAD (tools/release.sh does both). The
+script refuses to run when the firmware's embedded build tag does not match
+HEAD.
 
-REFACTOR_PLAN.md P6 additions:
-  - Adds `layout` (partition layout_id) and `flash_files` (web flasher map) to manifest
-  - Validates firmware image ≤ 3MB (0x300000), warns at 90%
-  - Validates bootmedia ≤ 4.75MB (0x4C0000) if present
+Checks:
+  - firmware image <= 0x300000 (ota slot), warning above 90 %;
+  - bootmedia.bin is the raw layout [manifest padded with 0xFF to 4 KB][bin]
+    (not a SPIFFS image), distributed for installation on SD.
 """
 
 import hashlib
@@ -42,7 +44,8 @@ LAYOUT_ID = 0x94752AA3
 
 # Size limits (partition layout v2)
 MAX_FIRMWARE_SIZE = 0x300000      # 3 MB per OTA slot
-MAX_BOOTMEDIA_SIZE = 0x4C0000     # 4.75 MB bootmedia partition
+MAX_BOOTMEDIA_SIZE = 0          # retired writable Flash media capacity
+BOOTMEDIA_MANIFEST_MAX = 0x1000   # raw bootmedia: manifest padded with 0xFF to 4 KB
 FIRMWARE_WARN_PCT = 90            # warn if firmware exceeds this % of MAX
 
 # Device block must stay in sync with main/app_obd_dsp/device_identity.c.
@@ -111,20 +114,30 @@ def main():
         pct = fw_size * 100.0 / MAX_FIRMWARE_SIZE
         print(f"✓ Firmware size: {fw_size} bytes ({pct:.1f}% of 3 MB limit)")
 
-    # 1b. Validate bootmedia size if present
-    bootmedia_path = os.path.join(BUILD_DIR, "bootmedia.bin")
-    if os.path.isfile(bootmedia_path):
-        bm_size = os.path.getsize(bootmedia_path)
-        if bm_size > MAX_BOOTMEDIA_SIZE:
-            print(f"⚠️  WARNING: bootmedia.bin {bm_size} bytes exceeds {MAX_BOOTMEDIA_SIZE} bytes (4.75 MB partition)")
-        else:
-            print(f"✓ bootmedia size: {bm_size} bytes")
+    # 1b. Validate bootmedia: raw layout (tools/make_bootmedia_raw.py) and size.
+    bm_path = os.path.join(RELEASE_DIR, "bootmedia.bin")
+    bm_size = os.path.getsize(bm_path)
+    with open(bm_path, "rb") as f:
+        bm_head = f.read(BOOTMEDIA_MANIFEST_MAX)
+    if bm_size <= BOOTMEDIA_MANIFEST_MAX or not (0x61 <= bm_head[0] <= 0x7A):
+        sys.exit("ERROR: bootmedia.bin is not the raw [manifest 4 KB][bin] layout "
+                 "(SPIFFS image?) - rebuild it with tools/make_bootmedia_raw.py")
+    print(f"✓ bootmedia size: {bm_size} bytes (raw)")
 
     # 2. Build the version metadata from the current git HEAD.
     branch = git("rev-parse", "--abbrev-ref", "HEAD")
     count = int(git("rev-list", "--count", "HEAD"))
     short = git("rev-parse", "--short=12", "HEAD")
     branch_safe = re.sub(r"[^A-Za-z0-9._-]", "_", branch)
+    build_tag = f"{branch_safe}-{count}-{short}"
+
+    # 2a. The firmware embeds OBD_GAUGE_BUILD_TAG from CMake's configure-time
+    #     HEAD. A mismatch means it was built before the last commit (the old
+    #     "one release behind" bug) - never publish that.
+    with open(fw_path, "rb") as f:
+        if build_tag.encode() not in f.read():
+            sys.exit(f"ERROR: firmware was not built from HEAD ({build_tag}).\n"
+                     "Commit first, then `idf.py reconfigure build` (or use tools/release.sh).")
 
     # built timestamp from the freshly copied firmware image (its build mtime).
     fw_path = os.path.join(RELEASE_DIR, "obd_brz_gauge.bin")
@@ -135,15 +148,12 @@ def main():
         p = os.path.join(RELEASE_DIR, rel)
         files[key] = {"path": rel, "size": os.path.getsize(p), "sha256": sha256(p)}
 
-    # Flash addresses for web flasher complete mode (REFACTOR_PLAN.md P6)
+    # Complete-flash map (offsets from partitions.csv). Custom media is SD-only.
     flash_files = {
         "0x0": "bootloader/bootloader.bin",
         "0x8000": "partition_table/partition-table.bin",
         "0xf000": "ota_data_initial.bin",
         "0x20000": "obd_brz_gauge.bin",
-        # Optional files (web flasher may skip these):
-        # "0x620000": "theme.bin",        # user-provided theme
-        # "0xA20000": "bootmedia.bin",    # boot animation
     }
 
     manifest = {
@@ -157,7 +167,7 @@ def main():
         "firmware": {
             "project": PROJECT,
             "version": VERSION,
-            "build_tag": f"{branch_safe}-{count}-{short}",
+            "build_tag": build_tag,
             "git": short,
             "branch": branch,
             "count": count,
@@ -167,6 +177,8 @@ def main():
         },
         "files": files,
         "flash_files": flash_files,
+        "resource_storage": "sd",
+        "sd_files": {"/OBD/BOOT/bootmedia.raw": "bootmedia.bin"},
     }
 
     out = os.path.join(RELEASE_DIR, "latest.json")

@@ -155,24 +155,41 @@ bool vp_rpn_extract_raw(const uint8_t *data, size_t len, uint16_t start,
                         uint8_t bits, uint8_t flags, int64_t *out)
 {
     uint32_t v = 0;
-    uint8_t i;
+    unsigned byte = start >> 3;
+    unsigned offset = start & 7u;
+    unsigned remaining = bits;
 
     if (!data || !out || bits == 0 || bits > 32) return false;
-    if ((uint64_t)start + bits > (uint64_t)len * 8u) return false;
+    if (((uint32_t)start + bits + 7u) / 8u > len) return false;
 
+    /* Consume only the bytes touched by the field (at most five). No
+     * unaligned word loads or reads beyond the declared payload length. */
     if (flags & VP_RAW_BE) {
-        for (i = 0; i < bits; i++) {
-            uint32_t bit = (uint32_t)start + i;
-            v = (v << 1) | ((data[bit >> 3] >> (7u - (bit & 7u))) & 1u);
+        while (remaining) {
+            unsigned take = 8u - offset;
+            if (take > remaining) take = remaining;
+            uint32_t mask = (1u << take) - 1u;
+            v = (v << take) | ((data[byte++] >> (8u - offset - take)) & mask);
+            remaining -= take;
+            offset = 0;
         }
     } else {
-        for (i = 0; i < bits; i++) {
-            uint32_t bit = (uint32_t)start + i;
-            v |= (uint32_t)((data[bit >> 3] >> (bit & 7u)) & 1u) << i;
+        unsigned shift = 0;
+        while (remaining) {
+            unsigned take = 8u - offset;
+            if (take > remaining) take = remaining;
+            uint32_t mask = (1u << take) - 1u;
+            v |= ((uint32_t)(data[byte++] >> offset) & mask) << shift;
+            remaining -= take;
+            shift += take;
+            offset = 0;
         }
     }
-    if ((flags & VP_RAW_SIGNED) && (v & (1u << (bits - 1)))) {
-        *out = (int64_t)v - ((int64_t)1 << bits);
+    if (flags & VP_RAW_SIGNED) {
+        /* Flip the sign bit, then subtract its weight. This handles 32-bit
+         * fields without a data-dependent branch or signed-shift overflow. */
+        uint32_t sign = 1u << (bits - 1);
+        *out = (int64_t)(v ^ sign) - sign;
     } else {
         *out = (int64_t)v;
     }
@@ -182,21 +199,21 @@ bool vp_rpn_extract_raw(const uint8_t *data, size_t len, uint16_t start,
 /* Integer-op operand: truncate toward zero, range [-2^31, 2^32-1], 32-bit pattern. */
 static bool to_u32(float f, uint32_t *out)
 {
-    double d = (double)f;
-    if (!isfinite(d) || d <= -2147483649.0 || d >= 4294967296.0) {
+    /* Binary32 has no value between -2^31 and -2^31-1. Keep the exact
+     * accepted set, then truncate inside the signed/unsigned 32-bit ranges. */
+    if (!isfinite(f) || f < -2147483648.0f || f >= 4294967296.0f) {
         return false;
     }
-    *out = (uint32_t)(int64_t)d;
+    *out = f < 0.0f ? (uint32_t)(int32_t)f : (uint32_t)f;
     return true;
 }
 
 static bool to_shift(float f, uint32_t *out)
 {
-    double d = (double)f;
-    if (!isfinite(d) || d <= -1.0 || d >= 32.0) {
+    if (!isfinite(f) || f <= -1.0f || f >= 32.0f) {
         return false;
     }
-    *out = (uint32_t)d;
+    *out = (uint32_t)f;
     return true;
 }
 
@@ -263,7 +280,8 @@ vp_rpn_err_t vp_rpn_eval(const vp_rpn_insn_t *code, size_t n,
             if (!vp_rpn_extract_raw(data, len, (uint16_t)in->u.arg, in->bits, in->flags, &v)) {
                 return VP_RPN_ERR_DATA;
             }
-            r = (float)v;
+            /* Extraction returns at most a signed or unsigned 32-bit field. */
+            r = (in->flags & VP_RAW_SIGNED) ? (float)(int32_t)v : (float)(uint32_t)v;
             break;
         }
         case VP_OP_PUSH_CONST:

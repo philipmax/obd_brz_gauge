@@ -19,6 +19,9 @@
 extern "C" {
 #endif
 
+/* Longest theme media path is /sdcard/OBD/THEMES/<64-char-key>/<64-char-key>.obv. */
+#define VIDEO_PLAYER_PATH_MAX 160u
+
 /* Playback modes */
 typedef enum {
     VIDEO_MODE_FULLSCREEN = 0,  /* Exclusive fullscreen (pause LVGL) */
@@ -36,7 +39,7 @@ typedef enum {
 
 /* Video source */
 typedef enum {
-    VIDEO_SRC_FLASH = 0,        /* From bootmedia partition */
+    VIDEO_SRC_FLASH = 0,        /* Retained for source compatibility; rejected */
     VIDEO_SRC_SD,               /* From SD card */
 } video_source_t;
 
@@ -50,22 +53,6 @@ typedef struct {
     lv_obj_t *video_view;       /* For composite mode only */
 } video_config_t;
 
-/* Player statistics */
-typedef struct {
-    uint32_t frames_decoded;
-    uint32_t frames_dropped;
-    uint32_t buffer_underruns;
-    uint32_t avg_decode_time_ms;
-    uint32_t current_fps;
-    uint32_t ring_used_bytes;
-    uint32_t ring_capacity_bytes;
-} video_stats_t;
-
-/**
- * Initialize video player.
- */
-esp_err_t video_player_init(void);
-
 /**
  * Start playback.
  */
@@ -77,10 +64,21 @@ esp_err_t video_player_start(const video_config_t *config);
 esp_err_t video_player_stop(void);
 
 /**
- * Pause/resume.
+ * Pause/resume (LVGL task, or while holding lvgl_mux, like start/stop).
+ * Pending composite frames remain owned by the session during pause and are
+ * handed to the view after resume. Fullscreen refresh stays
+ * paused until stop. Condition waits are event-driven: paused decoding and
+ * a full reader ring do not wake on a periodic timeout. Frame deadlines and panel
+ * transfer timeouts remain timed. Stop wakes both workers.
  */
 esp_err_t video_player_pause(void);
 esp_err_t video_player_resume(void);
+
+/**
+ * LVGL runtime handoff, called with lvgl_mux held before lv_timer_handler().
+ * Workers only wake the boot-lifetime LVGL task; no per-session UI timer.
+ */
+void video_player_ui_step(void);
 
 /**
  * Get current state.
@@ -88,14 +86,10 @@ esp_err_t video_player_resume(void);
 video_state_t video_player_get_state(void);
 
 /**
- * Get statistics.
+ * Stop playback and free the decoder handle, ring buffer and frame buffers
+ * (entering OTA / theme switch). The next start re-allocates.
  */
-void video_player_get_stats(video_stats_t *stats);
-
-/**
- * Seek to frame (for composite mode).
- */
-esp_err_t video_player_seek(uint32_t frame_idx);
+void video_player_release_all(void);
 
 #ifdef __cplusplus
 }

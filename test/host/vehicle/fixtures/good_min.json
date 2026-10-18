@@ -1,2 +1,2 @@
-{"schema":"skygauge.vehicle/1.2","id":"test.min","rev":1,"name":"Min","bus":{},
+{"defaults":"none", "schema":"skygauge.vehicle/1.2","id":"test.min","rev":1,"name":"Min","bus":{},
  "signals":[{"id":"obd.rpm","src":[{"req":"010C","len":2,"rpn":[["A",0],["k",256],"*",["A",1],"+",["k",4],"/"]}]}]}

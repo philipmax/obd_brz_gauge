@@ -2,6 +2,7 @@
 
 本文件是 [`vehicle-profile.schema.json`](vehicle-profile.schema.json) 的配套规范，定义 JSON Schema 表达不了的部分：
 RPN 指令集与执行语义、导入时的静态校验、服务号/寻址/AT 白名单、数量上限和错误码。
+教程向、照着真实车型例子抄字段的版本见 [`docs/PID_GUIDE.md`](../docs/PID_GUIDE.md)。
 
 **事实源是设备端校验器**：`main/vehicle/vp_validate.c`、`vp_rpn.c`、`vp_rpn_json.c`（P3，纯 C，host 可编译，
 测试在 `test/host/vehicle`）。本文件描述它的行为；两者不一致时以代码为准并同步修本文件。
@@ -34,11 +35,40 @@ schema 故意比设备严：未知字段在 schema 里是错误（设备只给 `
 | `origin`、`meta`、`notes` | 否 | 仅供参考，设备忽略 |
 | `aliases` | 否 | 本 profile 也可代表的其他 id（如合并掉的重复车型） |
 | `requires.elm` | 否 | 能力列表，只认 `ATMA`、`ATCEA` |
-| `bus` | 是（可为 `{}`） | `proto` 0..12（→ `ATSP0`..`ATSP9`、`ATSPA`..`ATSPC`）、`hdr`（缺省 `7E0`）、`atst` 2..255（缺省 0x19）、`gap_ms` 0..1000（缺省 30）、`init`（≤ 8 条额外 AT，见第 5 节） |
+| `bus` | 否（可省略或为 `{}`） | `proto` 0..12（省略/0 = 沿用已保存或已探测协议，无可用协议时自动检测；1..12 → `ATSP1`..`ATSPC`）、`hdr`（缺省 `7E0`）、`atst` 2..255（缺省 0x19）、`gap_ms` 0..1000（缺省 30）、`init`（≤ 8 条额外 AT，见第 5 节） |
 | `drivetrain` | 否 | `fd` 0.1..30、`tire_m` 0.1..1、`gears`（≤ 8 个，0.05..30）、`tol` 0..0.5、`speed_scale` 0.5..2；比值推算挡位需要 `fd`+`tire_m`+至少 1 个齿比 |
 | `monitor` | 否 | `mode`：`probe`（需 `every_ms` 250..60000、`window_ms` 10..200）或 `continuous`（不能再有请求源）；`stale_ms` 0..60000；必须声明 `requires.elm: ["ATMA"]` |
 | `luts` | 否 | ≤ 8 张查找表，见 2.4 |
-| `signals` | 是 | 1..48 个信号 |
+| `defaults` | 否 | `obd2`（缺省）或 `none`；缺省时补齐未声明的标准信号 |
+| `signals` | 否 | 缺省/空数组继承标准 OBD2；`defaults: "none"` 时必须非空；补齐后的数组（含禁用声明）≤48 项 |
+
+### 1.0 默认信号补齐
+
+根字段 `defaults` 缺省为 `"obd2"`。未声明的标准信号继承内置 Generic OBD2
+中的完整定义（请求、公式、单位、过滤及频率），只继承有 `src` 的 9 个信号：
+
+| 信号 / Signal | PID |
+|---|---|
+| `obd.rpm` | `010C` |
+| `obd.intake_temp` | `010F` |
+| `obd.speed` | `010D` |
+| `obd.coolant_temp` | `0105` |
+| `obd.load` | `0104` |
+| `obd.throttle` | `0111` |
+| `obd.oil_temp` | `015C` |
+| `obd.battery_voltage` | `0142` |
+| `obd.afr` | `0144` |
+
+显式声明整体替换同 id 默认信号，不能只写 id / 调度字段；仍需完整 `src` 或
+`derive`。自定义源失败不会自动追加标准 PID 回退，需自行写入 `src`。
+禁用项为 `{"id":"obd.oil_temp","disabled":true}`，只允许 `id`、`disabled`、
+`notes`，阻止默认补齐且不进入编译态信号表。重复 id 和未知信号仍报错。
+`defaults: "none"` 关闭全部继承，纯 CAN continuous 配置通常应使用此值，
+否则补齐的 OBD 请求与 continuous 模式冲突。传动比和比值挡位不自动继承。
+继承的请求使用车型 `bus.hdr`（缺省 `7E0`）；`bus` 缺省协议为自动检测，
+`ATST=0x19`、`gap_ms=30`。资源限制、频率和依赖在补齐后校验。
+运行时仍使用扁平编译态与单线程轮询；原始 JSON 不被修改。
+完整可导入的精简示例见 [`vehicles/examples/`](../vehicles/examples/README.md)。
 
 ### 1.1 信号
 
@@ -47,7 +77,6 @@ schema 故意比设备严：未知字段在 schema 里是错误（设备只给 `
 | `id` | 注册表里的 `obd.*` 键，或 `veh.[a-z0-9_]`（总长 ≤ 31）；`sys.*`、已退役的 `obd.brake_temp` 不可用；同一 id 只能出现一次；`veh.*` ≤ 32 个 |
 | `name` | 显示名，ASCII 1..23（`veh.*` 用） |
 | `unit` | ASCII 1..7。`obd.*`：RPN 结果的单位，必须是 `signals.json` 该信号 `profile_units` 的键，缺省为 `profile_unit_default`；`veh.*`：显示文本 |
-| `decimals` | 仅 `veh.*`，0..3，缺省 0：内部值 = `R(v × 10^decimals)`（**设备端尚未实现**，目前只会得到 `W_UNKNOWN`，见文末待办） |
 | `rate` | `round`（缺省，每轮一次）、`every`（每个请求之后插一次，等同现行 RPM 插队，全 profile 最多 2 个）、`slow`（每 `div` 轮一次，`div` 2..64，缺省 4）、`on_demand`（只在当前页面绑定或规则用到时轮询） |
 | `period_ms` | 20..60000，最小轮询间隔；不能和 `every` 同用；所有 `period_ms` 折算的总请求率 ≤ 100 次/秒 |
 | `valid` | `[lo, hi]`（RPN 结果单位），最终值在区间外 → 信号无效 |
@@ -55,7 +84,8 @@ schema 故意比设备严：未知字段在 schema 里是错误（设备只给 `
 | `filter` | `none`（缺省）、`temp_hyst`（沿用现行油温迟滞）、`ema` |
 | `derive` | `ratio`：仅 `obd.gear`，由转速和车速按 `drivetrain` 推算，**不能**再写 `src`；需要 profile 同时有 `obd.rpm` 和 `obd.speed` |
 | `fallback` | `ratio`：仅 `obd.gear`，所有源都失败后回退到比值推算；`none`（缺省）表示读不到就无效（显示 `--`） |
-| `src` | 1..4 个源，按顺序回退；没有 `derive: "ratio"` 时必填 |
+| `disabled` | 布尔值，缺省 false；true 时只允许 `id`、`disabled`、`notes`，不轮询该信号 |
+| `src` | 1..4 个源，按顺序回退；未禁用且没有 `derive: "ratio"` 时必填 |
 
 ### 1.2 源
 
@@ -166,7 +196,7 @@ CAN 监听源（有 `can`，profile 必须有 `monitor`）：
 5. 源连续失败 `fail_after` 次 → 切到下一个源；全部失败且 `fallback: "ratio"` → 比值推算；
 6. 信号级 `post`：`clamp` 钳位；`obd.rpm < zero_if_rpm_lt` 时置 0；`v <= zero_le` 时置 0；
 7. 信号级 `valid` 区间外 → 信号无效（源本身不算失败）；
-8. 换算成内部单位：`internal = R(v × factor)`，`R(x) = floor(x + 0.5)`，double 计算；`obd.*` 的 `factor` 取 `signals.json` 中 `profile_units[unit]`，`veh.*` 的 `factor = 10^decimals`；超出 int32 → 无效；
+8. 换算成内部单位：`internal = R(v × factor)`，`R(x) = floor(x + 0.5)`，double 计算；`obd.*` 的 `factor` 取 `signals.json` 中 `profile_units[unit]`，`veh.*` 当前按整数存储（`factor = 1`）；超出 int32 → 无效；
 9. 超出注册表 `internal.min/max` → 无效；
 10. `filter` 在内部单位上执行；写入信号表（值、valid 位、时间戳）。
 
@@ -223,6 +253,7 @@ profile 不能直接写 AT 命令（`bus.init` 的受限白名单除外，见第
 
 | 码 | 含义 |
 |----|------|
+| `E_NOMEM` | 默认 OBD2 补齐的临时 JSON 内存分配失败 |
 | `E_SIZE` | 文本超过 16384 字节 |
 | `E_SCHEMA` | 不是 JSON、类型错、缺字段、未知枚举值、主版本不支持、字段组合不一致（如 `raw` 带 `cea`、`byte_from_end` 无 `multiframe`、`derive` 与 `src` 同时出现、缺 `rpn`） |
 | `E_LIMIT` | 数量或大小超限（含公式 > 32 条指令） |
@@ -249,34 +280,45 @@ profile 不能直接写 AT 命令（`bus.init` 的受限白名单除外，见第
 - 静态校验已排除越界，执行器仍逐条检查栈和数据边界（纵深防御）；
 - 调度保持单线程、靠 `>` 提示符门控（AGENTS.md 红线）。
 
-## 9. 示例（ZC6 节选）
+## 9. 示例
+
+`vehicles/catalog/subaru.zc6.can.vehicle.json` 节选（由 `tools/vehicles/legacy_to_v1.py` 从旧表生成；水温、
+油门、机油温度来自 CAN 广播，旧固件在这三项上不发 OBD 请求，所以只有 CAN 源）：
 
 ```json
 {"schema":"skygauge.vehicle/1","id":"subaru.zc6.can","rev":1,"name":"ZN/C6 CAN",
- "requires":{"elm":["ATMA"]},"bus":{"proto":6,"hdr":"7E0","atst":10,"gap_ms":1},
- "drivetrain":{"fd":4.1,"tire_m":0.314,"gears":[3.626,2.188,1.541,1.213,1.0,0.767],"tol":0.15},
+ "requires":{"elm":["ATMA"]},"bus":{"proto":6,"atst":10,"gap_ms":1},
+ "drivetrain":{"fd":4.1,"tire_m":0.314,"gears":[3.626,2.188,1.541,1.213,1,0.767],"tol":0.15},
  "monitor":{"mode":"probe","every_ms":500,"window_ms":120,"stale_ms":15000},
  "signals":[
   {"id":"obd.rpm","rate":"every","src":[{"req":"010C","len":2,"expr":"(A*256+B)/4",
-    "rpn":[["A",0],["k",256],"*",["A",1],"+",["k",0.25],"*"]}]},
-  {"id":"obd.speed","post":{"zero_le":2,"zero_if_rpm_lt":800},"src":[{"req":"010D","len":1,"rpn":[["A",0]]}]},
-  {"id":"obd.oil_temp","valid":[-20,150],"filter":"temp_hyst","src":[
-    {"can":"360","bit":16,"bits":8,"rpn":[["X"],["k",40],"-"]},
-    {"req":"2101","multiframe":true,"byte_from_end":5,"valid":[-10,150],
-     "hold":{"delta":8,"max_hold":30,"gap_ms":3000},"rpn":[["X"],["k",40],"-"]}]},
-  {"id":"obd.battery_voltage","unit":"mV","src":[{"req":"0142","len":2,"rpn":[["R",0,16,"be"]]}]},
+    "rpn":[["A",0],["k",256],"*",["A",1],"+",["k",4],"/"]}]},
+  {"id":"obd.speed","post":{"zero_le":2,"zero_if_rpm_lt":800},"src":[{"req":"010D","len":1,"expr":"A","rpn":[["A",0]]}]},
+  {"id":"obd.coolant_temp","src":[{"can":"360","bit":24,"bits":8,"expr":"X-40","rpn":[["X"],["k",40],"-"]}]},
+  {"id":"obd.oil_temp","valid":[-20,150],"src":[{"can":"360","bit":16,"bits":8,"expr":"X-40","rpn":[["X"],["k",40],"-"]}]},
+  {"id":"obd.battery_voltage","unit":"mV","src":[{"req":"0142","len":2,"expr":"A*256+B","rpn":[["R",0,16,"be"]]}]},
   {"id":"obd.gear","derive":"ratio"}]}
 ```
 
-BMW F/G 挡位（EGS 扩展寻址裸帧，读不到显示 `--`）：
+ZN/C6 PID 的机油温度（Mode 21 多帧，倒数第 5 字节，跳变保持）：
 
 ```json
-{"id":"obd.gear","fallback":"none","src":[{"hdr":"6F1","rx":"618","raw":"18 03 22 DA 2E","expect":"62DA2E",
-  "len":1,"valid":[0,8],"rpn":[["A",0]]}]}
+{"id":"obd.oil_temp","valid":[-20,150],"filter":"temp_hyst","src":[{"req":"2101","multiframe":true,"byte_from_end":5,
+  "valid":[-10,150],"hold":{"delta":8,"max_hold":30,"gap_ms":3000},"expr":"X-40","rpn":[["X"],["k",40],"-"]}]}
+```
+
+BMW F/G 挡位（EGS 扩展寻址裸帧；一个越界或失败的样本就回落到速比推算，与旧固件一致）：
+
+```json
+{"id":"obd.gear","fallback":"ratio","src":[{"raw":"18 03 22 DA 2E","hdr":"6F1","rx":"618","expect":"62DA2E",
+  "len":1,"valid":[0,8],"fail_after":1,"expr":"A","rpn":[["A",0]]}]}
 ```
 
 ## 10. 待办（契约与设备实现之间的已知缺口）
 
-- `unit` → 内部单位换算（第 3 节第 8 步）和 `obd.*` 的 `unit` 必须在 `profile_units` 内：`vp_compile.c` 目前只把 `unit` 当说明文字保存，接入 `signal_store` 时补上；校验失败建议报 `E_SCHEMA`。
-- `veh.*` 的 `decimals`：设备端尚未支持（会得到 `W_UNKNOWN`），没有它 `veh.*` 只能按整数存储。
-- 原型转换器（调研 `scratchpad/conv/out`）还在输出旧字段：信号级 `raw_valid`（删除，改用 `valid`）、`post.clamp_min`（改为 `post.clamp: [lo, hi]`）；P3 的 `legacy_to_v1.py` 需要按本文件输出。
+目前没有已知的 profile 字段兼容缺口；未实现的字段不会进入可导入契约。
+
+已完成（留作记录）：`obd.*` 的 `unit` 由校验器按注册表的 `profile_units` 检查（不在其中报 `E_SCHEMA`），
+`vp_compile` 把缺省单位（`profile_units` 第一项）写进 `vp_signal_t.unit`，引擎按它取 `factor` 做第 3 节第 8 步；
+`tools/vehicles/legacy_to_v1.py` 按本文件输出 17 个目录车型，`tools/vehicles/expr2rpn.py --check` 验证每个
+`expr` 与 `rpn` 等值；旧固件行为基线见 `test/host/vehicle/fixtures/golden/README.md`。

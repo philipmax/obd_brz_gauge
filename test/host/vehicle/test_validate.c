@@ -6,6 +6,7 @@
 #include "vp_validate.h"
 #include "vt.h"
 #include "vt_support.h"
+#include "app_obd_dsp/signal_registry.h"
 
 #ifndef VT_FIXTURE_DIR
 #define VT_FIXTURE_DIR "fixtures"
@@ -140,6 +141,11 @@ static const mcase_t k_cases[] = {
     { "init whitelist", "bus.init", "[\"ATSH 7DF\",\"ATCRA\",\"ATST0A\",\"ATSPA6\",\"ATCRA 7E8\",\"ATSH18DA10F1\"]",
       NULL, NULL, NULL, NULL },
     { "service 09", "signals[9].src[0].req", "\"0902\"", NULL, NULL, NULL, NULL },
+    { "service 21", "signals[9].src[0].req", "\"2101\"", NULL, NULL, NULL, NULL },
+    { "service 22", "signals[9].src[0].req", "\"22F190\"", NULL, NULL, NULL, NULL },
+    { "registry unit", "signals[5].unit", "\"hPa\"", NULL, NULL, NULL, NULL },
+    { "registry unit 2", "signals[1].unit", "\"mph\"", NULL, NULL, NULL, NULL },
+    { "veh unit free", "signals[7].unit", "\"degF\"", NULL, NULL, NULL, NULL },
     { "29-bit can id", "signals[2].src[0].can", "\"18FF1234\"", NULL, NULL, NULL, NULL },
     { "be signed can field", "signals[2].src[0].endian", "\"be\"", "signals[2].src[0].signed", "true", NULL, NULL },
 
@@ -155,7 +161,7 @@ static const mcase_t k_cases[] = {
     { "rev string", "rev", "\"1\"", NULL, NULL, "E_SCHEMA", "rev" },
     { "name too long", "name", "\"123456789012345678901234\"", NULL, NULL, "E_NAME", "name" },
     { "name non-ascii", "name", "\"Caf\\u00e9\"", NULL, NULL, "E_NAME", "name" },
-    { "bus missing", "bus", NULL, NULL, NULL, "E_SCHEMA", "bus" },
+    { "bus missing", "bus", NULL, NULL, NULL, NULL, NULL },
     { "unknown capability", "requires.elm", "[\"ATXX\"]", NULL, NULL, "E_SCHEMA", "requires.elm[0]" },
     { "signals empty", "signals", "[]", NULL, NULL, "E_SCHEMA", "signals" },
 
@@ -172,6 +178,32 @@ static const mcase_t k_cases[] = {
     { "service 02 freeze", "signals[0].src[0].req", "\"0201\"", NULL, NULL, "E_SERVICE", "signals[0].src[0].req" },
     { "service 85 dtc ctl", "signals[0].src[0].req", "\"8502\"", NULL, NULL, "E_SERVICE", "signals[0].src[0].req" },
     { "22 short", "signals[0].src[0].req", "\"22DA\"", NULL, NULL, "E_SERVICE", "signals[0].src[0].req" },
+    { "service 2F IO control", "signals[0].src[0].req", "\"2FF19003\"", NULL, NULL, "E_SERVICE", "signals[0].src[0].req" },
+    { "service 34 download", "signals[0].src[0].req", "\"3400441000\"", NULL, NULL, "E_SERVICE", "signals[0].src[0].req" },
+    { "service 35 upload", "signals[0].src[0].req", "\"3500441000\"", NULL, NULL, "E_SERVICE", "signals[0].src[0].req" },
+    { "service 36 transfer", "signals[0].src[0].req", "\"360100\"", NULL, NULL, "E_SERVICE", "signals[0].src[0].req" },
+    { "service 37 transfer exit", "signals[0].src[0].req", "\"37\"", NULL, NULL, "E_SERVICE", "signals[0].src[0].req" },
+    { "service 3B write local id", "signals[0].src[0].req", "\"3B9001\"", NULL, NULL, "E_SERVICE", "signals[0].src[0].req" },
+    { "service 19 read DTC info", "signals[0].src[0].req", "\"190209\"", NULL, NULL, "E_SERVICE", "signals[0].src[0].req" },
+    { "service 23 read memory", "signals[0].src[0].req", "\"2312345678\"", NULL, NULL, "E_SERVICE", "signals[0].src[0].req" },
+    { "service 3D write memory", "signals[0].src[0].req", "\"3D1200010000\"", NULL, NULL, "E_SERVICE", "signals[0].src[0].req" },
+    { "service 28 comm control", "signals[0].src[0].req", "\"280301\"", NULL, NULL, "E_SERVICE", "signals[0].src[0].req" },
+    { "service 07 pending DTC", "signals[0].src[0].req", "\"07\"", NULL, NULL, "E_SERVICE", "signals[0].src[0].req" },
+    { "service 0A permanent DTC", "signals[0].src[0].req", "\"0A\"", NULL, NULL, "E_SERVICE", "signals[0].src[0].req" },
+    { "service 08 on-board control", "signals[0].src[0].req", "\"0801\"", NULL, NULL, "E_SERVICE", "signals[0].src[0].req" },
+    { "01 no pid", "signals[0].src[0].req", "\"01\"", NULL, NULL, "E_SERVICE", "signals[0].src[0].req" },
+    { "09 no pid", "signals[0].src[0].req", "\"09\"", NULL, NULL, "E_SERVICE", "signals[0].src[0].req" },
+    { "21 no pid", "signals[0].src[0].req", "\"21\"", NULL, NULL, "E_SERVICE", "signals[0].src[0].req" },
+    { "raw ext IO control", "signals[6].src[0].raw", "\"18 04 2F DA 2E 03\"", NULL, NULL, "E_SERVICE", "signals[6].src[0].raw" },
+    { "raw ext routine", "signals[6].src[0].raw", "\"18 05 31 01 FF 00 00\"", NULL, NULL, "E_SERVICE", "signals[6].src[0].raw" },
+    { "raw ext security", "signals[6].src[0].raw", "\"18 02 27 01\"", NULL, NULL, "E_SERVICE", "signals[6].src[0].raw" },
+    { "raw ext download", "signals[6].src[0].raw", "\"18 02 34 00\"", NULL, NULL, "E_SERVICE", "signals[6].src[0].raw" },
+    { "raw ext write local id", "signals[6].src[0].raw", "\"18 03 3B 90 01\"", NULL, NULL, "E_SERVICE", "signals[6].src[0].raw" },
+    { "raw ext clear DTC", "signals[6].src[0].raw", "\"18 04 14 FF FF FF\"", NULL, NULL, "E_SERVICE", "signals[6].src[0].raw" },
+    { "raw normal write", "signals[6].src[0].raw", "\"04 2E DA 2E 00\"", NULL, NULL, "E_SERVICE", "signals[6].src[0].raw" },
+    { "raw normal session", "signals[6].src[0].raw", "\"02 10 03\"", NULL, NULL, "E_SERVICE", "signals[6].src[0].raw" },
+    { "raw normal reset", "signals[6].src[0].raw", "\"02 11 01\"", NULL, NULL, "E_SERVICE", "signals[6].src[0].raw" },
+    { "raw normal IO control", "signals[6].src[0].raw", "\"03 2F DA 2E\"", NULL, NULL, "E_SERVICE", "signals[6].src[0].raw" },
     { "01 multi pid", "signals[0].src[0].req", "\"010C0D\"", NULL, NULL, "E_SERVICE", "signals[0].src[0].req" },
     { "req spaces", "signals[0].src[0].req", "\"01 0C\"", NULL, NULL, "E_SCHEMA", "signals[0].src[0].req" },
     { "req non-hex", "signals[0].src[0].req", "\"01G0\"", NULL, NULL, "E_SCHEMA", "signals[0].src[0].req" },
@@ -289,6 +321,9 @@ static const mcase_t k_cases[] = {
     { "clamp malformed", "signals[5].post.clamp", "[0]", NULL, NULL, "E_SCHEMA", "signals[5].post.clamp" },
     { "div without slow", "signals[7].rate", "\"round\"", NULL, NULL, "E_SCHEMA", "signals[7].div" },
     { "unit too long", "signals[7].unit", "\"degC/100\"", NULL, NULL, "E_SCHEMA", "signals[7].unit" },
+    { "unit not in registry", "signals[5].unit", "\"mbar\"", NULL, NULL, "E_SCHEMA", "signals[5].unit" },
+    { "unit of other signal", "signals[1].unit", "\"C\"", NULL, NULL, "E_SCHEMA", "signals[1].unit" },
+    { "unit case", "signals[0].unit", "\"RPM\"", NULL, NULL, "E_SCHEMA", "signals[0].unit" },
 
     /* rates */
     { "three every", "signals[1].rate", "\"every\"", "signals[2].rate", "\"every\"", "E_RATE", "signals" },
@@ -507,13 +542,44 @@ static void test_misc(void)
 
     /* empty registry rejects every obd.* id */
     {
-        vp_validate_cfg_t none = { NULL, 0, 0 };
+        vp_validate_cfg_t none = { NULL, 0, 0, NULL };
         root = cJSON_Parse(s_min_text);
         vp_issues_init(&l, store, MAX_ISSUES);
         VT_CHECK_INT(vp_validate(root, &none, &l), 1);
         VT_CHECK(find(&l, "E_SIGNAL", "signals[0].id") != NULL);
         cJSON_Delete(root);
     }
+}
+
+static void test_default_cfg(void)
+{
+    const vp_validate_cfg_t *c = vp_validate_default_cfg();
+    size_t i;
+
+    VT_CHECK(c != NULL && c == vp_validate_default_cfg());
+    VT_CHECK_INT(c->n_registry, SIG_OBD_COUNT);
+    VT_CHECK_INT(c->max_json_bytes, VP_MAX_JSON_BYTES);
+    VT_CHECK(c->unit_ok != NULL);
+    for (i = 0; i < c->n_registry; i++) {
+        const sig_def_t *d = &sig_registry[SIG_OBD_FIRST + i];
+        const vp_sig_def_t *r = &c->registry[i];
+        VT_CHECK(!strcmp(r->key, d->key));
+        VT_CHECK_INT(r->num_id, d->num_id);
+        VT_CHECK_INT(r->editor_index, d->editor_index);
+        VT_CHECK_INT(r->scale, d->scale);
+        VT_CHECK_INT(r->n_units, d->n_units);
+        VT_CHECK(r->unit_default && !strcmp(r->unit_default, d->units[0].unit));
+        VT_CHECK(c->unit_ok(i, r->unit_default));
+        VT_CHECK(!c->unit_ok(i, "nope"));
+    }
+    VT_CHECK(!strcmp(c->registry[0].key, "obd.rpm"));
+    VT_CHECK_INT(c->registry[0].num_id, 0x0001);
+    VT_CHECK(!strcmp(c->registry[SIG_OBD_OIL_PRESSURE - SIG_OBD_FIRST].unit_default, "bar"));
+    VT_CHECK(c->unit_ok(SIG_OBD_OIL_PRESSURE - SIG_OBD_FIRST, "hPa"));
+    VT_CHECK(c->unit_ok(SIG_OBD_BATTERY_VOLTAGE - SIG_OBD_FIRST, "mV"));
+    VT_CHECK(!c->unit_ok(SIG_OBD_RPM - SIG_OBD_FIRST, "C"));
+    VT_CHECK(!c->unit_ok(c->n_registry, "rpm"));
+    VT_CHECK(!c->unit_ok(0, NULL));
 }
 
 static void test_at_check(void)
@@ -555,13 +621,38 @@ static void test_at_check(void)
         { "ATPPS", VP_AT_CTX_ENGINE, false, NULL },
         { "ATBRD 45", VP_AT_CTX_ENGINE, false, NULL },
         { "ATBRT 0F", VP_AT_CTX_ENGINE, false, NULL },
-        { "ATZ", VP_AT_CTX_ENGINE, false, NULL },
+        /* fixed link-setup / monitor / voltage commands: firmware only */
+        { "ATZ", VP_AT_CTX_ENGINE, true, "ATZ" },
+        { "AT E0", VP_AT_CTX_ENGINE, true, "ATE0" },
+        { "ATL0", VP_AT_CTX_ENGINE, true, "ATL0" },
+        { "ATS1", VP_AT_CTX_ENGINE, true, "ATS1" },
+        { "ATH0", VP_AT_CTX_ENGINE, true, "ATH0" },
+        { "ATH1", VP_AT_CTX_ENGINE, true, "ATH1" },
+        { "ATAT1", VP_AT_CTX_ENGINE, true, "ATAT1" },
+        { "ATMA", VP_AT_CTX_ENGINE, true, "ATMA" },
+        { "AT AR", VP_AT_CTX_ENGINE, true, "ATAR" },
+        { "ATRV", VP_AT_CTX_ENGINE, true, "ATRV" },
+        { "ATI", VP_AT_CTX_ENGINE, true, "ATI" },
+        { "ATZ", VP_AT_CTX_INIT, false, NULL },
+        { "ATE0", VP_AT_CTX_INIT, false, NULL },
+        { "ATH1", VP_AT_CTX_INIT, false, NULL },
+        { "ATMA", VP_AT_CTX_INIT, false, NULL },
+        { "ATAR", VP_AT_CTX_INIT, false, NULL },
+        { "ATRV", VP_AT_CTX_INIT, false, NULL },
+        { "ATAT2", VP_AT_CTX_ENGINE, false, NULL },
         { "ATWS", VP_AT_CTX_ENGINE, false, NULL },
         { "ATD", VP_AT_CTX_ENGINE, false, NULL },
         { "ATLP", VP_AT_CTX_ENGINE, false, NULL },
-        { "ATMA", VP_AT_CTX_ENGINE, false, NULL },
         { "ATE1", VP_AT_CTX_ENGINE, false, NULL },
-        { "ATH1", VP_AT_CTX_ENGINE, false, NULL },
+        { "ATMR 10", VP_AT_CTX_ENGINE, false, NULL },
+        { "ATMT 10", VP_AT_CTX_ENGINE, false, NULL },
+        { "ATSD 00 11", VP_AT_CTX_ENGINE, false, NULL },
+        { "ATWM 81 10 F1 3E", VP_AT_CTX_ENGINE, false, NULL },
+        { "ATKW0", VP_AT_CTX_ENGINE, false, NULL },
+        { "ATRD", VP_AT_CTX_ENGINE, false, NULL },
+        { "ATPPFF OFF", VP_AT_CTX_INIT, false, NULL },
+        { "ATBRD 45", VP_AT_CTX_INIT, false, NULL },
+        { "ATCEA", VP_AT_CTX_INIT, false, NULL },
         { "ATCSM0", VP_AT_CTX_ENGINE, false, NULL },
         { "ATSW 00", VP_AT_CTX_ENGINE, false, NULL },
         { "STSBR 2000000", VP_AT_CTX_ENGINE, false, NULL },
@@ -592,13 +683,13 @@ int main(void)
         fprintf(stderr, "cannot read fixtures from %s\n", VT_FIXTURE_DIR);
         return 2;
     }
-    s_cfg.registry = vt_default_registry;
-    s_cfg.n_registry = vt_default_registry_count;
+    s_cfg = *vp_validate_default_cfg();
 
     VT_RUN(test_good);
     VT_RUN(test_mutations);
     VT_RUN(test_limits);
     VT_RUN(test_misc);
+    VT_RUN(test_default_cfg);
     VT_RUN(test_at_check);
     free(s_full_text);
     free(s_min_text);

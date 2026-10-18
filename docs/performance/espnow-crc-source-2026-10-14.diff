@@ -1,0 +1,47 @@
+--- a/main/bsp_obd_dsp/espnow_v6.c
++++ b/main/bsp_obd_dsp/espnow_v6.c
+@@ -1,12 +1,16 @@
+ /*
+  * espnow_v6.c - ESP-NOW three-gauge wire codec (v5 legacy + v6 TLV).
+  *
+- * Pure C (no ESP-IDF, no FreeRTOS, no globals): built into the firmware and
++ * Portable C (ROM CRC on ESP32, no FreeRTOS or globals): built into the firmware and
+  * into the host tests under test/host/espnow. Frame layouts: espnow_v6.h.
+  */
+ #include "espnow_v6.h"
+ 
+ #include <string.h>
++
++#ifdef ESP_PLATFORM
++#include "esp_rom_crc.h"
++#endif
+ 
+ /* v5 DATA field offsets (packed little-endian struct, 47 bytes). */
+ #define V5_OFS_FLAGS      3
+@@ -152,6 +156,18 @@
+ 
+ uint16_t espnow_crc16(const uint8_t *p, size_t n)
+ {
++#ifdef ESP_PLATFORM
++    /* SDK CRC state is complemented. Seed 0 and complement the result for
++     * CRC-16/CCITT-FALSE (init 0xFFFF, xorout 0). Chunk on wider host size_t. */
++    uint16_t crc = 0;
++    while (n) {
++        uint32_t len = n > UINT32_MAX ? UINT32_MAX : (uint32_t)n;
++        crc = esp_rom_crc16_be(crc, p, len);
++        p += len;
++        n -= len;
++    }
++    return (uint16_t)~crc;
++#else
+     uint16_t crc = 0xFFFFu;
+     for (size_t i = 0; i < n; i++) {
+         crc = (uint16_t)(crc ^ (uint16_t)(p[i] << 8));
+@@ -160,6 +176,7 @@
+         }
+     }
+     return crc;
++#endif
+ }
+ 
+ uint32_t espnow_profile_hash(const char *id, uint16_t rev)

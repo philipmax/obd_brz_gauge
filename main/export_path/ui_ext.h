@@ -9,6 +9,8 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "esp_err.h"
+#include "bsp_obd_dsp/nvs_storage.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -51,23 +53,38 @@ void ui_ext_showroom_handle_tap(void);    // 10 rapid taps on the version page e
 void ui_ext_showroom_tick(bool is_slave); // the whole showroom state machine (moved out of my_timerMain)
 
 /* ---- Boot animation / video / intro ---- */
+void ui_ext_boot_prepare(void);           // LVGL mutex held: stage theme images in a worker, or prebuild the scan page
 bool ui_ext_boot_video_tick(void);        // video boot mode; returns true to make my_timerMain return early
 void ui_ext_intro_tick(bool is_slave);    // RACE/AS/ONE boot animation state machine
 void ui_ext_no_signal_update(bool signal_ok); // "NO SIGNAL" overlay on gauge pages
 
 /* ---- RPM warning flash (migrated from ui.c my_timerMain) ---- */
-void ui_ext_rpm_flash_tick(uint16_t usRpm, bool in_sweep); // strobe + linked-ramp rendering (called where the old inline block lived)
+void ui_ext_rpm_flash_tick(uint16_t usRpm, bool in_sweep,
+                           const nvs_user_cfg_t *cfg,
+                           bool linked_flash_on); // strobe + linked-ramp rendering (called where the old inline block lived)
 bool ui_ext_rpm_is_flashing(void);      // stable strobing flag → fast refresh period
 bool ui_ext_rpm_link_ramp_active(void); // linked multi-gauge ramp in progress → fast refresh period
-bool ui_ext_rpm_warn_possible(void);    // any flash mode enabled → OBD snapshot gate
+bool ui_ext_rpm_warn_possible(const nvs_user_cfg_t *cfg,
+                              bool linked_flash_on); // any flash mode enabled → OBD snapshot gate
 
 // Flash period (ms per phase): red and black each last this long; toggle frequency = 1000/(2×period).
 // 25ms → 20Hz fast flash. Lower if not fast enough (15→33Hz), raise if too dazzling.
 #define RPM_FLASH_PERIOD_MS 25
 
+/* ---- SD theme library (contract: app_obd_dsp/theme_library.h) ----
+   LVGL task only. Deletes the theme page, unloads theme_0 and starts copying
+   /OBD/THEMES/<key>/theme.bin into it. The device restarts once the copy is done,
+   so every page is rebuilt for the new theme. On error the theme in theme_0 is
+   reloaded. A global timer started by ui_ext_init() also finishes resumed writes. */
+esp_err_t ui_ext_theme_activate(const char *key);
+// Status line for the storage page ("" when nothing to report); *ok = false for errors.
+const char *ui_ext_theme_status(bool *ok);
+
+/* Caller holds LVGL mutex. Release active SD resources before USB replacement. */
+esp_err_t ui_ext_theme_prepare_install(void);
+
 /* ---- Lifecycle ---- */
-void ui_ext_init(void);   // called in app_main after ui_init
-void ui_ext_tick(void);   // hand-written hook called from ui_event_easter_egg_background (kept for compatibility)
+void ui_ext_init(void);   // called in app_main after ui_init (starts the theme library timer)
 
 #ifdef __cplusplus
 }

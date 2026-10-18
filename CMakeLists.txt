@@ -9,3 +9,5 @@ endif()
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 add_compile_options("-Wno-format")
 project(obd_brz_gauge)
+
+include(cmake/idf_spi_bus_lock.cmake)

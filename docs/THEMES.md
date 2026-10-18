@@ -4,16 +4,22 @@
 
 本项目有**两套并存的主题系统**，服务不同场景：
 
-| | 编译期主题（TOML）| 运行时主题（theme_0 分区）|
+| | 编译期主题（TOML）| 运行时主题（SD 卡）|
 |---|---|---|
 | 改什么 | 8 个装饰色 + 表框/指针/表盘素材（换皮，不换布局）| 颜色 + 素材 + **自定义表盘页面与布局**（layout.json）|
-| 怎么装 | 主题文件夹编译进固件，重新刷固件 | 打包成 4MB `theme.bin`，USB 烧录或 WiFi OTA 推送 |
-| 怎么切 | 设置页 THEME 滚轮（重启生效）| 设备加载 theme_0 分区，开机即生效 |
+| 怎么装 | 主题文件夹编译进固件，重新刷固件 | 编辑器导出主题 ZIP，通过网页 USB 安装到 SD；App WiFi OTA 保持兼容 |
+| 怎么切 | 随固件构建确定；普通用户不能在仪表上切换 | 通过网页或 App 安装、选择，设备从 SD 读取并重启生效 |
 | 适合谁 | 想快速给内置页面换配色 / 换素材 | 想自己定义表盘页面组成与数据绑定 |
-| 来源 | [themes/](../themes/) | `themes/example_boost_oil/` + [tools/theme_packer/](../tools/theme_packer/) |
+| 来源 | [themes/](../themes/) | 主题编辑器（`obd_theme_store`）导出的 `<id>.zip`（含 `theme.bin`、规则和视频资源），见[主题编辑器契约](../contracts/theme-editor-contract.md) |
+| 安装方式 | 开发者重新编译固件 | 网页 USB 一键安装，或 App OTA（固件管理 SD 主题库）|
+| 生效时机 | 重启 | USB 安装启用、APPLY 和 OTA 安装后**自动重启** |
 
-两套系统的页面可以协同：运行时主题声明了页面时，开机跳过内置表盘页（省 40–60 KB RAM），
-主题页面进入轮播环（GEAR 页下滑进入）；运行时主题损坏或未刷时自动回退内置页面。
+两套系统的页面可以协同：运行时主题**声明了页面**时，开机跳过内置表盘页（省 40–60 KB RAM），
+主题页面进入轮播环（GEAR 页下滑进入，详见 [USER_GUIDE.md](USER_GUIDE.md#页面导航)）；
+没有页面的运行时主题只提供取色默认值，内置页面照样创建，继续用编译期调色板；
+没有选择主题、缺卡、文件缺失、清单损坏或解析失败时自动回退内置默认主题；保留已保存的选择。
+
+网页的主题安装和“删除当前主题”均通过 ESP32-S3 原生 USB，不要求设备地址、token 或 WiFi OTA。删除会先释放主题页面与资源，再移除当前 `/OBD/THEMES/<key>/` 目录（含 `theme.bin`、规则、图片、字体和视频）及保存的选择；网页随后单独请求重启以恢复内置主题。其他主题和公共开机动画保留。需先更新支持 USB 管理的固件；无卡、存储忙或删除失败会显示错误。
 
 ---
 
@@ -53,10 +59,7 @@ themes/
 
 | 宏 | 值 | 含义 |
 |----|----|------|
-| `UI_SEM_ALERT` | `0xFF4D4D` | 报警/超阈值文字 |
 | `UI_SEM_FLASH` | `0xFF0000` | 转速报警全屏闪烁背景 |
-| `UI_SEM_ON` | `0x06D6A0` | 开关 ON / 正常状态 |
-| `UI_SEM_WARN` | `0xFFD166` | 注意（机油压力等）|
 
 ### 制作四步
 
@@ -104,8 +107,8 @@ echo "3  sunset" >> themes/registry.txt
 idf.py build flash monitor
 ```
 
-开机进 **设置 → THEME** 滚轮选择，选中后设备**自动重启**生效 —— 页面只在开机创建一次，
-重启是最可靠的换肤方式。想快速验证可以先单独跑生成器（错误会指到具体行号）：
+编译期主题随固件构建提供，用户不能在仪表上单独切换。开发者可运行生成器验证
+配置（错误会指到具体行号）：
 
 ```bash
 python3 tools/gen_themes.py            # 重新生成
@@ -171,106 +174,271 @@ NVS 存的是**槽位号**（`theme_cfg.theme`），不是主题名。一旦调�
 
 ---
 
-## 二、运行时主题（theme_0 分区）
+## 二、运行时主题（SD 卡）
 
-把 UI 表现层从固件里剥离出来：固件提供数据与系统页（设置/OTA/蓝牙），
-`theme_0` 分区（4MB @ `0x620000`）提供表盘页面、布局、颜色与素材。
+固件提供数据（`signal_store`）、主题引擎与系统页（设置/OTA/蓝牙）；自定义主题的
+图片、字体、页面布局和主题视频全部从 SD 读取，不写入 Flash 媒体缓存。
+开机动画独立于主题；旧网页上传仍写公共 SD 目录。
+固件仍保留内置默认界面和编译期主题，供缺卡或资源无效时使用。
+NVS 只保存当前主题 key；规则与标签覆盖以 SD sidecar 为权威副本。旧 config sidecar 在 SD 缺失时迁移一次。
 
+```text
+/OBD/THEMES/<key>/
+  theme.bin
+  sidecar.json
+  rpm.obv                  # 可选普通主题视频
+/OBD/BOOT/boot.obv         # 网页上传流程的公共开机视频
+/OBD/BOOT/boot.jpg         # 公共回退静态图
+/OBD/BOOT/bootmedia.raw    # 旧格式开机动画
+/OBD/VIDEO/rpm.obv         # 可选共享主题视频
 ```
-┌────────────────────────────────────┐      ┌─────────────────────────────────┐
-│ 固件（ota_0/ota_1，各 3MB）          │      │ theme_0 分区（4MB）              │
-│ OBD 采集 / BLE+WiFi / NVS / 设置页  │ ───→ │ theme_manifest.json（≤16KB 头） │
-│ 主题引擎（加载 + 数据绑定）          │ 读取 │ assets/（dial.png、ring.png）   │
-└────────────────────────────────────┘      │ layout.json（页面元素定义）      │
-                                            └─────────────────────────────────┘
-```
+
+`theme.bin` 内含 16 KB manifest、images/fonts 与各页 layout；图片和字体仍需按二进制
+格式打包，不直接加载任意 PNG/TTF。主题视频放在对应主题目录；`/OBD/VIDEO` 是可选的
+共享主题视频回退目录。VIDEO 模式读取公共 SD `/OBD/BOOT/boot.obv` → `boot.jpg` → 旧格式
+`bootmedia.raw`。网页开机动画上传流程继续写入公共 `/OBD/BOOT/`，新文件提交后删除其他旧格式动画；传输中断或校验失败时保留已有动画，旧文件清理失败会提示错误。静态图显示 2.5 秒。
+旧 raw 动画的播放时长由 `frame_count/fps` 计算，不采用 manifest 的 `duration_ms`，避免时长不一致时停留在末帧。
+JPEG 使用 baseline 格式，宽高均不超过 360 px。
+主题包不再受旧 4 MB 分区限制；仍受 SD 空间、格式数量限制和运行时 RAM 预算约束。
 
 ### 受保护的启动页
 
-以下页面**永远不参与主题化**，始终用固件内置实现，主题清单里必须把它们列在
-`system_pages`（列到 `theme_pages` 里会被忽略）：
+以下页面**永远不参与主题化**，始终用固件内置实现，主题清单里把它们列到
+`theme_pages` 会被跳过并记日志：
 
 | 页面 ID | 内容 |
 |---------|------|
 | `logo` | Sky Gauge Logo（品牌一致性）|
 | `intro` | RACE AS ONE 开机动画（NVS `intro_enable`：0=OFF 1=RACE 2=VIDEO）|
-| `boot_video` | 自定义开机视频（`bootmedia` 分区里的 `boot_block.bin`，由 `boot_block_player` 播放）|
+| `boot_video` | 受保护的开机控制器；只读取公共 SD 开机目录；播放器是 `media/boot_video` |
 
-保护原因：开机流程不能依赖可能损坏的主题数据；用户每次开机都应看到同样的启动体验。
+启动控制器由固件保护，与主题选择无关。视频必须通过完整 OBV1 校验，静态图必须能由 JPEG
+解码器完整解码；公共媒体无效或不存在时跳过自定义动画。
 
-### 制作与打包
+### theme.bin 格式
 
-主题目录结构（参考 [themes/example_boost_oil/](../themes/example_boost_oil/)）：
+`theme.bin` 由主题编辑器（`obd_theme_store`）导出，不是手写目录；固件只认文件本身的
+二进制布局（代码：`main/theme_engine/theme_loader.c`、`theme_internal.h`）：
 
 ```
-my_theme/
-├── theme_manifest.json   # 必需
-├── layout.json           # 可选，自定义页面元素与数据绑定
-└── assets/
-    ├── dial.png          # 可选，360×360 RGB
-    └── ring.png          # 可选，360×360 RGBA
+[0, 16 KB)   manifest JSON（cJSON_ParseWithLength 解析，尾部 0xFF 填充）
+[16 KB, …)   images + fonts + 每页 layout（偏移/长度由 manifest 给出）
 ```
 
-`theme_manifest.json`（schema 1.0）：
+要点与限制：
 
-```json
-{
-  "schema_version": "1.0",
-  "theme": {
-    "id": "my_theme",
-    "name": "MY THEME",
-    "version": "1.0.0",
-    "author": "your-name"
-  },
-  "colors": {
-    "bg": "0x000000",
-    "ring": "0xFF0000"
-  },
-  "pages": {
-    "comment": "logo/intro/boot_video 必须列在 system_pages",
-    "system_pages": ["logo", "intro", "boot_video", "settings", "ota", "bluetooth_pair"],
-    "theme_pages": ["main_gauge"]
-  }
-}
-```
+- 首字节是 `0xFF` 或 `0x00` → 视为无可用主题，用内置默认主题
+- `schema_version` 必须精确等于 `"1.0"`，否则 `ESP_ERR_NOT_SUPPORTED`，回退默认主题
+- `theme.id` 必填，≤64 字符；`name` / `version` / `author` 超长时按 UTF-8 字符边界截断
+- `assets.*`：`format` 为 `rgb565` / `rgba8888` / `lv_font_bin`，未知格式整条跳过；
+  宽高 ≤2047 px；`size` 必须等于 `width*height*每像素字节数`；偏移 ≥16 KB；重名素材取第一个
+- `pages.theme_pages[]`：`{id, layout_data_offset, layout_data_size}`，单页 layout ≤64 KB；
+  重复 `id` 取第一个；`id` 为 `logo` / `intro` / `boot_video` 的页按上一节规则跳过
+- 颜色拿不到时回退内置默认调色板
+- 容量上限：≤32 页、≤16 张图、≤16 个字体；每页 ≤128 个元素、≤32 个数据绑定
 
-打包成 4MB 分区镜像（固定 0xFF 填充，头部 16KB 预留清单）：
+字体是 `lv_font_bin`。'F' 文件系统驱动在 `lv_font_load` 期间从 SD 读取对应字体段到
+临时 PSRAM，关闭时释放临时段；LVGL 字体对象保留到主题卸载。失败则记日志
+"font '%s': lv_font_load failed, built-in font used" 并退回内置字体。
+`theme_load()` 在主题页面对象存活或后台启动页准备任务尚未结束时拒绝重载；图片读取任务结束后才允许
+切换/删除主题，避免 SD 文件与后台读操作竞争。
+
+### 主题模式：有页面 vs 没页面（`main/export_path/ui.c`）
+
+内置表盘页（Gear/Rpm/Speed/Temp/OilPressure/Needle）只有在主题 **id 不是 `default`
+且声明了至少一个 `theme_pages`** 时才会被跳过（省 40–60 KB RAM）；开机直接进主题默认页
+（`id` 为 `main_gauge` 的页，没有则第一页），建页失败回退内置默认页。主题页面轮播里左右
+滑动切换页面，划过首尾进入 Info（EasterEgg）页；Gear 页下滑同样能进主题首页（只要
+`theme_pages` 非空）。默认主题页的图片在 Logo / 开机动画期间由后台任务读取和转换，启动画面
+保持显示；开机视频首帧完整传输到 LCD 后才替换 Logo。全屏播放期间接管 LVGL 刷新回调，防止切页或布局更新自动恢复刷新后清黑屏幕、争用 DMA 缓冲；解码器释放屏幕和缓冲后才恢复正常刷新。若动画先于主题资源准备结束，播放器释放后恢复 Logo，页面就绪后再创建并切换页面，
+透明图片转换和视频播放都不会被页面创建阻塞；准备早于视频开始完成时可在 Logo 期间建页。主题包分块读取通过文件描述符 `read` 和内部 DMA 缓冲批量读取，避免本平台 `_IONBF` + `fread` 的逐字节补充开销；慢读取日志分别记录缓冲等待、实际读取与回调耗时。开机视频解码失败或被中止时恢复 Logo，主题准备失败时回退到内置页。主题页面上的图片、视频和其他子控件会把
+手势冒泡到页面根对象，因此在任意主题内容区域左右滑动都能继续轮播。完整导航见
+[USER_GUIDE.md](USER_GUIDE.md#页面导航)。
+
+LCD 输出还包含 ESP-IDF 5.5.3 SPI bus-lock 的上游唤醒修复，防止跨核请求在 DMA 中断退出时永久等待；LCD 低速探测句柄在注册正式句柄前释放。修复只替换构建目录内的 SDK 源码副本，安装的 SDK 不变。实机同一 360×360 RGBA 图片准备约 238–240 ms；连续 20 次 USB 复位均完整播放 100 帧 OBV2 并进入主题页。这是该设备和资源的测量，不是所有 SD 卡、图片和视频的耗时保证。
+
+**没有声明页面的主题**：目前代码里 `colors.*` 只是主题自身页面元素的取色缺省值，主题
+没有页面时根本用不上——**不会**改变内置页面的配色，内置页面始终用编译期主题色。
+
+### Sidecar（规则 + 覆盖）
+
+主题编辑器的规则（告警/变色/动画）和标签覆盖（旋转、方向、数值显示格式）不进
+`theme.bin`，单独存一份精简 JSON：
+
+- 位置：SD `/OBD/THEMES/<key>/sidecar.json`（`<key>` = `storage_theme_key(theme.id)`），是唯一权威副本；
+  安装/删除需要 SD 卡。旧 config 分区 `/themes/<key>/sidecar.json` 只在 SD 文件缺失时迁移一次，
+  成功后删除旧副本
+- 输入可以是精简格式本身（`"format":"gauge-sidecar/1"`），也可以是完整的
+  `<id>.gaugeproj.json`（流式过滤，边读边丢图片/字体等大字段）
+- 限制（`theme_sidecar_core.h`）：精简后 ≤64 KB；≤32 页；每页 ≤128 个 element id；
+  单条 element id ≤128 字符；单个 element/rule/overlay 条目 ≤16 KB；超长字符串边读边丢（>4096）
+- 可选 `asset_files`：素材名 → gaugeproj 文件名，供 `vid_` / `video_` 元素用 `set.asset`
+  规则切换视频
+- 安装失败：`ESP_ERR_INVALID_ARG`（JSON / format / theme-id 不对）、`ESP_ERR_INVALID_SIZE`
+  （"sidecar too big: reduced form exceeds 64 KB"）、`ESP_ERR_NO_MEM`
+- 安装会返回一份配对报告：页数/规则数、截断计数、`not in theme.bin: ...`、每页
+  matched/missing/kind mismatch、未知资产/来源、预计因 PSRAM 预算被跳过的元素名（最多列 8 个）；
+  末尾一行固定是 "applies on the next page build; bin-only installs (app/store/web flash) have
+  no overlay"；报告太长时以 "..." 结尾
+- API：`POST /api/v1/theme/sidecar`（分块上传；≤64 KB 走 PSRAM，更大的流式写 SD 临时文件，
+  保存前都要求 SD 卡；没插卡则 409 `sd_unavailable`；整体上限 32 MB，超了 413；格式不对
+  422 `invalid_sidecar`；成功 `{"ok":true,"size":N,"report":"..."}`）、
+  `DELETE /api/v1/theme/sidecar[?theme=<id>]`（不带参数删当前主题的）。`/api/v1` 需要
+  `X-OTA-Token`。SD 导入 `*.gaugeproj.json` 同样当 sidecar 安装（`sd_import.c`）
+
+### PSRAM 预算与跳过顺序
+
+建一页时素材总量按是否含视频元素分两档预算（`theme_img_cache.h`）：**不含视频 2560 KB，
+含视频 1536 KB**。超预算的分配顺序：
+
+1. 指针及其所有变体 —— 必须保留
+2. 规则目标图（会被规则改变外观的图片）—— 必须保留，它们的染色变体也算进预算
+3. 装饰性图片按从下到上的层叠顺序分配，预算不够先砍最上层的；装饰性图片还必须
+   给系统留出 512 KB 空闲 PSRAM（`TE_PSRAM_RESERVE`）
+
+被砍的素材记日志 "'%s' skipped: over the page budget / PSRAM reserve"。
+所有图片（包括未染色的 `rgb565`）都从 SD 读取并持有 RAM 像素，计入缓存预算；
+不再有 Flash mmap 零拷贝。缓存未命中时还需要临时源数据和可能的缩放缓冲，因此
+包大小不等于页面 RAM 用量。染色变体超过 128 KB（`TE_TINT_BAKE_MAX`）时不预烘焙，
+改用运行时实时上色。
+
+### SD 主题库存储
+
+SD 卡 `/OBD/THEMES/<key>/theme.bin` 是固件管理的运行时主题源。用户通过网页或 App 安装、选择主题，
+无需直接访问 SD 卡。`<key>` 由
+`storage_theme_key(theme.id)` 生成（替换不安全字符、处理前后点与 DOS 保留名，≤64 字符）。
+可直接复制到该目录，或将 `*.bin` 放入 `/OBD/IMPORT/` 自动入库；导入后留下 `.ok` 便签。
+WiFi OTA 同样直接安装到 SD。旧 Flash 主题只作为升级迁移源，已有 SD 文件不会被覆盖，
+已有主题选择也不会被旧资源替换。
+
+主题编辑器导出的 `*-sd.zip` **不是固件可直接读取的安装文件**。在电脑上将 ZIP
+该包用于网页或 App 导入，不要求用户手动整理 SD 文件。
+包内 `theme.bin` 和普通主题视频位于 `/OBD/THEMES/<key>/`，规则 sidecar 位于
+`/OBD/IMPORT/`；固件扫描器导入 sidecar，主题库直接从 SD 主题目录读取主题数据和媒体。
+不要把 ZIP 本身放进 `/OBD/IMPORT/`。主题视频按资源 key 导出到主题目录，使用 manifest
+引用的名称；视频和主题图片、字体均存储在 SD。编辑器媒体资源面板可以用图片或视频做预览，
+但开机动画不属于主题包；网页原有动画上传流程保持不变并写入公共 SD `/OBD/BOOT/`，
+与当前主题独立。
+
+主题通过网页或 App 选择；仪表不提供主题选择或 SD 卡管理页面。以下为固件内部应用主题时的处理行为：
+
+1. 删除主题页面对象、`theme_unload()`。
+2. 显示 "Loading theme..." / "Loading theme NN%"；后台校验 SD 包并提交 NVS 选择，500 ms 轮询状态。
+3. 成功显示 "Theme selected, restarting"，约 1.5 秒后重启并直接读取 SD。
+4. 失败显示 "Theme selection failed: <reason>"，重新加载旧选择或内置默认主题。
+5. 繁忙显示 "Busy, try again"；无有效包显示 "Not a usable theme.bin"。
+
+切换不擦写 Flash 媒体分区，不复制整个包到 PSRAM。OTA、缺卡或其它存储任务运行时拒绝切换。
+旧版中断的 Flash 写入标记会转换为 SD 选择；缺卡时保留标记等待重试。
+普通 SD 导入不允许覆盖当前选中的包，应先切到其它主题；OTA 在释放主题页面后可更新该包。
+开机缺卡会回退内置界面，插卡后可再次 APPLY。运行中拔卡时已有图片缓存可能继续显示，
+后续页面或素材读取会失败，不保证立即切换整套界面。
+
+### 主题视频
+
+主题里 id 以 `vid_` 或 `video_` 开头的图片元素会被当成视频元素：图片本身是封面图
+（poster），key 是去掉前缀后的部分。查找顺序是 `/OBD/THEMES/<theme_key>/<key>.obv`，
+再 `/OBD/VIDEO/<key>.obv`（供多个主题共享）；都没有就一直显示封面图。`visible` 规则可以暂停视频，
+`asset` 规则按 sidecar 的 `asset_files` 切到另一个文件名（不带目录和扩展名）。主题
+视频循环播放，同一时刻只解码一路。
+主题目录与视频 key 均支持最多 64 个字符；播放器路径缓冲区可容纳完整的主题视频 SD 路径。
+
+主题循环视频容器是自定义的 **OBV1**（`main/media/obv1_format.h`，`tools/make_video.py` 生成）：
+`[64B 头][8B × 帧数 的帧索引][JPEG 帧数据]`，宽高 8..360 且是 8 的倍数，fps 1..60，
+最多 36000 帧，单帧 ≤48 KB，用 CRC-32 校验。开机动画网页上传使用下方的 OBV2；制作命令：
 
 ```bash
-python3 tools/theme_packer/pack_theme.py themes/my_theme my_theme.bin
+python3 tools/make_video.py boot INPUT -o boot.obv            # 开机视频，默认 360px/4:2:2/Q75/24fps
+python3 tools/make_video.py theme INPUT -o rpm.obv --size 240x240 [--poster rpm.png]
+python3 tools/make_video.py inspect boot.obv                  # 打印头部信息
+python3 tools/make_video.py verify boot.obv                   # 校验 CRC 与每帧
+python3 tools/make_video.py legacy INPUT -o bootmedia/slot_a [--raw bootmedia.raw]  # 老的 delta_varint 开机动画
 ```
 
-### 烧录 / 推送
+需要 Pillow（`pip install Pillow`），视频输入还需要 ffmpeg。
 
-**USB 直刷**（首次或调试）：
+网页本地开机动画使用 **OBV2**，主题循环视频继续使用 OBV1。OBV2 沿用 `OBV1` magic 和 64B 头，
+`version=2`、`fps=0`、`timescale=1000000`；16B 索引项为 `offset,size,timestamp_us,duration_us`。
+时间戳从 0 连续递增，单帧间隔 ≥16666 µs，`duration_ms` 为总时长向上取整，最多 36000 帧，
+单帧 ≤48 KiB、文件 ≤256 MiB，一秒压缩帧窗口加环绕余量 ≤1.25 MiB。头、索引和帧数据各有 CRC-32。
+浏览器将 H.264 MP4 转为保持比例、不裁切的 360×360 Q90 baseline JPEG 4:2:0，保留源帧时间轴，
+预算超限时直接报错。固件预读约一秒的压缩帧，SD 顺序读取；360×360/4:2:0 使用整帧解码、双 DMA 缓冲分条推屏，
+满足 MCU 对齐和解码自检的素材可使用块解码。OBV2 仅支持非循环全屏开机播放；连续三帧超出各自显示期限时记录错误并退出，
+不会静默降帧或拉长时间轴。此为格式上限，实际帧率仍需在设备上验证。
+网页用 USB `BEGIN_OBV=7` 暂存、校验后安装到 `/OBD/BOOT/boot.obv`。工具的 `boot/theme` 仍生成 OBV1；
+`inspect/verify` 可读取两版，旧 BIN/raw 动画继续兼容。
 
-```bash
-esptool.py --chip esp32s3 -p PORT write_flash 0x620000 my_theme.bin
-```
+### 安装 / 推送
 
-**WiFi OTA 推送**（设备进 OTA 模式后，App 或 curl 调用，协议见
+主题编辑器将原来的 BIN 和 SD 资源包导出合并为 **导出主题 ZIP**，下载一个 `<id>.zip`。
+ZIP 包含 `/OBD/THEMES/<key>/theme.bin`、主题的 `*.obv` 视频和
+`/OBD/IMPORT/<key>.gaugeproj.json`；图片、字体和布局位于 `theme.bin`，规则来自 gaugeproj。
+编辑器会阻止缺少关联视频文件的导出。开机动画独立于主题，仍保存在公共 `/OBD/BOOT/`。
+
+推荐安装流程：插入 SD 卡，使用 ESP32-S3 原生 USB 连接网页刷机页，在 **主题** 区域点击 **从社区选择** 或
+**本地上传**。网页校验目录、CRC、主题 ID、数据范围和视频依赖后解包，按顺序上传主题与资源。
+固件校验 SHA-256，将文件暂存并生成 `sidecar.json`；全部成功后保存主题选择并重启。
+无需手动解压或另行启用。首次使用需安装支持 USB 主题包的固件；旧固件会被提示升级。
+
+兼容新版完整 ZIP、旧 `*-sd.zip` 和 STORE / DEFLATE 压缩，也可同时选择旧 BIN、配套 gaugeproj / sidecar JSON
+及 `.obv`。仅有 BIN 时保留其中的图片、字体和布局，无法恢复未提供的规则或视频；缺少已声明视频时拒绝上传。
+社区新发布主题保存完整 ZIP，历史 BIN 仍可安装；文件内容决定格式。完整固件刷写完成后需重连，再安装主题或动画。
+
+支持同 ID 主题更新：提交前释放正在使用的主题资源，通过暂存目录、旧目录备份和恢复日志替换整个主题目录。
+安装失败时回滚；提交过程中断电，下次开机挂载 SD 后尝试恢复旧文件和选择。提交前至少预留
+`2 × 上传流大小 + 1 MiB` 可用空间。网页 ZIP 和上传流各限 256 MiB，最多 128 个安装文件。
+主机测试覆盖目录替换、校验失败、选择失败回滚与中断恢复，不代表真实 SD 卡的断电可靠性。
+
+也可解压 ZIP 到 SD 根目录，保留已有文件；规则在启动时自动扫描导入，但手动复制不自动启用。
+网页主题安装使用 ESP32-S3 原生 USB；App 的 WiFi OTA 路径保持兼容。
+
+**WiFi OTA 推送**（设备进 OTA 模式后，协议见
 [APP_PROTOCOL.md](APP_PROTOCOL.md#wifi-ota-http-api)）：
 
-- `POST /ota/theme/prepare` — 预检并返回挂载状态（不擦除）
-- `POST /ota/theme` — 分块上传（`X-OTA-SHA256` / `X-OTA-Size` / `X-OTA-Offset` / `X-Last` 头）
-- `POST /ota/theme/erase` — 立即擦除整个主题分区，下次开机回退内置默认主题
+- `POST /ota/theme/prepare` — 检查 SD 挂载与可用空间，返回 `storage:"sd"`；PSRAM 字段仅供诊断。
+- `POST /ota/theme` — 分块流式写 SD 临时文件，SHA 校验与清单校验后入库、保存选择并自动重启。
+- `POST /ota/theme/erase` — 删除当前选中主题的整个 `/OBD/THEMES/<key>/` 目录（含 `theme.bin`、规则、图片、字体及专属视频）并清除选择；下次开机使用内置默认主题。需要 SD 卡挂载；其他主题和公共 `/OBD/BOOT/` 开机动画不受影响。返回 `{"ok":true,"deleted":true|false}`。
 
-主题只能走 WiFi OTA 或 USB 烧录，没有 BLE 传输通道。
+主题选择任务运行时，这三个接口和 `/ota/bootmedia` 的首块返回 "theme library busy"。
+主题通过 USB、SD 或 WiFi 传输，没有 BLE 主题上传通道。缺卡时媒体上传返回 "SD card required"。
 
 ### 运行行为
 
-- 开机时 `theme_engine_init()` 读取 theme_0：清单损坏 / 分区为空 / 解析失败 →
+- 开机时 `theme_engine_init()` 读取 NVS 选择对应的 SD 包：缺卡 / 文件缺失 / 清单损坏 / 解析失败 →
   自动回退内置默认主题，不会变砖
-- 主题声明了页面时：内置表盘页（Gear/RPM/Speed/Temp/Chart 等）不再创建，主题页面进入
-  轮播环；数据通过 `theme_update_data()` 周期推送（`obd_snapshot_t`，16 字节 ABI 稳定结构：
-  rpm/speed/boost/水温/油压/挡位/电压/油温/AFR/节气门/进气温）
-- 素材从 Flash 内存映射（mmap 零拷贝），不占堆
-- 切换 / 更新主题需重启生效（与编译期主题一致）
+- 主题页面在屏幕上时，LVGL 任务通常每 16 ms 调一次 `theme_tick()`（动画/告警期间使用对应刷新周期）：读一次
+  `signal_store`（键定义见 `contracts/signals.json`）更新数据绑定（只有变化的值才动 LVGL
+  对象），再在同一份快照上跑 sidecar 规则并应用差异；没有主题页面在屏幕上时是空操作
+- 主题页面显示且处于蓝牙连接扫表期间，规则评估临时模拟全部 12 个标准 `obd.*` 信号，并将其作为变化中的输入，
+  因此各信号的阈值条件和 `change` 规则都可随扫表触发。扫表结束后规则输入立即恢复为真实 `signal_store` 数据；
+  模拟值不会写入或覆盖真实 OBD 数据。车型专属 `veh.*` 信号没有统一量程，因此扫表期间仍使用其实时数据
+- 规则的条件/滞回/去抖/计时状态仍每次更新；活动规则集合相同时复用已排序的动作覆盖表，
+  集合改变时重新计算并撤销退出规则的覆盖，重建页面或主题时清除缓存。
+  集合与系统告警抑制状态都不变时，还会跳过目标外观的拼装/比较；数据绑定继续更新，
+  规则退出、抑制切换和 reset 后首次更新仍应用外观，告警结束仍恢复页面背景。
+- 弧线和条形的规则动作 `set.color` 只改变进度/填充色，底轨保留元素的 `bgColor`；即时变色和颜色动画遵循同一规则，避免扫表越过阈值后底轨一起变亮、看起来瞬间满格。规则退出后恢复原进度色。已有主题包无需重新导出，更新固件即可生效。
+- 圆弧进度使用完整的 0–10000 数值范围，不套用像素坐标的 8191 上限；扫表和实时数值均可到达满刻度。
+- 规则动作的 `set.color` 支持 `animation` 的 `fade`、`keyframes` 和 `strobe`，每个主题 tick
+  更新颜色或图片 tint；`change` / `timer` 规则会保持到最长动画时长结束。动画不预生成图片帧，
+  `text`、`visible` 和 `asset` 仍即时切换；图片资源切换当前不是 crossfade。
+- 标签取字体：先试 manifest 里的 `font_asset`，加载失败退回内置 Montserrat
+  12/14/16/26/32/48（先找精确匹配，没有就找最接近的更小号，再没有用最小号 12）；
+  要求的字号大于 48 时用 48 号字体 + `transform_zoom = 字号×256/48` 放大
+  （LVGL 的 `transform_zoom`，和编译期主题的素材缩放无关）
+- 数据缺失或是 NaN 时标签显示 `--`（不显示单位）
+- 系统告警优先于主题规则：转速报警全屏闪烁或三连表联动变红期间，主题规则暂停
+  （数据绑定仍然在刷新），结束后内置页面恢复调色板背景+表盘，主题页面恢复自己 layout
+  里的 `bg_color`
+- 页面 layout 与素材从 SD 按段读取；缓存命中不再读 SD。图片转换、裁剪、染色和指针缩放
+  使用 PSRAM；等尺寸图片仍持有独立 RAM 像素，页面引用存在时不释放缓存。
+  字体和 layout 的读取段在解析后释放。SD 读锁等待最多 1 秒，失败时结束本次加载。
+  主机测试覆盖像素/几何一致性、读取失败与分配失败清理，不代表实际 SD/LCD 性能。
 - API 见 [main/theme_engine/theme_interface.h](../main/theme_engine/theme_interface.h)
 
 ### 分区表背景
 
-`theme_0`（0x620000，4MB）与 `bootmedia`（0xA20000，5.875MB）见
-[partitions.csv](../partitions.csv)。单一主题槽位即可 —— 坏主题自动回退默认，
-不需要 A/B 双槽。老分区表（无 theme_0、bootmedia 在旧地址）的设备升级到当前布局
-必须**一次性 USB 全量重刷**，OTA 无法改写分区表本身。
+当前保留 layout v2 的物理布局：`theme_0`（0x620000，4 MB）和 `bootmedia`
+（0xA20000，4.75 MB）只作旧资源迁移源/预留空间，合计 8.75 MiB。
+新主题和动画不使用这些分区；本次没有把这部分重新分配给固件或配置区。
+地址见 [partitions.csv](../partitions.csv)。已使用 layout v2 的设备可 OTA 更新；
+仍用旧分区表的设备需要一次性全量刷写，OTA 不能改分区表。

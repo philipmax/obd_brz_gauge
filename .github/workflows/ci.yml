@@ -22,10 +22,31 @@ jobs:
         run: pip install jsonschema 2>/dev/null || true
 
       - name: Check contracts (signals, schema, fixtures)
-        run: python3 contracts/check_contracts.py
+        run: python3 contracts/check_contracts.py --profiles vehicles/catalog vehicles/import/OBD/IMPORT vehicles/examples
 
       - name: Check partition layout matches docs
         run: python3 tools/gen_layout.py --check --no-idf
+
+  host-signal-store:
+    name: Host unit tests – signal store
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install CMake + ninja
+        run: sudo apt-get install -y cmake ninja-build
+
+      - name: Configure
+        run: |
+          cmake -S test/host/signal_store -B build/host/signal_store \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build/host/signal_store
+
+      - name: Run
+        run: ctest --test-dir build/host/signal_store --output-on-failure
 
   host-rules:
     name: Host unit tests – rules engine
@@ -68,3 +89,123 @@ jobs:
 
       - name: Run
         run: ctest --test-dir build/host/vehicle --output-on-failure
+
+  host-espnow:
+    name: Host unit tests – ESP-NOW v5/v6 codec
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install CMake + ninja
+        run: sudo apt-get install -y cmake ninja-build
+
+      - name: Configure
+        run: |
+          cmake -S test/host/espnow -B build/host/espnow \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build/host/espnow
+
+      - name: Run
+        run: ctest --test-dir build/host/espnow --output-on-failure
+
+  host-media:
+    name: Host unit tests – OBV1 parser + legacy delta stream
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install CMake + ninja
+        run: sudo apt-get install -y cmake ninja-build
+
+      - name: Configure
+        run: |
+          cmake -S test/host/media -B build/host/media \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build/host/media
+
+      - name: Run
+        run: ctest --test-dir build/host/media --output-on-failure
+
+  host-engine:
+    name: Host unit tests – vehicle polling engine (golden requests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install CMake + ninja
+        run: sudo apt-get install -y cmake ninja-build
+
+      - name: Configure
+        run: |
+          cmake -S test/host/engine -B build/host/engine \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build/host/engine
+
+      - name: Run
+        run: ctest --test-dir build/host/engine --output-on-failure
+
+  host-theme:
+    name: Host unit tests – theme core + LVGL page
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out LVGL 8.4.0 (matches dependencies.lock)
+        uses: actions/checkout@v4
+        with:
+          repository: lvgl/lvgl
+          ref: 4495f428630cc1741bd8bfd977f080e8460e8e8d
+          path: .ci/lvgl
+
+      - name: Install CMake + ninja
+        run: sudo apt-get install -y cmake ninja-build
+
+      - name: Configure
+        run: |
+          cmake -S test/host/theme -B build/host/theme \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DTE_PAGE_LVGL=ON \
+            -DTE_LVGL_DIR="$GITHUB_WORKSPACE/.ci/lvgl"
+
+      - name: Build
+        run: cmake --build build/host/theme
+
+      - name: Run
+        run: ctest --test-dir build/host/theme --output-on-failure
+
+  host-storage:
+    name: Host unit tests – storage service / SD (slot/no slot)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install CMake + ninja
+        run: sudo apt-get install -y cmake ninja-build
+
+      - name: Configure
+        run: |
+          cmake -S test/host/storage -B build/host/storage \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build/host/storage
+
+      - name: Run
+        run: ctest --test-dir build/host/storage --output-on-failure
+
+      - name: SPI bus-lock upstream regression (stock vs patched SDK)
+        run: |
+          cmake -S test/host/spi_lock -B build/host/spi_lock -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/host/spi_lock
+          ctest --test-dir build/host/spi_lock --output-on-failure

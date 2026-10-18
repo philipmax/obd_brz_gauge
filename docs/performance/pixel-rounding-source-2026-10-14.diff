@@ -1,0 +1,12 @@
+--- a/main/theme_engine/theme_pixconv.c
++++ b/main/theme_engine/theme_pixconv.c
+@@ -398,7 +398,8 @@
+ {
+     if (!(v > 0.0f)) return 0;
+     if (v >= 255.0f) return 255;
+-    return (uint8_t)floorf(v + 0.5f);
++    /* The guards bound the float sum to [0.5, 255.5); truncation equals floor. */
++    return (uint8_t)(v + 0.5f);
+ }
+ 
+ tpx_err_t tpx_resample(const tpx_src_t *src, uint16_t dw, uint16_t dh,

@@ -3,6 +3,7 @@
 // LVGL version: 8.3.11
 // Project name: OBD_PRJ
 // The UI theme is named PINK_CAT (pink cat): main color pink, secondary color purple
+#include "app_obd_dsp/perf_stats.h"
 #include "ui.h"
 #include "ui_helpers.h"
 #include "ui_ext.h"
@@ -11,6 +12,7 @@
 #include "theme_engine/theme_interface.h"
 #include "app_obd_dsp/app_event.h"
 #include "app_obd_dsp/obd_data_cache.h"
+#include "ui_data_plan.h"
 #include <driver/gpio.h>
 #include "bsp_obd_dsp/bsp_board.h"
 #include "bsp_obd_dsp/nvs_storage.h"
@@ -19,11 +21,7 @@
 #include "bsp_obd_dsp/espnow_link.h"
 #include "bsp_obd_dsp/gauge_pair_ble_client.h"
 #include "bsp_obd_dsp/racechrono_ble_diy.h"
-#include "vehicle/vp_profile.h"
-#include "vehicle/vp_loader.h"
-#include "app_obd_dsp/theme_rule_integration.h"
-#include "app_obd_dsp/boot_block_player.h"
-#include "app_obd_dsp/boot_media_mount.h"
+#include "vehicle/vp_manager.h"
 #include "app_obd_dsp/ota_wifi_server.h"
 #include "esp_system.h"
 #include "esp_random.h"
@@ -39,8 +37,6 @@ static const char *TAG = "ui";
 ///////////////////// VARIABLES ////////////////////
 void ui_ScreenPageLogo_screen_init(void);
 lv_obj_t * ui_ScreenPageLogo;
-lv_obj_t * imageLogo;
-lv_obj_t * imageEasterEgg;
 
 // CUSTOM VARIABLES
 
@@ -55,8 +51,8 @@ lv_obj_t * ui_ImageGearBlackEar;
 // CUSTOM VARIABLES
 
 
-// SCREEN: ui_ScreenPageThemeGauge (theme-partition custom gauge page; only
-// reachable if the active theme declares a "main_gauge" theme page — see
+// SCREEN: ui_ScreenPageThemeGauge (SD theme page at ui_theme_gauge_page_index;
+// only reachable when the active theme declares pages — see
 // theme_engine/theme_interface.h. Not SquareLine-generated, hand-written below.)
 void ui_ScreenPageThemeGauge_screen_init(void);
 lv_obj_t * ui_ScreenPageThemeGauge;
@@ -101,7 +97,6 @@ lv_obj_t * ui_ScreenPageBLEScan;
 
 // SCREEN: ui_ScreenPageOTAMode
 void ui_ScreenPageOTAMode_screen_init(void);
-void ui_ota_mode_refresh(void);
 
 // SCREEN: ui_ScreenPageTemp
 void ui_ScreenPageTemp_screen_init(void);
@@ -151,6 +146,12 @@ lv_obj_t * ui_ScreenPageNeedleConfig;
 void ui_ScreenPageMultiGauge_screen_init(void);
 lv_obj_t * ui_ScreenPageMultiGauge;
 
+// SCREEN: ui_ScreenPageVehicle (vehicle profile select / rollback / reset)
+lv_obj_t * ui_ScreenPageVehicle;
+
+// SCREEN: ui_ScreenPageStorage (SD state / scan / eject / export)
+lv_obj_t * ui_ScreenPageStorage;
+
 // SCREEN: ui_ScreenPageChartConfig (chart data-source selection)
 void ui_ScreenPageChartConfig_screen_init(void);
 lv_obj_t * ui_ScreenPageChartConfig;
@@ -189,7 +190,6 @@ static uint16_t usSaveProtTimeCnt = 0; //OBD protocol save timer
 #define OIL_PRESS_TREND_SAMPLE_MS 1000
 
 /* ---- Digit-ramp animation thresholds (used by disp_item_update) ---- */
-#define ANIM_THRESH_RPM   50   // RPM diff ≤50 steps by ±1
 #define ANIM_THRESH_SPD   10   // speed diff ≤10 steps by ±1
 #define ANIM_THRESH_TEMP   5   // temperature diff ≤5 steps by ±1
 
@@ -231,9 +231,8 @@ static int32_t s_chart_ymax = 100;
 
 static uint8_t needle_active_source(void)
 {
-    uint8_t src = nvs_cfg_get()->needle_source_idx;
-    if (src >= DISP_ITEM_COUNT) src = DISP_ITEM_CLT;
-    return src;
+    uint8_t src = nvs_cfg_read().needle_source_idx;
+    return src < DISP_ITEM_COUNT ? src : DISP_ITEM_CLT;
 }
 
 void ui_needle_apply_source(void)
@@ -248,14 +247,14 @@ void ui_needle_apply_source(void)
     if (ui_NeedleUnitLabel) lv_label_set_text(ui_NeedleUnitLabel, s_disp_meta[src].unit);
 }
 
-void ui_needle_page_update(float sweep_ratio, int16_t clt, int16_t iat, int16_t oil,
+static void ui_needle_page_update_with_source(uint8_t src, float sweep_ratio,
+                           int16_t clt, int16_t iat, int16_t oil,
                            int16_t load_pct, int16_t tps, int32_t bat_mv,
                            int16_t oilp_x10,
                            uint16_t rpm, uint16_t speed, int16_t boost_x10,
                            int16_t afr_x100)
 {
     if (!ui_ScreenPageNeedle || !ui_NeedleMeter || !ui_NeedleIndic) return;
-    uint8_t src = needle_active_source();
     const needle_scale_meta_t *ns = &s_needle_scale_meta[src];
     static int32_t s_last_needle_meter = INT32_MIN;
 
@@ -296,6 +295,15 @@ void ui_needle_page_update(float sweep_ratio, int16_t clt, int16_t iat, int16_t 
         lv_meter_set_indicator_value(ui_NeedleMeter, ui_NeedleIndic, nval);
         s_last_needle_meter = nval;
     }
+}
+
+void ui_needle_page_update(float sweep_ratio, int16_t clt, int16_t iat, int16_t oil,
+                           int16_t load_pct, int16_t tps, int32_t bat_mv,
+                           int16_t oilp_x10, uint16_t rpm, uint16_t speed,
+                           int16_t boost_x10, int16_t afr_x100)
+{
+    ui_needle_page_update_with_source(needle_active_source(), sweep_ratio,
+        clt, iat, oil, load_pct, tps, bat_mv, oilp_x10, rpm, speed, boost_x10, afr_x100);
 }
 
 static void oil_pressure_trend_init(void)
@@ -352,7 +360,7 @@ static void oil_pressure_chart_refresh(void)
 // Apply the chart page title/dot/unit/color/Y-range per chart_source_idx (call after the data source changes)
 void ui_chart_apply_source(void)
 {
-    uint8_t src = nvs_cfg_get()->chart_source_idx;
+    uint8_t src = nvs_cfg_read().chart_source_idx;
     if (src >= DISP_ITEM_COUNT) src = DISP_ITEM_OILP;
     const disp_item_meta_t *m = &s_disp_meta[src];
     const needle_scale_meta_t *ns = &s_needle_scale_meta[src];
@@ -424,6 +432,7 @@ static uint32_t ui_refresh_period_ms_for_screen(lv_obj_t *scr,
         return 33;
     }
     if (scr == ui_ScreenPageSettings || scr == ui_ScreenPageMultiGauge ||
+        scr == ui_ScreenPageVehicle || scr == ui_ScreenPageStorage ||
         scr == ui_ScreenPageBLEScan || scr == ui_ScreenPageOTAMode || scr == ui_ScreenPageODBProtocal ||
         scr == ui_ScreenPageTempCustom || scr == ui_ScreenPageInfoCustom ||
         scr == ui_ScreenPageNeedleConfig || scr == ui_ScreenPageChartConfig ||
@@ -434,73 +443,69 @@ static uint32_t ui_refresh_period_ms_for_screen(lv_obj_t *scr,
     return 50;
 }
 
+static uint16_t ui_data_mask_for_screen(lv_obj_t *scr, const nvs_user_cfg_t *cfg,
+                                        bool need_rpm, uint8_t needle_source)
+{
+    uint16_t mask = need_rpm ? (1u << SIG_OBD_RPM) : 0;
+    if (scr == ui_ScreenPageNeedle) {
+        mask |= ui_data_mask_for_item(needle_source);
+    } else if (scr == ui_ScreenPageOilPressure) {
+        mask |= ui_data_mask_for_item(cfg->chart_source_idx % DISP_ITEM_COUNT);
+    } else if (scr == ui_ScreenPageTemp) {
+        mask |= ui_data_mask_for_map(cfg->temp_display_map, sizeof(cfg->temp_display_map));
+    } else if (scr == ui_ScreenPageInfo) {
+        mask |= ui_data_mask_for_map(cfg->info_display_map, sizeof(cfg->info_display_map));
+    }
+    return mask;
+}
+
 static bool ui_screen_updates_live_data(lv_obj_t *scr)
 {
+    // Theme bindings read signal_store directly; an OBD snapshot is only needed
+    // there when the RPM warning/ramp path requests one (gated separately).
     return scr == ui_ScreenPageGear || scr == ui_ScreenPageRpm ||
            scr == ui_ScreenPageSpeed || scr == ui_ScreenPageNeedle ||
            scr == ui_ScreenPageTemp || scr == ui_ScreenPageOilPressure ||
-           scr == ui_ScreenPageInfo || scr == ui_ScreenPageThemeGauge;
+           scr == ui_ScreenPageInfo;
 }
 
-// Converts the core firmware's live OBD snapshot into the ABI-stable struct
-// theme_engine consumes, applying the unit conversions the two structs don't
-// share (boost 0.1bar->0.01bar, oil pressure bar->PSI, battery mV->0.1V) and
-// clamping into the narrower target field widths. Invalid-sentinel fields are
-// passed through as 0 rather than propagating e.g. -32768 into a uint8_t.
-static void ui_build_theme_snapshot(obd_snapshot_t *out,
-                                     int16_t clt, int16_t oil, int16_t oilp_x10,
-                                     int32_t bat_mv, int16_t boost_x10, int16_t afr_x100,
-                                     uint16_t usRpm, uint16_t ucSpeed, int16_t tps,
-                                     enGear eGear, bool gear_unknown)
+#if CONFIG_OBD_PERF_STATS
+static void ui_timer_main_run(lv_timer_t *timer);
+
+void my_timerMain(lv_timer_t *timer)
 {
-    memset(out, 0, sizeof(*out));
-    out->rpm = usRpm;
-    out->speed = (ucSpeed > 255) ? 255 : (uint8_t)ucSpeed;
-    out->boost = (boost_x10 <= -32768) ? 0 : (int16_t)(boost_x10 * 10);
-    out->coolant_temp = (clt < 0) ? 0 : (clt > 255 ? 255 : (uint8_t)clt);
-    if (oilp_x10 < 0) {
-        out->oil_pressure = 0;
-    } else {
-        // oilp_x10 is in 0.1bar units; 1 bar = 14.5038 PSI
-        int32_t psi = (int32_t)(oilp_x10 * 1.45038f + 0.5f);
-        out->oil_pressure = (psi > 255) ? 255 : (uint8_t)psi;
-    }
-    out->gear = gear_unknown ? (int8_t)127 : (int8_t)eGear;
-    if (bat_mv < 0) {
-        out->battery_voltage = 0;
-    } else {
-        int32_t dv = bat_mv / 100;
-        out->battery_voltage = (dv > 255) ? 255 : (uint8_t)dv;
-    }
-    out->oil_temp = (oil < 0) ? 0 : (oil > 255 ? 255 : (uint8_t)oil);
-    out->afr = (afr_x100 < 0) ? 0 : (uint16_t)afr_x100;
-    out->throttle = (tps < 0) ? 0 : (tps > 100 ? 100 : (uint8_t)tps);
-
-    int16_t iat = obd_data_get_intake_temp();
-    out->intake_temp = (iat < 0) ? 0 : (iat > 255 ? 255 : (uint8_t)iat);
+    PERF_BEGIN(perf_ui_start);
+    ui_timer_main_run(timer);
+    PERF_END(PERF_UI_TICK, perf_ui_start, 1);
 }
 
+static void ui_timer_main_run(lv_timer_t * timer)
+#else
 void my_timerMain(lv_timer_t * timer)
+#endif
 {
-    // ---- NEW: Evaluate theme rules every frame ----
-    theme_rule_integration_tick();
-
-    // ---- Process the event queue (ESP-NOW / BLE cross-task events) ----
+    // ---- Process cross-task events from ESP-NOW ----
     {
         app_event_t evt;
+        bool have_sync_slot = false;
+        bool have_intro_step = false;
+        uint8_t sync_slot = 0;
+        uint8_t intro_step = 0;
+
         while (app_event_recv(&evt)) {
             switch (evt.type) {
+                // These are latest-state snapshots, not commands: if the UI
+                // timer was delayed, intermediate animation steps are stale.
                 case APP_EVT_ESPNOW_SYNC_SLOT:
-                    ui_showroom_set_page_from_sync((int)evt.data.u8);
+                    sync_slot = evt.data.u8;
+                    have_sync_slot = true;
                     break;
                 case APP_EVT_ESPNOW_INTRO_STEP:
-                    ui_intro_set_step((int)evt.data.u8);
-                    break;
-                case APP_EVT_ESPNOW_ENTER_SHOWROOM:
-                    ui_showroom_set_active(true);
+                    intro_step = evt.data.u8;
+                    have_intro_step = true;
                     break;
                 case APP_EVT_ESPNOW_THRESH_SYNC:
-                    // RPM threshold synced from another gauge: write local NVS (the master forwards it to the other slaves) + refresh this page
+                    // Threshold updates are commands; preserve every queued one.
                     espnow_link_apply_synced_threshold((uint16_t)evt.data.u16);
                     ui_rpm_warn_refresh_from_nvs();
                     break;
@@ -508,19 +513,19 @@ void my_timerMain(lv_timer_t * timer)
                     break;
             }
         }
+        if (have_sync_slot) ui_showroom_set_page_from_sync((int)sync_slot);
+        if (have_intro_step) ui_intro_set_step((int)intro_step);
     }
 
     static uint16_t usRpm = 0;
     static uint16_t ucSpeed = 0;  // uint16_t so sweep can reach 999
-    static enGear eGear = GEAR_NEUTRAL;
-    static bool  s_gear_unknown = false;   // OBD-gear profile can't read a valid gear → show "--" (no ratio-calc fallback)
+    static int8_t eGear = 0;
+    static bool  s_gear_unknown = true;    // obd.gear invalid (no source / no ratio match yet) → show "--"
     // rpm flash state (red/black toggle, strobing flag, linked ramp) moved to ui_ext.c
     // Sweep animation detection (excludes showroom sync values 200+); sweep state lives in ui_ext.c now
     #define IN_SWEEP (ui_ext_sweep_active())
-    static uint8_t ucOnlyOnce = 0;
-    static uint32_t ulOpenLightTimeCnt = 0;
 
-    const nvs_user_cfg_t *user_cfg = nvs_cfg_get();
+    nvs_user_cfg_t user_cfg = nvs_cfg_read();
     int16_t clt = 0;
     int16_t iat = 0;
     int16_t oil = 0;
@@ -534,7 +539,7 @@ void my_timerMain(lv_timer_t * timer)
     /* ---- Sweep trigger ----
        Master: triggered the instant the ELM327 BLE connects and advances the animation itself;
        Slave: never self-triggers, driven by the master's broadcast sweep_step (espnow recv → app_event queue). */
-    bool is_slave = (user_cfg->device_role == ESPNOW_ROLE_SLAVE);
+    bool is_slave = (user_cfg.device_role == ESPNOW_ROLE_SLAVE);
     // "connected" signal: slave=master data being received, master=ELM327 BLE connected (shared by status display and the master's sweep trigger)
     bool ble_now = is_slave ? espnow_link_slave_has_data() : elm327_ble_is_connected();
     ui_ext_sweep_trigger(ble_now, is_slave);
@@ -543,47 +548,65 @@ void my_timerMain(lv_timer_t * timer)
 
     lv_obj_t *scr = lv_scr_act();
     bool live_data_screen = ui_screen_updates_live_data(scr);
-    bool rpm_warn_possible = ui_ext_rpm_warn_possible();
+    bool rpm_linked_flash_on = false;
+    if (user_cfg.device_role != ESPNOW_ROLE_STANDALONE) {
+        rpm_linked_flash_on =
+            espnow_link_linked_en_with_local(user_cfg.rpm_warn_linked_en != 0) ||
+            espnow_link_linktest_active();
+    }
+    bool rpm_warn_possible = ui_ext_rpm_warn_possible(&user_cfg, rpm_linked_flash_on);
+    bool rpm_flash_active = ui_ext_rpm_is_flashing();
+    bool rpm_link_ramp_active = ui_ext_rpm_link_ramp_active();
+    const uint8_t needle_source = user_cfg.needle_source_idx < DISP_ITEM_COUNT ?
+                                 user_cfg.needle_source_idx : DISP_ITEM_CLT;
 
-    if (!IN_SWEEP && (live_data_screen || rpm_warn_possible || ui_ext_rpm_is_flashing() || ui_ext_rpm_link_ramp_active())) {
-        obd_data_snapshot_t obd;
-
-        obd_data_get_snapshot(&obd);
-        clt       = obd.coolant_temp;
-        iat       = obd.intake_temp;
-        oil       = obd.oil_temp;      // real oil temperature °C (SSM 22 10 17), -100=invalid
-        oilp_x10  = obd.oil_pressure_x10; // oil pressure 0.1bar, -1=invalid
-        load_pct  = obd.load_pct;      // engine load 0~100%, -1=invalid
-        tps       = obd.tps;
-        bat_mv    = obd.bat_mv;
-        boost_x10 = obd.boost_x10; // boost gauge pressure 0.1bar, -32768=invalid
-        afr_x100  = obd.afr_x100;   // air-fuel ratio ×100, -1=invalid
-        usRpm     = obd.rpm;
-        ucSpeed   = obd.speed;
-        int8_t decoded_gear = obd.gear;
-        if (decoded_gear >= 0 && decoded_gear <= GEAR_8) {
-            eGear = (enGear)decoded_gear;
-            s_gear_unknown = false;
-        } else if (vp_loader_get_active()->obd_gear_did != 0) {
-            // OBD gear profile: no RPM/speed ratio fallback — show "--" until a valid gear arrives
-            s_gear_unknown = true;
+    if (!IN_SWEEP && live_data_screen) {
+        if (scr == ui_ScreenPageGear || scr == ui_ScreenPageRpm ||
+            scr == ui_ScreenPageSpeed) {
+            // These 16 ms pages use only the motion signals. Avoid collecting
+            // and converting the other nine snapshot fields every frame.
+            obd_motion_snapshot_t motion;
+            obd_data_get_motion_snapshot(&motion);
+            usRpm = motion.rpm;
+            ucSpeed = motion.speed;
+            // R (-1) and unknown both show "--" on the gear page.
+            s_gear_unknown = (motion.gear < 0 || motion.gear > 8);
+            if (!s_gear_unknown) eGear = motion.gear;
         } else {
-            eGear = calculate_gear(usRpm, ucSpeed);
-            s_gear_unknown = false;
+            obd_data_snapshot_t obd;
+            const uint16_t requested = ui_data_mask_for_screen(scr, &user_cfg,
+                rpm_warn_possible || rpm_flash_active || rpm_link_ramp_active, needle_source);
+            obd_data_get_snapshot_mask(&obd, requested);
+            clt       = obd.coolant_temp;
+            iat       = obd.intake_temp;
+            oil       = obd.oil_temp;      // real oil temperature °C (SSM 22 10 17), -100=invalid
+            oilp_x10  = obd.oil_pressure_x10; // oil pressure 0.1bar, -1=invalid
+            load_pct  = obd.load_pct;      // engine load 0~100%, -1=invalid
+            tps       = obd.tps;
+            bat_mv    = obd.bat_mv;
+            boost_x10 = obd.boost_x10; // boost gauge pressure 0.1bar, -32768=invalid
+            afr_x100  = obd.afr_x100;   // air-fuel ratio ×100, -1=invalid
+            usRpm     = obd.rpm;
+            ucSpeed   = obd.speed;
+            // obd.gear comes from the vehicle profile (direct source or drivetrain ratio
+            // derivation in vp_engine).
+            s_gear_unknown = (obd.gear < 0 || obd.gear > 8);
+            if (!s_gear_unknown) eGear = obd.gear;
         }
+    } else if (!IN_SWEEP &&
+               (rpm_warn_possible || rpm_flash_active || rpm_link_ramp_active)) {
+        // Static screens only need RPM for warning rendering; avoid reading all signals.
+        usRpm = obd_data_get_rpm();
     }
 
     /* ---- Data source: sweep or real OBD (sweep state machine moved to ui_ext.c) ---- */
-    float sweep_ratio = ui_ext_sweep_tick(is_slave, user_cfg->brightness_day);
+    float sweep_ratio = ui_ext_sweep_tick(is_slave, user_cfg.brightness_day);
     if (sweep_ratio >= 0.0f) {
         usRpm   = (uint16_t)(SWEEP_RPM_PEAK * sweep_ratio);
         ucSpeed = (uint16_t)(SWEEP_SPEED_PEAK * sweep_ratio); // uint16_t so it can hold 999
-        eGear   = (enGear)((int)(6.0f * sweep_ratio + 0.5f)); // up to 6th gear
+        eGear   = (int8_t)(6.0f * sweep_ratio + 0.5f); // up to 6th gear
         s_gear_unknown = false;
-        // Temp/Info/Chart pages animate their own data item via disp_item_sweep_value();
-        // the theme-gauge page (ui_build_theme_snapshot below) has no such per-item logic
-        // and just forwards these locals as-is, so without this they'd stay frozen at the
-        // 0 they were declared with above (real OBD reads are skipped while IN_SWEEP).
+        // Needle/Temp/Info pages read these locals; real OBD reads are skipped while IN_SWEEP.
         clt       = (int16_t)disp_item_sweep_value(DISP_ITEM_CLT, sweep_ratio);
         oil       = (int16_t)disp_item_sweep_value(DISP_ITEM_OIL, sweep_ratio);
         oilp_x10  = (int16_t)disp_item_sweep_value(DISP_ITEM_OILP, sweep_ratio);
@@ -595,11 +618,11 @@ void my_timerMain(lv_timer_t * timer)
     /*Gear page: refresh only while this page is actually shown, no idle background updates*/
     if (scr == ui_ScreenPageGear) {
         static const char *pGearNum[] = {"N","1","2","3","4","5","6","7","8"};
-        static enGear s_last_gear_disp = GEAR_NEUTRAL;
+        static int8_t s_last_gear_disp = 0;
         static bool s_last_gear_unknown = false;
-        uint8_t gc = vp_loader_get_active()->gear_count;
+        uint8_t gc = vp_manager_gear_count();
         if (gc < 1) gc = 6;
-        enGear g = (eGear <= GEAR_8) ? eGear : GEAR_8;
+        int8_t g = (eGear <= 8) ? eGear : 8;
         if (s_gear_unknown != s_last_gear_unknown || g != s_last_gear_disp || IN_SWEEP) {
             s_last_gear_unknown = s_gear_unknown;
             s_last_gear_disp = g;
@@ -615,12 +638,10 @@ void my_timerMain(lv_timer_t * timer)
             }
         }
     }
-    /* Theme-provided gauge page: feed the theme engine's arc/bar/label bindings */
+    /* Theme-provided gauge page: bindings + rules read signal_store directly */
     if (scr == ui_ScreenPageThemeGauge) {
-        obd_snapshot_t theme_snap;
-        ui_build_theme_snapshot(&theme_snap, clt, oil, oilp_x10, bat_mv, boost_x10, afr_x100,
-                                 usRpm, ucSpeed, tps, eGear, s_gear_unknown);
-        theme_update_data(&theme_snap);
+        theme_set_sweep(sweep_ratio, usRpm);
+        theme_tick();
     }
     /*RPM page: direct output, no animation delay (CAN 100Hz data is already clean)*/
     if (scr == ui_ScreenPageRpm) {
@@ -646,7 +667,8 @@ void my_timerMain(lv_timer_t * timer)
 
  /*Needle page (configurable data source, sweeps along during gauge sweep)*/
     if (scr == ui_ScreenPageNeedle) {
-        ui_needle_page_update(sweep_ratio, clt, iat, oil, load_pct, tps, bat_mv,
+        ui_needle_page_update_with_source(needle_source, sweep_ratio,
+                              clt, iat, oil, load_pct, tps, bat_mv,
                               oilp_x10, usRpm, ucSpeed, boost_x10, afr_x100);
     }
 
@@ -662,7 +684,7 @@ void my_timerMain(lv_timer_t * timer)
             else r = 1.0f;   // hold at max (hold phase)
 
             for (int i = 0; i < 3; ++i) {
-                uint8_t map_idx = user_cfg->temp_display_map[i];
+                uint8_t map_idx = user_cfg.temp_display_map[i];
                 disp_item_t item = (disp_item_t)(map_idx % DISP_ITEM_COUNT);
 
                 if (s_last_temp_map[i] != map_idx) {
@@ -677,7 +699,7 @@ void my_timerMain(lv_timer_t * timer)
             }
         } else {
             for (int i = 0; i < 3; ++i) {
-                uint8_t map_idx = user_cfg->temp_display_map[i];
+                uint8_t map_idx = user_cfg.temp_display_map[i];
                 disp_item_t item = (disp_item_t)(map_idx % DISP_ITEM_COUNT);
 
                 if (s_last_temp_map[i] != map_idx) {
@@ -697,9 +719,9 @@ void my_timerMain(lv_timer_t * timer)
     if (scr == ui_ScreenPageOilPressure && ui_LabelOilPressureText) {
         static int32_t s_disp_chart = 0;
         static uint8_t s_last_chart_src = 0xFF;
-        disp_item_t citem = (disp_item_t)(user_cfg->chart_source_idx % DISP_ITEM_COUNT);
-        if (s_last_chart_src != user_cfg->chart_source_idx) {
-            s_last_chart_src = user_cfg->chart_source_idx;
+        disp_item_t citem = (disp_item_t)(user_cfg.chart_source_idx % DISP_ITEM_COUNT);
+        if (s_last_chart_src != user_cfg.chart_source_idx) {
+            s_last_chart_src = user_cfg.chart_source_idx;
             s_disp_chart = 0;  // reset on source switch, avoiding a ramp from the old source's value
         }
         int32_t cval = 0;
@@ -750,7 +772,7 @@ void my_timerMain(lv_timer_t * timer)
             else r = 1.0f;   // hold at max (hold phase)
 
             for (int i = 0; i < 5; ++i) {
-                uint8_t map_idx = user_cfg->info_display_map[i];
+                uint8_t map_idx = user_cfg.info_display_map[i];
                 disp_item_t item = (disp_item_t)(map_idx % DISP_ITEM_COUNT);
 
                 if (s_last_info_map[i] != map_idx) {
@@ -765,7 +787,7 @@ void my_timerMain(lv_timer_t * timer)
             }
         } else {
             for (int i = 0; i < 5; ++i) {
-                uint8_t map_idx = user_cfg->info_display_map[i];
+                uint8_t map_idx = user_cfg.info_display_map[i];
                 disp_item_t item = (disp_item_t)(map_idx % DISP_ITEM_COUNT);
 
                 if (s_last_info_map[i] != map_idx) {
@@ -786,7 +808,7 @@ void my_timerMain(lv_timer_t * timer)
         static char s_last_easteregg_info[192];
         char info_text[192];
         const char *mode_str = is_slave ? "SLAVE"
-                             : (user_cfg->device_role == ESPNOW_ROLE_MASTER) ? "MASTER" : "STANDALONE";
+                             : (user_cfg.device_role == ESPNOW_ROLE_MASTER) ? "MASTER" : "STANDALONE";
         const char *conn_label, *conn_name;
 
         if (is_slave) {
@@ -816,30 +838,7 @@ void my_timerMain(lv_timer_t * timer)
         }
     }
 
-    /* OTA mode screen: refresh connection status */
-    ui_ota_mode_refresh();
-
-#if EXAMPLE_PIN_NUM_BK_LIGHT >= 0
-        //wait 500ms before turning on the backlight, so it isn't enabled before init completes; runs once
-        if(ucOnlyOnce == 0)
-        {
-            ulOpenLightTimeCnt++;
-            if(ulOpenLightTimeCnt > 400 / 200)
-            {
-                uint8_t bright = user_cfg->brightness_day;
-                if(bright < 10) bright = 100;
-                Set_Backlight(bright);
-                ESP_LOGD(TAG, "Set LCD backlight to %d%%", bright);
-                ulOpenLightTimeCnt = 0;
-                ucOnlyOnce = 1;//run once only
-            }
-        }
-#endif
-
-    /* The bottom info bar (TRIP/ODO/MAX/AVG/TIME) belonged to the removed Main page and was removed with it.
-       Mileage statistics are still accumulated by a background task and can be shown on other pages or re-attached later. */
-
-    /* ===== Video boot mode (INTRO == 2: VIDEO, the boot_block flashed via the phone app) ===== */
+    /* ===== Video boot mode (INTRO == 2: VIDEO, media is read from SD /OBD/BOOT only) ===== */
     // Moved to ui_ext.c; returns true while the Logo/video is still showing, so my_timerMain returns early.
     if (ui_ext_boot_video_tick()) return;
 
@@ -847,7 +846,7 @@ void my_timerMain(lv_timer_t * timer)
     ui_ext_intro_tick(is_slave);
 
     /* ---- RPM over-limit flash warning (migrated to ui_ext.c) ---- */
-    ui_ext_rpm_flash_tick(usRpm, IN_SWEEP);
+    ui_ext_rpm_flash_tick(usRpm, IN_SWEEP, &user_cfg, rpm_linked_flash_on);
 
     if (!ui_ext_showroom_is_active()) {
         ui_ext_no_signal_update(ble_now);   // showroom mode is a fake-data demo, no NO SIGNAL hint
@@ -892,7 +891,6 @@ void ui_event_logo_background(lv_event_t * e)
             if(ui_ScreenPageODBProtocal == NULL) ui_ScreenPageODBProtocal_screen_init();
             lv_scr_load_anim(ui_ScreenPageODBProtocal, LV_SCR_LOAD_ANIM_FADE_ON, 300, 0, true);
             ui_ScreenPageLogo = NULL;
-            imageLogo = NULL;
         }  
 
         ESP_LOGD(TAG, "Logo LV_EVENT_CLICKED");
@@ -925,6 +923,23 @@ void ui_event_gear_background(lv_event_t * e)
 // declared by the active theme. Swiping left past the last theme page goes
 // to the Info page (version/settings). Swiping right from the first theme
 // page also goes to Info page (creating a loop: theme pages ↔ Info).
+// Theme page → theme page. The old screen is the active one, so it is loaded
+// with auto_del and LVGL frees it after the fade (it used to leak on every swipe).
+static void theme_gauge_switch(uint8_t index)
+{
+    lv_obj_t *old = ui_ScreenPageThemeGauge;
+    uint8_t old_index = ui_theme_gauge_page_index;
+    ui_theme_gauge_page_index = index;
+    ui_ScreenPageThemeGauge = NULL;
+    ui_ScreenPageThemeGauge_screen_init();
+    if (ui_ScreenPageThemeGauge == NULL) {          // page failed to build: stay put
+        ui_ScreenPageThemeGauge = old;
+        ui_theme_gauge_page_index = old_index;
+        return;
+    }
+    lv_scr_load_anim(ui_ScreenPageThemeGauge, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, old == lv_scr_act());
+}
+
 void ui_event_theme_gauge_background(lv_event_t * e)
 {
     lv_event_code_t event_code = lv_event_get_code(e);
@@ -935,10 +950,7 @@ void ui_event_theme_gauge_background(lv_event_t * e)
         if(dir == LV_DIR_LEFT) {
             lv_indev_wait_release(lv_indev_get_act());
             if (ui_theme_gauge_page_index + 1 < page_count) {
-                // Move to next theme page
-                ui_theme_gauge_page_index++;
-                ui_ScreenPageThemeGauge = NULL;  // Let _ui_screen_change delete the old screen
-                _ui_screen_change(&ui_ScreenPageThemeGauge, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageThemeGauge_screen_init);
+                theme_gauge_switch(ui_theme_gauge_page_index + 1);
             } else {
                 // Past the last theme page → go to Info page (version/settings)
                 _ui_screen_change(&ui_ScreenPageEasterEgg, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageEasterEgg_screen_init);
@@ -947,10 +959,7 @@ void ui_event_theme_gauge_background(lv_event_t * e)
         else if(dir == LV_DIR_RIGHT) {
             lv_indev_wait_release(lv_indev_get_act());
             if (ui_theme_gauge_page_index > 0) {
-                // Move to previous theme page
-                ui_theme_gauge_page_index--;
-                ui_ScreenPageThemeGauge = NULL;  // Let _ui_screen_change delete the old screen
-                _ui_screen_change(&ui_ScreenPageThemeGauge, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageThemeGauge_screen_init);
+                theme_gauge_switch(ui_theme_gauge_page_index - 1);
             } else {
                 // Before the first theme page → go to Info page (creating a loop)
                 _ui_screen_change(&ui_ScreenPageEasterEgg, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageEasterEgg_screen_init);
@@ -1188,7 +1197,6 @@ void ui_event_easter_egg_background(lv_event_t * e)
     }
 
     // ---- hand-written extension logic hook (ui_ext.c, not overwritten by SquareLine) ----
-    ui_ext_tick();
 }
 
 // OTA button: enter OTA mode screen (WiFi SoftAP + HTTP server, no BLE)
@@ -1196,27 +1204,6 @@ void ui_event_easter_egg_ota_button(lv_event_t *e)
 {
     (void)e;
     _ui_screen_change(&ui_ScreenPageOTAMode, LV_SCR_LOAD_ANIM_FADE_ON, 300, 0, &ui_ScreenPageOTAMode_screen_init);
-}
-
-// OTA mode screen: refresh status from the LVGL timer (called every 500ms)
-void ui_ota_mode_refresh(void)
-{
-    if (ui_ScreenPageOTAMode == NULL) return;
-    if (ui_LabelOTAModeStatus == NULL) return;
-
-    if (ota_wifi_server_is_busy()) {
-        lv_label_set_text(ui_LabelOTAModeStatus, "Receiving update...");
-        lv_obj_set_style_text_color(ui_LabelOTAModeStatus, lv_color_hex(0x00CC66), LV_PART_MAIN | LV_STATE_DEFAULT);
-    } else if (ota_wifi_server_get_state() == OTA_WIFI_STATE_READY) {
-        lv_label_set_text(ui_LabelOTAModeStatus, "WiFi ready — connect your phone");
-        lv_obj_set_style_text_color(ui_LabelOTAModeStatus, lv_color_hex(0x00CC66), LV_PART_MAIN | LV_STATE_DEFAULT);
-    } else if (ota_wifi_server_get_state() == OTA_WIFI_STATE_IDLE) {
-        lv_label_set_text(ui_LabelOTAModeStatus, "Starting WiFi...");
-        lv_obj_set_style_text_color(ui_LabelOTAModeStatus, lv_color_hex(0xAAAAAA), LV_PART_MAIN | LV_STATE_DEFAULT);
-    } else if (ota_wifi_server_get_state() == OTA_WIFI_STATE_ERROR) {
-        lv_label_set_text(ui_LabelOTAModeStatus, "WiFi error");
-        lv_obj_set_style_text_color(ui_LabelOTAModeStatus, lv_color_hex(0xFF0000), LV_PART_MAIN | LV_STATE_DEFAULT);
-    }
 }
 
 ///////////////////// SCREENS ////////////////////
@@ -1228,7 +1215,7 @@ void ui_init(void)
     // Here we only load theme and create other UI elements.
 
     // Initialize theme partition system AFTER logo is visible
-    // This loads the theme from theme_0/theme_1 partition, or falls back to default
+    // This loads the selected theme from SD, or falls back to the built-in UI
     ESP_LOGI(TAG, "Initializing theme partition system");
     esp_err_t theme_ret = theme_engine_init();
     if (theme_ret == ESP_OK) {
@@ -1236,8 +1223,6 @@ void ui_init(void)
         if (theme_get_info(&info) == ESP_OK) {
             ESP_LOGI(TAG, "Theme loaded: %s v%s by %s", info.name, info.version, info.author);
         }
-        // Run test to print detailed theme info
-        theme_engine_test();
     } else {
         ESP_LOGW(TAG, "Theme partition system initialization failed, using built-in themes");
     }
@@ -1252,7 +1237,9 @@ void ui_init(void)
     bool has_custom_theme = false;
     theme_info_t theme_info;
     if (theme_get_info(&theme_info) == ESP_OK) {
-        if (theme_info.id[0] != '\0' && strcmp(theme_info.id, "default") != 0) {
+        // A theme without pages only recolors: the built-in gauge pages are still needed.
+        if (theme_info.id[0] != '\0' && strcmp(theme_info.id, "default") != 0 &&
+            theme_page_list_count() > 0) {
             has_custom_theme = true;
             ESP_LOGI(TAG, "Custom theme detected - skipping built-in gauge pages to save RAM");
         }
@@ -1284,16 +1271,20 @@ void ui_init(void)
     ui_ScreenPageInfoCustom = NULL;
     ui_ScreenPageNeedleConfig = NULL;   // config page lazy-loaded
     ui_ScreenPageMultiGauge = NULL;     // triple-gauge settings page lazy-loaded
+    ui_ScreenPageVehicle = NULL;        // vehicle profile page lazy-loaded
+    ui_ScreenPageStorage = NULL;        // SD storage page lazy-loaded
     ui_ScreenPageChartConfig = NULL;    // chart data-source selection page lazy-loaded
     ui_ScreenPageChartAlarm = NULL;     // chart alarm settings page lazy-loaded
     ui_ScreenPageIntro = NULL;          // boot animation page lazy-loaded
-    ui_ScreenPageThemeGauge = NULL;     // theme-provided gauge page, lazy-loaded (only reachable if the active theme declares "main_gauge")
+    ui_ScreenPageThemeGauge = NULL;     // theme-provided gauge page, lazy-loaded (only reachable when the active theme declares pages)
 
     // Pre-create the default boot page: build it before the boot switch so it isn't created synchronously mid-transition and cause a stutter.
     // The other default pages (Temp/OilP/Needle/Gear/Rpm/Speed) were eagerly created above; only Info is lazy-loaded.
-    if (nvs_cfg_get()->default_page == 1 && ui_ScreenPageInfo == NULL) {
+    if (nvs_cfg_read().default_page == 1 && ui_ScreenPageInfo == NULL) {
         ui_ScreenPageInfo_screen_init();
     }
+
+    ui_ext_boot_prepare();
 
     lv_timer_create(my_timerMain,
                     ui_refresh_period_ms_for_screen(lv_scr_act(), false, false, false),
@@ -1316,9 +1307,11 @@ void ui_event_obd_prot_background(lv_event_t * e)
         usSaveProtTimeCnt += 100; // this event fires every 100 ms
         if(usSaveProtTimeCnt >= SAVE_PROTOCOL_TIME){
             usSaveProtTimeCnt = 0;
-            nvs_user_cfg_t cfg = *nvs_cfg_get();
+            nvs_user_cfg_t base;
+            nvs_cfg_snapshot(&base);
+            nvs_user_cfg_t cfg = base;
             cfg.protocol = lv_roller_get_selected(ui_RollerODBProtocalChoose);
-            nvs_cfg_set(&cfg);
+            nvs_cfg_update(&base, &cfg);
             esp_restart();
         }
     }else if(code == LV_EVENT_RELEASED){
@@ -1334,7 +1327,7 @@ void ui_event_ble_scan_background(lv_event_t * e)
         lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_get_act());
         if(dir == LV_DIR_LEFT || dir == LV_DIR_RIGHT){
             // on this page slaves run the pairing scan (gauge_pair_ble), not the OBD scan (elm327_ble); stop the matching one when swiping away.
-            if (nvs_cfg_get()->device_role == ESPNOW_ROLE_SLAVE) {
+            if (nvs_cfg_read().device_role == ESPNOW_ROLE_SLAVE) {
                 gauge_pair_ble_scan_stop();
             } else {
                 elm327_ble_scan_only_stop();
@@ -1358,6 +1351,32 @@ void ui_event_settings_background(lv_event_t * e)
         else if(dir == LV_DIR_BOTTOM){   // swipe down enters the triple-gauge settings page
             lv_indev_wait_release(lv_indev_get_act());
             _ui_screen_change(&ui_ScreenPageMultiGauge, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageMultiGauge_screen_init);
+        }
+    }
+}
+
+// Vehicle page gestures: swipe up/left/right → return to the settings page
+void ui_event_vehicle_background(lv_event_t * e)
+{
+    lv_event_code_t code = lv_event_get_code(e);
+    if(code == LV_EVENT_GESTURE){
+        lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_get_act());
+        if(dir == LV_DIR_TOP || dir == LV_DIR_LEFT || dir == LV_DIR_RIGHT){
+            lv_indev_wait_release(lv_indev_get_act());
+            _ui_screen_change(&ui_ScreenPageSettings, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageSettings_screen_init);
+        }
+    }
+}
+
+// Storage page gestures: swipe down/left/right → return to the settings page
+void ui_event_storage_background(lv_event_t * e)
+{
+    lv_event_code_t code = lv_event_get_code(e);
+    if(code == LV_EVENT_GESTURE){
+        lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_get_act());
+        if(dir == LV_DIR_BOTTOM || dir == LV_DIR_LEFT || dir == LV_DIR_RIGHT){
+            lv_indev_wait_release(lv_indev_get_act());
+            _ui_screen_change(&ui_ScreenPageSettings, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageSettings_screen_init);
         }
     }
 }

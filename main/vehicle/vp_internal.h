@@ -11,6 +11,15 @@
 extern "C" {
 #endif
 
+/* Resolve absent standard signals. Returns root unchanged when no expansion is
+ * needed, otherwise a new tree in *owned (caller deletes it). NULL means OOM.
+ * Explicit declarations are retained in order; inherited signals are appended.
+ */
+const cJSON *vp_int_resolve_defaults(const cJSON *root, cJSON **owned, vp_issues_t *issues);
+
+/* Validate an already resolved tree; used by the compiler to avoid expanding twice. */
+size_t vp_int_validate_resolved(const cJSON *root, const vp_validate_cfg_t *cfg, vp_issues_t *out);
+
 /* Number that is an integer in [lo, hi]. */
 bool vp_int_json_int(const cJSON *it, double lo, double hi, long *out);
 

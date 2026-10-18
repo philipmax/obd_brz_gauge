@@ -27,9 +27,6 @@ extern "C" {
  * config_part_format() then config_part_init() again). */
 esp_err_t config_part_init(void);
 
-/* Unmount the config partition. */
-esp_err_t config_part_deinit(void);
-
 /* Erase and reformat the config partition (destructive).
  * Only call this when init fails or on explicit user factory-reset. */
 esp_err_t config_part_format(void);
@@ -58,9 +55,6 @@ esp_err_t config_part_read(const char *path, void *buf, size_t buf_len,
 
 /* Delete a file. Returns ESP_OK if the file did not exist. */
 esp_err_t config_part_remove(const char *path);
-
-/* Rename / move a file within the config partition (atomic commit). */
-esp_err_t config_part_rename(const char *src, const char *dst);
 
 /* Check whether a file exists. */
 bool config_part_exists(const char *path);

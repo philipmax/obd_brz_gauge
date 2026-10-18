@@ -165,6 +165,72 @@ static void test_push_raw(void)
     }
 }
 
+/* Independent bit-by-bit oracle: exercise every bit offset/width and
+ * both endiannesses, including signed 32-bit fields and truncated buffers. */
+static bool raw_reference(const uint8_t *data, size_t len, uint16_t start,
+                          uint8_t bits, uint8_t flags, int64_t *out)
+{
+    uint32_t v = 0;
+    if (!data || !out || !bits || bits > 32) return false;
+    if ((uint32_t)start + bits > len * 8u) return false;
+    for (unsigned i = 0; i < bits; i++) {
+        unsigned pos = start + i;
+        if (flags & VP_RAW_BE)
+            v = (v << 1) | ((data[pos / 8] >> (7u - pos % 8)) & 1u);
+        else
+            v |= (uint32_t)((data[pos / 8] >> (pos % 8)) & 1u) << i;
+    }
+    *out = ((flags & VP_RAW_SIGNED) && (v & (1u << (bits - 1))))
+         ? (int64_t)v - ((int64_t)1 << bits) : (int64_t)v;
+    return true;
+}
+
+static void test_raw_all_fields(void)
+{
+    uint8_t storage[10];
+    uint8_t *data = storage + 1;
+    uint32_t seed = 0x617E9AB3u;
+    for (unsigned pattern = 0; pattern < 12; pattern++) {
+        for (unsigned i = 0; i < 8; i++) {
+            seed = seed * 1664525u + 1013904223u;
+            data[i] = pattern == 0 ? 0 : pattern == 1 ? 0xFF :
+                      pattern == 2 ? 0xAA : pattern == 3 ? 0x55 : (uint8_t)(seed >> 24);
+        }
+        for (uint16_t start = 0; start <= 64; start++) {
+            for (uint8_t bits = 0; bits <= 33; bits++) {
+                for (uint8_t flags = 0; flags < 4; flags++) {
+                    size_t needed = ((size_t)start + bits + 7) / 8;
+                    /* Exact end boundary, one byte short, and a full frame. */
+                    size_t lengths[] = {needed <= 8 ? needed : 8, needed ? needed - 1 : 0, 8};
+                    for (unsigned k = 0; k < N(lengths); k++) {
+                        if (lengths[k] > 8) continue;
+                        int64_t expected = INT64_C(0x123456789), actual = expected;
+                        bool ok = raw_reference(data, lengths[k], start, bits, flags, &expected);
+                        VT_CHECK_INT(vp_rpn_extract_raw(data, lengths[k], start, bits, flags, &actual), ok);
+                        VT_CHECK_INT(actual, expected); /* errors must leave output untouched */
+                    }
+                }
+            }
+        }
+    }
+    int64_t out = 123;
+    VT_CHECK(!vp_rpn_extract_raw(NULL, 8, 0, 8, 0, &out));
+    VT_CHECK(!vp_rpn_extract_raw(data, 8, 0, 8, 0, NULL));
+    VT_CHECK_INT(out, 123);
+    uint8_t far_data[8196] = {0};
+    far_data[8191] = 0xD3;
+    far_data[8192] = 0x79;
+    far_data[8193] = 0xA6;
+    far_data[8194] = 0xCC;
+    far_data[8195] = 0x01;
+    for (uint8_t flags = 0; flags < 4; flags++) {
+        int64_t expected;
+        VT_CHECK(raw_reference(far_data, sizeof(far_data), UINT16_MAX, 32, flags, &expected));
+        VT_CHECK(vp_rpn_extract_raw(far_data, sizeof(far_data), UINT16_MAX, 32, flags, &out));
+        VT_CHECK_INT(out, expected);
+    }
+}
+
 static void test_const(void)
 {
     vp_rpn_insn_t c[1];
@@ -503,7 +569,7 @@ static void test_json_example(void)
     VT_CHECK_INT(n, 7);
     VT_CHECK_INT(verify(c, n, 2, 0, NULL), VP_RPN_OK);
     VT_CHECK_INT(eval(c, n, d, 2, &r), VP_RPN_OK);
-    VT_CHECK_FLT(r, 1727.5, 0);
+    VT_CHECK_FLT(r, 1726, 0);   /* 0x1AF8 = 6904 */
     VT_CHECK_INT(verify(c, n, 1, 0, NULL), VP_RPN_ERR_INDEX);
 }
 
@@ -611,6 +677,7 @@ int main(void)
 {
     VT_RUN(test_push_byte);
     VT_RUN(test_push_raw);
+    VT_RUN(test_raw_all_fields);
     VT_RUN(test_const);
     VT_RUN(test_arith);
     VT_RUN(test_clamp);

@@ -65,7 +65,9 @@ static void count_tables(const cJSON *root, counts_t *k)
 
     memset(k, 0, sizeof(*k));
     k->n_init = cJSON_IsArray(init) ? (size_t)cJSON_GetArraySize(init) : 0;
-    k->n_sig = (size_t)cJSON_GetArraySize(signals);
+    cJSON_ArrayForEach(s, signals) {
+        if (!cJSON_IsTrue(jget(s, "disabled"))) k->n_sig++;
+    }
     while ((s = vp_int_next_src(signals, &si, &sj, NULL)) != NULL) {
         k->n_src++;
         if (vp_int_src_kind(s) == VP_SRC_CAN) k->n_can++;
@@ -81,13 +83,13 @@ static void count_tables(const cJSON *root, counts_t *k)
     }
 }
 
-static uint16_t registry_id(const vp_validate_cfg_t *cfg, const char *key)
+static const vp_sig_def_t *registry_def(const vp_validate_cfg_t *cfg, const char *key)
 {
     size_t i;
     for (i = 0; cfg && cfg->registry && i < cfg->n_registry; i++) {
-        if (cfg->registry[i].key && !strcmp(cfg->registry[i].key, key)) return cfg->registry[i].num_id;
+        if (cfg->registry[i].key && !strcmp(cfg->registry[i].key, key)) return &cfg->registry[i];
     }
-    return 0;
+    return NULL;
 }
 
 static void fill_header(vp_profile_t *p, const cJSON *root)
@@ -111,7 +113,7 @@ static void fill_header(vp_profile_t *p, const cJSON *root)
         if (cJSON_IsString(it) && !strcmp(it->valuestring, "ATCEA")) p->requires |= VP_REQ_ATCEA;
     }
 
-    p->proto = (uint8_t)jint(bus, "proto", 0);
+    p->proto = (uint8_t)jint(bus, "proto", VP_DEFAULT_PROTO);
     p->hdr = vp_int_bus_hdr(root, &functional);
     p->hdr_functional = functional ? 1 : 0;
     p->atst = (uint8_t)jint(bus, "atst", VP_DEFAULT_ATST);
@@ -274,7 +276,10 @@ static bool fill_signal(fill_t *f, const cJSON *root, const cJSON *js, uint16_t 
         o->num_id = (uint16_t)(VP_VEH_NUM_ID_BASE + f->n_veh++);
         o->flags |= VP_SIG_F_VEH;
     } else {
-        o->num_id = registry_id(cfg, id);
+        const vp_sig_def_t *d = registry_def(cfg, id);
+        o->num_id = d ? d->num_id : 0;
+        /* resolve the default unit so the engine never guesses */
+        if (!o->unit[0] && d && d->unit_default) copy_str(o->unit, sizeof(o->unit), d->unit_default);
     }
     o->rate = (uint8_t)str_index(jstr(js, "rate"), k_rates, VP_RATE_ROUND);
     if (o->rate == VP_RATE_SLOW) o->slow_div = (uint8_t)jint(js, "div", VP_DEFAULT_SLOW_DIV);
@@ -311,7 +316,7 @@ static bool fill_signal(fill_t *f, const cJSON *root, const cJSON *js, uint16_t 
     return true;
 }
 
-vp_compile_err_t vp_compile(const cJSON *root, const vp_validate_cfg_t *cfg,
+static vp_compile_err_t compile_resolved(const cJSON *root, const vp_validate_cfg_t *cfg,
                             const vp_allocator_t *alloc, vp_profile_t **out,
                             vp_issues_t *issues)
 {
@@ -325,7 +330,7 @@ vp_compile_err_t vp_compile(const cJSON *root, const vp_validate_cfg_t *cfg,
 
     if (!root || !alloc || !alloc->alloc || !out) return VP_COMPILE_ERR_ARG;
     *out = NULL;
-    if (vp_validate(root, cfg, issues) != 0) return VP_COMPILE_ERR_INVALID;
+    if (vp_int_validate_resolved(root, cfg, issues) != 0) return VP_COMPILE_ERR_INVALID;
 
     count_tables(root, &k);
     off = sizeof(vp_profile_t);
@@ -398,6 +403,7 @@ vp_compile_err_t vp_compile(const cJSON *root, const vp_validate_cfg_t *cfg,
     }
     if (!fill_luts(&f, jget(root, "luts"))) goto internal;
     cJSON_ArrayForEach(it, jget(root, "signals")) {
+        if (cJSON_IsTrue(jget(it, "disabled"))) continue;
         if (!fill_signal(&f, root, it, idx, cfg)) goto internal;
         idx++;
     }
@@ -418,6 +424,22 @@ internal:
     }
     if (alloc->free) alloc->free(alloc->ctx, blob);
     return VP_COMPILE_ERR_INTERNAL;
+}
+
+vp_compile_err_t vp_compile(const cJSON *root, const vp_validate_cfg_t *cfg,
+                            const vp_allocator_t *alloc, vp_profile_t **out,
+                            vp_issues_t *issues)
+{
+    cJSON *owned = NULL;
+    const cJSON *resolved;
+    vp_compile_err_t err;
+    if (!root || !alloc || !alloc->alloc || !out) return VP_COMPILE_ERR_ARG;
+    *out = NULL;
+    resolved = vp_int_resolve_defaults(root, &owned, issues);
+    if (!resolved) return VP_COMPILE_ERR_NOMEM;
+    err = compile_resolved(resolved, cfg, alloc, out, issues);
+    cJSON_Delete(owned);
+    return err;
 }
 
 vp_compile_err_t vp_compile_json(const char *text, size_t len, const vp_validate_cfg_t *cfg,

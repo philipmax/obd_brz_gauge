@@ -1,51 +1,47 @@
 #include "racechrono_ble_diy.h"
+#include "racechrono_filter.h"
+#include "app_obd_dsp/perf_stats.h"
 
 #include <string.h>
 #include <inttypes.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 
 #include "esp_log.h"
 #include "esp_err.h"
 #include "esp_timer.h"
-#include "esp_bt_main.h"
 #include "esp_bt_defs.h"
+#include "esp_gap_ble_api.h"
 #include "esp_gatts_api.h"
-#include "esp_gatt_common_api.h"
-#include "esp_bt.h"
 #include "esp_mac.h"
 
-#include "app_obd_dsp/obd_data_cache.h"
+#include "app_obd_dsp/signal_store.h"
+#include "bsp_obd_dsp/ble_hub.h"
 #include "bsp_obd_dsp/nvs_storage.h"
 #include "bsp_obd_dsp/espnow_link.h"
 #include "bsp_obd_dsp/gauge_pair_ble_client.h"   // GAUGE_PAIR_SERVICE_UUID / GAUGE_PAIR_CHAR_MAC (shared with the slave-gauge pairing client)
 
 #define RC_TAG "racechrono_diy"
 
-#define RC_APP_ID 0x52
 #define RC_DEVICE_NAME "SkyGarageRC"
 
 #define RC_SERVICE_UUID  0x1FF8
 #define RC_CHAR_CAN_MAIN 0x0001
 #define RC_CHAR_FILTER   0x0002
 
-#define RC_CH_MAX 9
-#define RC_PID_RULE_MAX 24
+#define RC_CH_MAX RC_FILTER_CHANNEL_COUNT
 
 typedef struct {
     uint32_t pid;
-    uint16_t interval_ms;
-    int64_t last_sent_us;
-} rc_pid_rule_t;
-
-typedef struct {
-    uint32_t pid;
-    int32_t (*read_scaled)(bool *valid);
+    int      slot;       /* SIG_SLOT_NONE for retired channels */
+    int32_t  scale;
 } rc_chan_t;
 
 static esp_gatt_if_t s_gatts_if = ESP_GATT_IF_NONE;
 static uint16_t s_conn_id = 0;
+static esp_bd_addr_t s_peer_bda;
 static bool s_connected = false;
 static bool s_notify_enabled = false;
 static bool s_started = false;
@@ -57,10 +53,8 @@ static bool s_adv_cfg_pending = false;
 static bool s_adv_raw_done = false;
 static bool s_scan_rsp_raw_done = false;
 
-static bool s_allow_all = true;
-static uint16_t s_allow_all_interval_ms = 100;
-static rc_pid_rule_t s_rules[RC_PID_RULE_MAX];
-static uint8_t s_rule_count = 0;
+static rc_filter_t s_filter = RC_FILTER_INITIALIZER;
+static portMUX_TYPE s_filter_mux = portMUX_INITIALIZER_UNLOCKED;
 
 static uint16_t s_handle_can_main = 0;
 static uint16_t s_handle_can_cccd = 0;
@@ -68,8 +62,23 @@ static uint16_t s_handle_filter = 0;
 static int64_t s_last_send_err_log_us = 0;
 
 static TaskHandle_t s_stream_task = NULL;
-static int64_t s_last_all_sent_us[RC_CH_MAX] = {0};
-static obd_data_snapshot_t s_stream_snapshot;
+/* Lifetime is the entire boot, not the worker lifetime. Late GATT/shutdown
+ * callbacks can safely give this token even after the worker deletes itself. */
+static StaticSemaphore_t s_stream_wake_storage;
+static SemaphoreHandle_t s_stream_wake;
+
+static void wake_stream(void)
+{
+    if (s_stream_wake) xSemaphoreGive(s_stream_wake);
+}
+
+static TickType_t stream_wait_ticks(uint32_t wait_us)
+{
+    if (wait_us == RC_FILTER_WAIT_FOREVER) return portMAX_DELAY;
+    uint64_t ticks = ((uint64_t)wait_us * configTICK_RATE_HZ + 999999u) / 1000000u;
+    if (ticks >= portMAX_DELAY) ticks = portMAX_DELAY - 1u;
+    return (TickType_t)(ticks ? ticks : 1u);
+}
 
 // Stable virtual CAN IDs: keep backward compatibility for RaceChrono formulas.
 #define RC_PID_RPM          0x0000F101u
@@ -137,8 +146,8 @@ static uint8_t s_scan_rsp_raw[31] = {0};
 // Decide the advertising name and pairing MAC characteristic content based on the current device_role; called once before the startup flow / role change.
 static void build_adv_identity(void)
 {
-    const nvs_user_cfg_t *cfg = nvs_cfg_get();
-    if (cfg->device_role == ESPNOW_ROLE_MASTER) {
+    nvs_user_cfg_t cfg = nvs_cfg_read();
+    if (cfg.device_role == ESPNOW_ROLE_MASTER) {
         uint8_t mac[6] = {0};
         esp_read_mac(mac, ESP_MAC_WIFI_STA);
         memcpy(s_pair_mac, mac, sizeof(s_pair_mac));
@@ -274,79 +283,18 @@ static const esp_gatts_attr_db_t s_gatt_db_pair[IDX_PAIR_NB] = {
       sizeof(s_pair_mac), sizeof(s_pair_mac), s_pair_mac}},
 };
 
-static int32_t read_rpm(bool *valid)
-{
-    uint16_t v = s_stream_snapshot.rpm;
-    *valid = (v > 0);
-    return (int32_t)v;
-}
-
-static int32_t read_speed(bool *valid)
-{
-    uint8_t v = s_stream_snapshot.speed;
-    *valid = true;
-    return (int32_t)v;
-}
-
-static int32_t read_clt(bool *valid)
-{
-    int16_t v = s_stream_snapshot.coolant_temp;
-    *valid = (v > -100);
-    return (int32_t)v;
-}
-
-static int32_t read_iat(bool *valid)
-{
-    int16_t v = s_stream_snapshot.intake_temp;
-    *valid = (v > -100);
-    return (int32_t)v;
-}
-
-static int32_t read_oil(bool *valid)
-{
-    int16_t v = s_stream_snapshot.oil_temp;
-    *valid = (v > -100);
-    return (int32_t)v;
-}
-
-static int32_t read_load_x10(bool *valid)
-{
-    int16_t v = s_stream_snapshot.load_pct;
-    *valid = (v >= 0);
-    return (int32_t)(v * 10);
-}
-
-static int32_t read_tps_x10(bool *valid)
-{
-    int16_t v = s_stream_snapshot.tps;
-    *valid = (v >= 0);
-    return (int32_t)(v * 10);
-}
-
-static int32_t read_bat_mv(bool *valid)
-{
-    int32_t v = s_stream_snapshot.bat_mv;
-    *valid = (v > 0);
-    return v;
-}
-
-// Retired channel stub: keeps index 8 / PID F109 known so it is never remapped or reused.
-static int32_t read_retired(bool *valid)
-{
-    *valid = false;
-    return 0;
-}
-
+// Values use signal_store internal units; scale preserves the RaceChrono
+// legacy wire format (load/TPS are tenths, battery is mV).
 static const rc_chan_t s_channels[RC_CH_MAX] = {
-    {RC_PID_RPM, read_rpm},
-    {RC_PID_SPEED_KMH, read_speed},
-    {RC_PID_CLT_C, read_clt},
-    {RC_PID_IAT_C, read_iat},
-    {RC_PID_OIL_C, read_oil},
-    {RC_PID_LOAD_X10, read_load_x10},
-    {RC_PID_TPS_X10, read_tps_x10},
-    {RC_PID_BAT_MV, read_bat_mv},
-    {RC_PID_F109_RETIRED, read_retired},   // F109 retired, never reuse
+    {RC_PID_RPM,          SIG_OBD_RPM,          1},
+    {RC_PID_SPEED_KMH,    SIG_OBD_SPEED,        1},
+    {RC_PID_CLT_C,        SIG_OBD_COOLANT_TEMP, 1},
+    {RC_PID_IAT_C,        SIG_OBD_INTAKE_TEMP,  1},
+    {RC_PID_OIL_C,        SIG_OBD_OIL_TEMP,     1},
+    {RC_PID_LOAD_X10,     SIG_OBD_LOAD,        10},
+    {RC_PID_TPS_X10,      SIG_OBD_THROTTLE,    10},
+    {RC_PID_BAT_MV,       SIG_OBD_BATTERY_VOLTAGE, 1},
+    {RC_PID_F109_RETIRED, SIG_SLOT_NONE,        1}, // F109 retired, never reuse
 };
 
 static inline void le32_store(uint8_t *p, uint32_t v)
@@ -425,63 +373,28 @@ static bool normalize_client_pid(uint32_t pid_raw, uint32_t *out_pid)
 
 static void send_can_packet(uint32_t pid, int32_t value)
 {
-    if (!s_connected || !s_notify_enabled || s_handle_can_main == 0 || s_gatts_if == ESP_GATT_IF_NONE) {
-        return;
-    }
+    portENTER_CRITICAL(&s_filter_mux);
+    bool enabled = s_connected && s_notify_enabled && s_handle_can_main != 0 && s_gatts_if != ESP_GATT_IF_NONE;
+    uint16_t conn_id = s_conn_id;
+    uint16_t handle = s_handle_can_main;
+    esp_gatt_if_t gatts_if = s_gatts_if;
+    portEXIT_CRITICAL(&s_filter_mux);
+    if (!enabled || !ble_hub_is_ready()) return;
 
     uint8_t pkt[8];
     le32_store(pkt, pid);
     le32_store(pkt + 4, (uint32_t)value);
-    esp_err_t err = esp_ble_gatts_send_indicate(s_gatts_if, s_conn_id, s_handle_can_main, sizeof(pkt), pkt, false);
+    esp_err_t err = esp_ble_gatts_send_indicate(gatts_if, conn_id, handle, sizeof(pkt), pkt, false);
     if (err != ESP_OK) {
         int64_t now_us = esp_timer_get_time();
-        if ((now_us - s_last_send_err_log_us) > 1000000) {
-            s_last_send_err_log_us = now_us;
+        portENTER_CRITICAL(&s_filter_mux);
+        bool log_error = now_us - s_last_send_err_log_us > 1000000;
+        if (log_error) s_last_send_err_log_us = now_us;
+        portEXIT_CRITICAL(&s_filter_mux);
+        if (log_error) {
             ESP_LOGW(RC_TAG, "send_indicate failed: %s", esp_err_to_name(err));
         }
     }
-}
-
-static bool should_send_by_rule(uint32_t pid, int channel_idx, int64_t now_us)
-{
-    uint16_t interval_ms = s_allow_all_interval_ms;
-    rc_pid_rule_t *rule = NULL;
-
-    if (!s_allow_all) {
-        for (uint8_t i = 0; i < s_rule_count; i++) {
-            if (s_rules[i].pid == pid) {
-                rule = &s_rules[i];
-                break;
-            }
-        }
-        if (!rule) {
-            return false;
-        }
-        interval_ms = rule->interval_ms;
-    }
-
-    if (interval_ms < 20) {
-        interval_ms = 20;
-    }
-
-    int64_t *last_us = s_allow_all ? NULL : &rule->last_sent_us;
-
-    if (s_allow_all) {
-        if (channel_idx < 0 || channel_idx >= RC_CH_MAX) {
-            return false;
-        }
-        if ((now_us - s_last_all_sent_us[channel_idx]) < ((int64_t)interval_ms * 1000)) {
-            return false;
-        }
-        s_last_all_sent_us[channel_idx] = now_us;
-        return true;
-    }
-
-    if ((now_us - *last_us) < ((int64_t)interval_ms * 1000)) {
-        return false;
-    }
-    *last_us = now_us;
-    return true;
 }
 
 static void process_filter_write(const uint8_t *buf, uint16_t len)
@@ -492,22 +405,22 @@ static void process_filter_write(const uint8_t *buf, uint16_t len)
 
     uint8_t cmd = buf[0];
     if (cmd == 0) {
-        s_allow_all = false;
-        s_rule_count = 0;
+        portENTER_CRITICAL(&s_filter_mux);
+        rc_filter_deny_all(&s_filter);
+        portEXIT_CRITICAL(&s_filter_mux);
+        wake_stream();
         ESP_LOGD(RC_TAG, "Filter: deny all");
         return;
     }
 
     if (cmd == 1) {
-        if (len >= 3) {
-            s_allow_all_interval_ms = (uint16_t)((buf[1] << 8) | buf[2]);
-            if (s_allow_all_interval_ms == 0) {
-                s_allow_all_interval_ms = 100;
-            }
-        }
-        s_allow_all = true;
-        s_rule_count = 0;
-        ESP_LOGD(RC_TAG, "Filter: allow all, interval=%u ms", s_allow_all_interval_ms);
+        portENTER_CRITICAL(&s_filter_mux);
+        uint16_t interval_ms = len >= 3 ? (uint16_t)((buf[1] << 8) | buf[2]) : s_filter.all_interval_ms;
+        rc_filter_allow_all(&s_filter, interval_ms);
+        interval_ms = s_filter.all_interval_ms;
+        portEXIT_CRITICAL(&s_filter_mux);
+        wake_stream();
+        ESP_LOGD(RC_TAG, "Filter: allow all, interval=%u ms", interval_ms);
         return;
     }
 
@@ -528,20 +441,14 @@ static void process_filter_write(const uint8_t *buf, uint16_t len)
             interval_ms = 100;
         }
 
-        for (uint8_t i = 0; i < s_rule_count; i++) {
-            if (s_rules[i].pid == pid) {
-                s_rules[i].interval_ms = interval_ms;
-                ESP_LOGD(RC_TAG, "Filter: update PID=0x%08" PRIX32 " interval=%u", pid, interval_ms);
-                return;
-            }
-        }
-
-        if (s_rule_count < RC_PID_RULE_MAX) {
-            s_rules[s_rule_count].pid = pid;
-            s_rules[s_rule_count].interval_ms = interval_ms;
-            s_rules[s_rule_count].last_sent_us = 0;
-            s_rule_count++;
+        for (unsigned i = 0; i < RC_CH_MAX; i++) {
+            if (s_channels[i].pid != pid) continue;
+            portENTER_CRITICAL(&s_filter_mux);
+            rc_filter_subscribe(&s_filter, i, interval_ms);
+            portEXIT_CRITICAL(&s_filter_mux);
+            wake_stream();
             ESP_LOGD(RC_TAG, "Filter: allow PID=0x%08" PRIX32 " interval=%u", pid, interval_ms);
+            break;
         }
     }
 }
@@ -549,23 +456,69 @@ static void process_filter_write(const uint8_t *buf, uint16_t len)
 static void stream_task(void *arg)
 {
     (void)arg;
+    uint16_t live_channels = 0;
+    for (unsigned i = 0; i < RC_CH_MAX; i++) {
+        if (s_channels[i].slot != SIG_SLOT_NONE) live_channels |= (uint16_t)(1u << i);
+    }
+    int64_t sample_not_before_us = 0;
     while (1) {
-        if (s_connected && s_notify_enabled && s_attr_ready) {
-            int64_t now_us = esp_timer_get_time();
-            obd_data_get_snapshot(&s_stream_snapshot);
-            for (int i = 0; i < RC_CH_MAX; i++) {
-                bool valid = false;
-                int32_t val = s_channels[i].read_scaled(&valid);
-                if (!valid) {
-                    continue;
+        if (!ble_hub_is_ready()) {
+            // BLE shut down for WiFi OTA (one-way): stop touching the stack.
+            ESP_LOGI(RC_TAG, "BLE down, stream task exit");
+            s_stream_task = NULL;
+            vTaskDelete(NULL);
+        }
+        int64_t now_us = esp_timer_get_time();
+        portENTER_CRITICAL(&s_filter_mux);
+        bool active = s_connected && s_notify_enabled && s_attr_ready;
+        uint16_t due = active && now_us >= sample_not_before_us
+                     ? rc_filter_due_mask(&s_filter, live_channels, now_us) : 0;
+        portEXIT_CRITICAL(&s_filter_mux);
+        if (due) {
+            /* Plan active state and filter together before snapshotting:
+             * idle intervals/deny-all perform no signal-store reads, and
+             * F109 stays retired and is never sampled. */
+            int slots[RC_CH_MAX];
+            unsigned channels[RC_CH_MAX];
+            int32_t values[RC_CH_MAX];
+            size_t count = 0;
+            for (unsigned i = 0; i < RC_CH_MAX; i++) {
+                if (!(due & (1u << i)) || s_channels[i].slot == SIG_SLOT_NONE) continue;
+                channels[count] = i;
+                slots[count++] = s_channels[i].slot;
+            }
+            if (count) {
+                /* Invalid samples do not claim a send interval, but repeated
+                 * event wakeups must not turn them into a busy retry loop. */
+                sample_not_before_us = now_us + 20000;
+                PERF_BEGIN(perf_snapshot_start);
+                uint64_t valid = signal_store_get_many(slots, count, values);
+                PERF_END(PERF_RC_SNAPSHOT, perf_snapshot_start, (uint32_t)count);
+                uint16_t valid_channels = 0;
+                for (size_t i = 0; i < count; i++) {
+                    if (valid & (UINT64_C(1) << i)) valid_channels |= (uint16_t)(1u << channels[i]);
                 }
-                if (!should_send_by_rule(s_channels[i].pid, i, now_us)) {
-                    continue;
+                portENTER_CRITICAL(&s_filter_mux);
+                uint16_t send = s_connected && s_notify_enabled && s_attr_ready
+                              ? rc_filter_claim_valid(&s_filter, valid_channels, now_us) : 0;
+                portEXIT_CRITICAL(&s_filter_mux);
+                for (size_t i = 0; i < count; i++) {
+                    unsigned channel = channels[i];
+                    if (!(send & (1u << channel))) continue;
+                    send_can_packet(s_channels[channel].pid, values[i] * s_channels[channel].scale);
                 }
-                send_can_packet(s_channels[i].pid, val);
             }
         }
-        vTaskDelay(pdMS_TO_TICKS(20));
+        now_us = esp_timer_get_time();
+        portENTER_CRITICAL(&s_filter_mux);
+        active = s_connected && s_notify_enabled && s_attr_ready;
+        uint32_t wait_us = active ? rc_filter_next_wake_us(&s_filter, live_channels, now_us,
+                                                        sample_not_before_us)
+                                  : RC_FILTER_WAIT_FOREVER;
+        portEXIT_CRITICAL(&s_filter_mux);
+        /* Tokens coalesce and persist before the take: a GATT write or hub
+         * shutdown between deadline planning and blocking cannot be lost. */
+        xSemaphoreTake(s_stream_wake, stream_wait_ticks(wait_us));
     }
 }
 
@@ -590,7 +543,13 @@ static void gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble
 {
     switch (event) {
     case ESP_GATTS_REG_EVT:
+        if (param->reg.status != ESP_GATT_OK) {
+            ESP_LOGE(RC_TAG, "GATTS app register failed, status=%d", param->reg.status);
+            break;
+        }
+        portENTER_CRITICAL(&s_filter_mux);
         s_gatts_if = gatts_if;
+        portEXIT_CRITICAL(&s_filter_mux);
         build_adv_identity();
         {
             esp_err_t err = esp_ble_gap_set_device_name(s_adv_name);
@@ -617,11 +576,16 @@ static void gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble
             param->add_attr_tab.num_handle == IDX_NB &&
             param->add_attr_tab.svc_uuid.uuid.uuid16 == RC_SERVICE_UUID) {
             uint16_t *h = param->add_attr_tab.handles;
+            portENTER_CRITICAL(&s_filter_mux);
             s_handle_can_main = h[IDX_CHAR_VAL_CAN_MAIN];
             s_handle_can_cccd = h[IDX_CHAR_CFG_CAN_MAIN];
             s_handle_filter = h[IDX_CHAR_VAL_FILTER];
+            portEXIT_CRITICAL(&s_filter_mux);
             esp_ble_gatts_start_service(h[IDX_SVC]);
+            portENTER_CRITICAL(&s_filter_mux);
             s_attr_ready = true;
+            portEXIT_CRITICAL(&s_filter_mux);
+            wake_stream();
             ESP_LOGD(RC_TAG, "RC attr table ready, CAN main handle=0x%04X", s_handle_can_main);
             // After the RC service table is created, create the pairing service attribute table separately
             // (independent create_attr_tab calls, so both services are independently discoverable Primary Services in the peer's GATT database).
@@ -640,14 +604,21 @@ static void gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble
         break;
 
     case ESP_GATTS_CONNECT_EVT:
+        // Bluedroid reports every LE link to every GATTS app, including the links this
+        // device opens as a central (ELM327 adapter, gauge pairing): only a peer that
+        // connected to us (we are the slave) is a RaceChrono / pairing client.
+        if (param->connect.link_role != 1) {
+            break;
+        }
+        portENTER_CRITICAL(&s_filter_mux);
         s_connected = true;
         s_conn_id = param->connect.conn_id;
+        memcpy(s_peer_bda, param->connect.remote_bda, sizeof(esp_bd_addr_t));
         // Start each connection from a safe default, so stale deny-all rules don't block data.
-        s_allow_all = true;
-        s_allow_all_interval_ms = 100;
-        s_rule_count = 0;
-        memset(s_last_all_sent_us, 0, sizeof(s_last_all_sent_us));
+        rc_filter_reset(&s_filter);
         s_last_send_err_log_us = 0;
+        portEXIT_CRITICAL(&s_filter_mux);
+        wake_stream();
         ESP_LOGI(RC_TAG, "GATT client connected: %02x:%02x:%02x:%02x:%02x:%02x conn_id=0x%04X",
                  param->connect.remote_bda[0], param->connect.remote_bda[1], param->connect.remote_bda[2],
                  param->connect.remote_bda[3], param->connect.remote_bda[4], param->connect.remote_bda[5],
@@ -655,8 +626,16 @@ static void gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble
         break;
 
     case ESP_GATTS_DISCONNECT_EVT:
+        // Ignore drops of other links (our central links to the adapter / a master gauge).
+        if (!s_connected || param->disconnect.conn_id != s_conn_id ||
+            memcmp(param->disconnect.remote_bda, s_peer_bda, sizeof(esp_bd_addr_t)) != 0) {
+            break;
+        }
+        portENTER_CRITICAL(&s_filter_mux);
         s_connected = false;
         s_notify_enabled = false;
+        portEXIT_CRITICAL(&s_filter_mux);
+        wake_stream();
         ESP_LOGI(RC_TAG, "GATT client disconnected: %02x:%02x:%02x:%02x:%02x:%02x",
                  param->disconnect.remote_bda[0], param->disconnect.remote_bda[1], param->disconnect.remote_bda[2],
                  param->disconnect.remote_bda[3], param->disconnect.remote_bda[4], param->disconnect.remote_bda[5]);
@@ -666,7 +645,10 @@ static void gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble
     case ESP_GATTS_WRITE_EVT:
         if (param->write.handle == s_handle_can_cccd && param->write.len >= 2) {
             uint16_t cccd = (uint16_t)param->write.value[0] | ((uint16_t)param->write.value[1] << 8);
+            portENTER_CRITICAL(&s_filter_mux);
             s_notify_enabled = ((cccd & 0x0003u) != 0);
+            portEXIT_CRITICAL(&s_filter_mux);
+            wake_stream();
             ESP_LOGD(RC_TAG, "CAN main cccd=0x%04X stream %s", cccd, s_notify_enabled ? "EN" : "DIS");
         } else if (s_attr_ready && param->write.handle == s_handle_filter) {
             process_filter_write(param->write.value, param->write.len);
@@ -678,9 +660,9 @@ static void gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble
     }
 }
 
-void racechrono_ble_diy_handle_gap_event(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param)
+// GAP events fanned out by ble_hub (scan results go to the scan owner only).
+static void gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param)
 {
-    (void)param;
     switch (event) {
     case ESP_GAP_BLE_ADV_DATA_RAW_SET_COMPLETE_EVT:
         ESP_LOGI(RC_TAG, "Adv raw data applied");
@@ -731,27 +713,25 @@ void racechrono_ble_diy_start(bool enable_racechrono)
 
     // RaceChrono off and not MASTER: there is no service to publish (Pair is MASTER-only),
     // so no GATTS app is registered and the device does not advertise.
-    if (!s_rc_enabled && nvs_cfg_get()->device_role != ESPNOW_ROLE_MASTER) {
+    if (!s_rc_enabled && nvs_cfg_read().device_role != ESPNOW_ROLE_MASTER) {
         ESP_LOGI(RC_TAG, "RaceChrono off and not MASTER: no GATTS services, skip start");
         return;
     }
 
-    if (esp_bt_controller_get_status() != ESP_BT_CONTROLLER_STATUS_ENABLED ||
-        esp_bluedroid_get_status() != ESP_BLUEDROID_STATUS_ENABLED) {
-        ESP_LOGW(RC_TAG, "BT stack is not ready, skip RaceChrono BLE DIY start");
-        return;
-    }
+    /* Initialize before registering callbacks; retained through OTA teardown. */
+    if (s_rc_enabled && !s_stream_wake) s_stream_wake = xSemaphoreCreateBinaryStatic(&s_stream_wake_storage);
 
-    esp_err_t err = esp_ble_gatts_register_callback(gatts_cb);
+    // ble_hub brings the stack up if needed and registers GATTS app 0x52;
+    // its REG_EVT does the common setup + service creation.
+    const ble_hub_client_t client = {
+        .gap_cb = gap_cb,
+        .gattc_cb = NULL,
+        .gatts_cb = gatts_cb,
+        .shutdown_cb = wake_stream,
+    };
+    esp_err_t err = ble_hub_register(BLE_HUB_APP_RACECHRONO, &client);
     if (err != ESP_OK) {
-        ESP_LOGE(RC_TAG, "gatts register cb failed: %s", esp_err_to_name(err));
-        return;
-    }
-
-    // app_register triggers REG_EVT, which does common setup + service creation
-    err = esp_ble_gatts_app_register(RC_APP_ID);
-    if (err != ESP_OK) {
-        ESP_LOGE(RC_TAG, "gatts app register failed: %s", esp_err_to_name(err));
+        ESP_LOGE(RC_TAG, "ble_hub register failed: %s", esp_err_to_name(err));
         return;
     }
 

@@ -1,9 +1,7 @@
 #include "bsp_obd_dsp/lcd_driver/ST77916.h"
 
 
-#define LCD_OPCODE_WRITE_CMD        (0x02ULL)
 #define LCD_OPCODE_READ_CMD         (0x0BULL)
-#define LCD_OPCODE_WRITE_COLOR      (0x32ULL)
 
 static const char *TAG_LCD = "ST77916";
 
@@ -708,7 +706,14 @@ int QSPI_Init(void){
   } else {
     ESP_LOGW(TAG_LCD, "Failed to read register 0x04, error code: %d", ret);
   } 
-  // panel_io_spi_del(io_handle);
+  /* The 3 MHz probe device must be removed before registering the display
+   * device at its normal clock. Otherwise its handle and bus-lock slot leak. */
+  ret = esp_lcd_panel_io_del(io_handle);
+  if (ret != ESP_OK) {
+    ESP_LOGE(TAG_LCD, "Failed to release LCD probe IO: %s", esp_err_to_name(ret));
+    return 0;
+  }
+  io_handle = NULL;
   io_config.pclk_hz = ESP_PANEL_LCD_SPI_CLK_HZ;
   if(esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)ESP_PANEL_HOST_SPI_ID_DEFAULT, &io_config, &io_handle) != ESP_OK){
     ESP_LOGE(TAG_LCD, "Failed to set LCD communication parameters -- SPI");

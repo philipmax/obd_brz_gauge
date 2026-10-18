@@ -1,0 +1,2487 @@
+ESP32-S3 actual compile command. Standalone adds only original header directory and changes source/output/dependency paths:
+/Users/parklu/.espressif/tools/xtensa-esp-elf/esp-14.2.0_20251107/xtensa-esp-elf/bin/xtensa-esp32s3-elf-gcc -DESP_PLATFORM -DIDF_VER=\"v5.5.3\" -DLV_CONF_INCLUDE_SIMPLE -DMBEDTLS_CONFIG_FILE=\"mbedtls/esp_config.h\" -DOBD_GAUGE_BUILD_TAG=\"rebuild-138-233b2cce8831\" -DOBD_GAUGE_GIT_BRANCH=\"rebuild\" -DOBD_GAUGE_GIT_COUNT=138 -DOBD_GAUGE_GIT_HASH=\"233b2cce8831\" -DSOC_MMU_PAGE_SIZE=CONFIG_MMU_PAGE_SIZE -DSOC_XTAL_FREQ_MHZ=CONFIG_XTAL_FREQ -D_GLIBCXX_HAVE_POSIX_SEMAPHORE -D_GLIBCXX_USE_POSIX_SEMAPHORE -D_GNU_SOURCE -D_POSIX_READER_WRITER_LOCKS -I/private/tmp/obd-brz-build/config -I/Users/parklu/personProject/obd_brz_gauge/main -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/newlib/platform_include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/freertos/config/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/freertos/config/include/freertos -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/freertos/config/xtensa/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/freertos/FreeRTOS-Kernel/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/freertos/FreeRTOS-Kernel/portable/xtensa/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/freertos/FreeRTOS-Kernel/portable/xtensa/include/freertos -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/freertos/esp_additions/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/include/soc -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/include/soc/esp32s3 -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/dma/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/ldo/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/debug_probe/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/mspi_timing_tuning/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/mspi_timing_tuning/tuning_scheme_impl/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/power_supply/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/port/esp32s3/. -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/port/esp32s3/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/mspi_timing_tuning/port/esp32s3/. -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/mspi_timing_tuning/port/esp32s3/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/heap/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/heap/tlsf -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/log/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/soc/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/soc/esp32s3 -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/soc/esp32s3/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/soc/esp32s3/register -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/hal/platform_port/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/hal/esp32s3/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/hal/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_rom/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_rom/esp32s3/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_rom/esp32s3/include/esp32s3 -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_rom/esp32s3 -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_common/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_system/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_system/port/soc -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_system/port/include/private -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/xtensa/esp32s3/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/xtensa/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/xtensa/deprecated_include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/lwip/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/lwip/include/apps -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/lwip/include/apps/sntp -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/lwip/lwip/src/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/lwip/port/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/lwip/port/freertos/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/lwip/port/esp32xx/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/lwip/port/esp32xx/include/arch -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/lwip/port/esp32xx/include/sys -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_http_server/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/http_parser -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_event/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_wifi/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_wifi/include/local -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_wifi/wifi_apps/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_wifi/wifi_apps/nan_app/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_phy/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_phy/esp32s3/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_netif/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/include/esp32c3/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/common/osi/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/common/api/include/api -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/common/btc/profile/esp/blufi/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/common/btc/profile/esp/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/common/hci_log/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/common/ble_log/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/host/bluedroid/api/include/api -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/common/tinycrypt/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/common/tinycrypt/port -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_timer/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/mbedtls/port/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/mbedtls/mbedtls/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/mbedtls/mbedtls/library -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/mbedtls/esp_crt_bundle/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/mbedtls/mbedtls/3rdparty/everest/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/mbedtls/mbedtls/3rdparty/p256-m -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/mbedtls/mbedtls/3rdparty/p256-m/p256-m -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/nvs_flash/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_partition/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/app_update/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bootloader_support/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bootloader_support/bootloader_flash/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_app_format/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_bootloader_format/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/json/cJSON -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/sdmmc/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_sdmmc/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_gpio/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/fatfs/diskio -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/fatfs/src -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/fatfs/vfs -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/wear_levelling/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_sdspi/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_spi/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_pm/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/espcoredump/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/espcoredump/include/port/xtensa -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/spi_flash/include -I/Users/parklu/personProject/obd_brz_gauge/managed_components/joltwallet__littlefs/include -I/Users/parklu/personProject/obd_brz_gauge/managed_components/espressif__esp_lcd_touch/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/driver/deprecated -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/driver/i2c/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/driver/touch_sensor/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/driver/twai/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/driver/touch_sensor/esp32s3/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_ringbuf/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_pcnt/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_gptimer/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_mcpwm/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_ana_cmpr/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_i2s/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_sdio/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_dac/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_rmt/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_tsens/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_sdm/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_i2c/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_uart/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/vfs/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_ledc/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_parlio/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_usb_serial_jtag/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_twai/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_lcd/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_lcd/interface -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_lcd/rgb/include -I/Users/parklu/personProject/obd_brz_gauge/managed_components/lvgl__lvgl -I/Users/parklu/personProject/obd_brz_gauge/managed_components/lvgl__lvgl/src -I/Users/parklu/personProject/obd_brz_gauge/managed_components -I/Users/parklu/personProject/obd_brz_gauge/managed_components/lvgl__lvgl/examples -I/Users/parklu/personProject/obd_brz_gauge/managed_components/lvgl__lvgl/demos -I/Users/parklu/personProject/obd_brz_gauge/managed_components/espressif__esp_new_jpeg/include -mlongcalls  -fno-builtin-memcpy -fno-builtin-memset -fno-builtin-bzero -fno-builtin-stpcpy -fno-builtin-strncpy -fdiagnostics-color=always -Wno-format -ffunction-sections -fdata-sections -Wall -Werror=all -Wno-error=unused-function -Wno-error=unused-variable -Wno-error=unused-but-set-variable -Wno-error=deprecated-declarations -Wextra -Wno-error=extra -Wno-unused-parameter -Wno-sign-compare -Wno-enum-conversion -gdwarf-4 -ggdb -mdisable-hardware-atomics -O2 -fmacro-prefix-map=/Users/parklu/personProject/obd_brz_gauge=. -fmacro-prefix-map=/Users/parklu/.espressif/v5.5.3/esp-idf=/IDF -fstrict-volatile-bitfields -fno-jump-tables -fno-tree-switch-conversion -std=gnu17 -Wno-old-style-declaration -o esp-idf/main/CMakeFiles/__idf_main.dir/bsp_obd_dsp/espnow_v6.c.obj -c /Users/parklu/personProject/obd_brz_gauge/main/bsp_obd_dsp/espnow_v6.c
+
+before espnow_crc16 disassembly:
+Disassembly of section .text.espnow_crc16:
+
+00000000 <espnow_crc16>:
+   0:	004136        	entry	a1, 32
+   3:	63bc      	beqz.n	a3, 3d <espnow_crc16+0x3d>
+			3: R_XTENSA_SLOT0_OP	.text.espnow_crc16+0x3d
+   5:	02cd      	mov.n	a12, a2
+   7:	0000b1        	l32r	a11, fffc0008 <espnow_crc16+0xfffc0008>
+			7: R_XTENSA_SLOT0_OP	.literal.espnow_crc16+0x4
+   a:	000021        	l32r	a2, fffc000c <espnow_crc16+0xfffc000c>
+			a: R_XTENSA_SLOT0_OP	.literal.espnow_crc16
+   d:	80dc30        	add	a13, a12, a3
+  10:	000c82        	l8ui	a8, a12, 0
+  13:	890c      	movi.n	a9, 8
+  15:	401900        	ssl	a9
+  18:	a18800        	sll	a8, a8
+  1b:	302280        	xor	a2, a2, a8
+  1e:	138976        	loop	a9, 35 <espnow_crc16+0x35>
+			1e: R_XTENSA_SLOT0_OP	.text.espnow_crc16+0x35
+  21:	822a      	add.n	a8, a2, a2
+  23:	23a280        	sext	a10, a2, 15
+  26:	f42080        	extui	a2, a8, 0, 16
+  29:	3022b0        	xor	a2, a2, a11
+  2c:	f42020        	extui	a2, a2, 0, 16
+  2f:	f48080        	extui	a8, a8, 0, 16
+  32:	b328a0        	movgez	a2, a8, a10
+  35:	cc1b      	addi.n	a12, a12, 1
+  37:	d59dc7        	bne	a13, a12, 10 <espnow_crc16+0x10>
+			37: R_XTENSA_SLOT0_OP	.text.espnow_crc16+0x10
+  3a:	000086        	j	40 <espnow_crc16+0x40>
+			3a: R_XTENSA_SLOT0_OP	.text.espnow_crc16+0x40
+  3d:	000021        	l32r	a2, fffc0040 <espnow_crc16+0xfffc0040>
+			3d: R_XTENSA_SLOT0_OP	.literal.espnow_crc16
+  40:	f01d      	retw.n
+
+before espnow_v6_encode disassembly:
+Disassembly of section .text.espnow_v6_encode:
+
+00000000 <espnow_v6_encode>:
+   0:	008136        	entry	a1, 64
+   3:	40f280        	nsau	a8, a2
+   6:	027d      	mov.n	a7, a2
+   8:	05ad      	mov.n	a10, a5
+   a:	190c      	movi.n	a9, 1
+   c:	418580        	srli	a8, a8, 5
+   f:	1bf216        	beqz	a2, 1d2 <espnow_v6_encode+0x1d2>
+			f: R_XTENSA_SLOT0_OP	.text.espnow_v6_encode+0x1d2
+  12:	838940        	moveqz	a8, a9, a4
+  15:	1b9856        	bnez	a8, 1d2 <espnow_v6_encode+0x1d2>
+			15: R_XTENSA_SLOT0_OP	.text.espnow_v6_encode+0x1d2
+  18:	200282        	l8ui	a8, a2, 32
+  1b:	09dd      	mov.n	a13, a9
+  1d:	189c      	beqz.n	a8, 32 <espnow_v6_encode+0x32>
+			1d: R_XTENSA_SLOT0_OP	.text.espnow_v6_encode+0x32
+  1f:	000091        	l32r	a9, fffc0020 <espnow_v6_encode+0xfffc0020>
+			1f: R_XTENSA_SLOT0_OP	.literal.espnow_v6_encode+0x4
+  22:	22c8d2        	addi	a13, a8, 34
+  25:	b29d90        	mulsh	a9, a13, a9
+  28:	dd9a      	add.n	a13, a13, a9
+  2a:	21d5d0        	srai	a13, a13, 5
+  2d:	0d9d      	mov.n	a9, a13
+  2f:	ffffc6        	j	32 <espnow_v6_encode+0x32>
+			2f: R_XTENSA_SLOT0_OP	.text.espnow_v6_encode+0x32
+  32:	11d9      	s32i.n	a13, a1, 4
+  34:	020c      	movi.n	a2, 0
+  36:	023397        	bltu	a3, a9, 3c <espnow_v6_encode+0x3c>
+			36: R_XTENSA_SLOT0_OP	.text.espnow_v6_encode+0x3c
+  39:	006746        	j	1da <espnow_v6_encode+0x1da>
+			39: R_XTENSA_SLOT0_OP	.text.espnow_v6_encode+0x1da
+  3c:	a09330        	addx4	a9, a3, a3
+  3f:	f09990        	subx8	a9, a9, a9
+  42:	c08890        	sub	a8, a8, a9
+  45:	535820        	max	a5, a8, a2
+  48:	392c      	movi.n	a9, 35
+  4a:	435590        	min	a5, a5, a9
+  4d:	236580        	sext	a6, a5, 15
+  50:	906660        	addx2	a6, a6, a6
+  53:	2189      	s32i.n	a8, a1, 8
+  55:	666a      	add.n	a6, a6, a6
+  57:	1183e0        	slli	a8, a3, 2
+  5a:	0129      	s32i.n	a2, a1, 0
+  5c:	3189      	s32i.n	a8, a1, 12
+  5e:	28c622        	addi	a2, a6, 40
+  61:	02ba27        	bgeu	a10, a2, 67 <espnow_v6_encode+0x67>
+			61: R_XTENSA_SLOT0_OP	.text.espnow_v6_encode+0x67
+  64:	005c06        	j	1d8 <espnow_v6_encode+0x1d8>
+			64: R_XTENSA_SLOT0_OP	.text.espnow_v6_encode+0x1d8
+  67:	01b8      	l32i.n	a11, a1, 0
+  69:	6c2c      	movi.n	a12, 38
+  6b:	20a440        	or	a10, a4, a4
+  6e:	000081        	l32r	a8, fffc0070 <espnow_v6_encode+0xfffc0070>
+			6e: R_XTENSA_SLOT0_OP	.literal.espnow_v6_encode+0xc
+			6e: R_XTENSA_ASM_EXPAND	memset
+  71:	0008e0        	callx8	a8
+  74:	294c      	movi.n	a9, 66
+  76:	004492        	s8i	a9, a4, 0
+  79:	f94c      	movi.n	a9, 79
+  7b:	014492        	s8i	a9, a4, 1
+  7e:	690c      	movi.n	a9, 6
+  80:	024492        	s8i	a9, a4, 2
+  83:	190c      	movi.n	a9, 1
+  85:	034492        	s8i	a9, a4, 3
+  88:	11d8      	l32i.n	a13, a1, 4
+  8a:	1007a2        	l8ui	a10, a7, 16
+  8d:	1193c0        	slli	a9, a3, 4
+  90:	2099d0        	or	a9, a9, a13
+  93:	0444a2        	s8i	a10, a4, 4
+  96:	054492        	s8i	a9, a4, 5
+  99:	064452        	s8i	a5, a4, 6
+  9c:	110792        	l8ui	a9, a7, 17
+  9f:	1ac482        	addi	a8, a4, 26
+  a2:	074492        	s8i	a9, a4, 7
+  a5:	0798      	l32i.n	a9, a7, 0
+  a7:	1189      	s32i.n	a8, a1, 4
+  a9:	41d890        	srli	a13, a9, 8
+  ac:	f5b090        	extui	a11, a9, 16, 16
+  af:	75a890        	extui	a10, a9, 24, 8
+  b2:	0944d2        	s8i	a13, a4, 9
+  b5:	0a44b2        	s8i	a11, a4, 10
+  b8:	0b44a2        	s8i	a10, a4, 11
+  bb:	084492        	s8i	a9, a4, 8
+  be:	1798      	l32i.n	a9, a7, 4
+  c0:	01b8      	l32i.n	a11, a1, 0
+  c2:	41e890        	srli	a14, a9, 8
+  c5:	f5d090        	extui	a13, a9, 16, 16
+  c8:	75a890        	extui	a10, a9, 24, 8
+  cb:	0d44e2        	s8i	a14, a4, 13
+  ce:	0e44d2        	s8i	a13, a4, 14
+  d1:	0f44a2        	s8i	a10, a4, 15
+  d4:	0c4492        	s8i	a9, a4, 12
+  d7:	2798      	l32i.n	a9, a7, 8
+  d9:	08ad      	mov.n	a10, a8
+  db:	41f890        	srli	a15, a9, 8
+  de:	f5e090        	extui	a14, a9, 16, 16
+  e1:	75d890        	extui	a13, a9, 24, 8
+  e4:	1144f2        	s8i	a15, a4, 17
+  e7:	1244e2        	s8i	a14, a4, 18
+  ea:	1344d2        	s8i	a13, a4, 19
+  ed:	104492        	s8i	a9, a4, 16
+  f0:	3798      	l32i.n	a9, a7, 12
+  f2:	14c782        	addi	a8, a7, 20
+  f5:	41f890        	srli	a15, a9, 8
+  f8:	4189      	s32i.n	a8, a1, 16
+  fa:	f5e090        	extui	a14, a9, 16, 16
+  fd:	75d890        	extui	a13, a9, 24, 8
+ 100:	144492        	s8i	a9, a4, 20
+ 103:	1544f2        	s8i	a15, a4, 21
+ 106:	1644e2        	s8i	a14, a4, 22
+ 109:	1744d2        	s8i	a13, a4, 23
+ 10c:	120792        	l8ui	a9, a7, 18
+ 10f:	cc0c      	movi.n	a12, 12
+ 111:	184492        	s8i	a9, a4, 24
+ 114:	130792        	l8ui	a9, a7, 19
+ 117:	194492        	s8i	a9, a4, 25
+ 11a:	000081        	l32r	a8, fffc011c <espnow_v6_encode+0xfffc011c>
+			11a: R_XTENSA_SLOT0_OP	.literal.espnow_v6_encode+0x10
+			11a: R_XTENSA_ASM_EXPAND	memset
+ 11d:	0008e0        	callx8	a8
+ 120:	01c8      	l32i.n	a12, a1, 0
+ 122:	2188      	l32i.n	a8, a1, 8
+ 124:	c90c      	movi.n	a9, 12
+ 126:	000206        	j	132 <espnow_v6_encode+0x132>
+			126: R_XTENSA_SLOT0_OP	.text.espnow_v6_encode+0x132
+ 129:	cc1b      	addi.n	a12, a12, 1
+ 12b:	990b      	addi.n	a9, a9, -1
+ 12d:	19cc      	bnez.n	a9, 132 <espnow_v6_encode+0x132>
+			12d: R_XTENSA_SLOT0_OP	.text.espnow_v6_encode+0x132
+ 12f:	0001c6        	j	13a <espnow_v6_encode+0x13a>
+			12f: R_XTENSA_SLOT0_OP	.text.espnow_v6_encode+0x13a
+ 132:	a7ca      	add.n	a10, a7, a12
+ 134:	140aa2        	l8ui	a10, a10, 20
+ 137:	feea56        	bnez	a10, 129 <espnow_v6_encode+0x129>
+			137: R_XTENSA_SLOT0_OP	.text.espnow_v6_encode+0x129
+ 13a:	41b8      	l32i.n	a11, a1, 16
+ 13c:	11a8      	l32i.n	a10, a1, 4
+ 13e:	0189      	s32i.n	a8, a1, 0
+ 140:	000081        	l32r	a8, fffc0140 <espnow_v6_encode+0xfffc0140>
+			140: R_XTENSA_SLOT0_OP	.literal.espnow_v6_encode+0x14
+			140: R_XTENSA_ASM_EXPAND	memcpy
+ 143:	0008e0        	callx8	a8
+ 146:	0188      	l32i.n	a8, a1, 0
+ 148:	26c4b2        	addi	a11, a4, 38
+ 14b:	0bad      	mov.n	a10, a11
+ 14d:	4318a6        	blti	a8, 1, 194 <espnow_v6_encode+0x194>
+			14d: R_XTENSA_SLOT0_OP	.text.espnow_v6_encode+0x194
+ 150:	3188      	l32i.n	a8, a1, 12
+ 152:	1c0c      	movi.n	a12, 1
+ 154:	983a      	add.n	a9, a8, a3
+ 156:	f09990        	subx8	a9, a9, a9
+ 159:	b09970        	addx8	a9, a9, a7
+ 15c:	0b8d      	mov.n	a8, a11
+ 15e:	53cc50        	max	a12, a12, a5
+ 161:	268c76        	loop	a12, 18b <espnow_v6_encode+0x18b>
+			161: R_XTENSA_SLOT0_OP	.text.espnow_v6_encode+0x18b
+ 164:	1219a2        	l16ui	a10, a9, 36
+ 167:	998b      	addi.n	a9, a9, 8
+ 169:	41d8a0        	srli	a13, a10, 8
+ 16c:	0148d2        	s8i	a13, a8, 1
+ 16f:	0048a2        	s8i	a10, a8, 0
+ 172:	89a8      	l32i.n	a10, a9, 32
+ 174:	41f8a0        	srli	a15, a10, 8
+ 177:	f5e0a0        	extui	a14, a10, 16, 16
+ 17a:	75d8a0        	extui	a13, a10, 24, 8
+ 17d:	0248a2        	s8i	a10, a8, 2
+ 180:	0348f2        	s8i	a15, a8, 3
+ 183:	0448e2        	s8i	a14, a8, 4
+ 186:	0548d2        	s8i	a13, a8, 5
+ 189:	886b      	addi.n	a8, a8, 6
+ 18b:	f45050        	extui	a5, a5, 0, 16
+ 18e:	905550        	addx2	a5, a5, a5
+ 191:	90a5b0        	addx2	a10, a5, a11
+ 194:	000081        	l32r	a8, fffc0194 <espnow_v6_encode+0xfffc0194>
+			194: R_XTENSA_SLOT0_OP	.literal.espnow_v6_encode
+ 197:	0000d1        	l32r	a13, fffc0198 <espnow_v6_encode+0xfffc0198>
+			197: R_XTENSA_SLOT0_OP	.literal.espnow_v6_encode+0x8
+ 19a:	eb6a      	add.n	a14, a11, a6
+ 19c:	000492        	l8ui	a9, a4, 0
+ 19f:	8b0c      	movi.n	a11, 8
+ 1a1:	401b00        	ssl	a11
+ 1a4:	a19900        	sll	a9, a9
+ 1a7:	308890        	xor	a8, a8, a9
+ 1aa:	138b76        	loop	a11, 1c1 <espnow_v6_encode+0x1c1>
+			1aa: R_XTENSA_SLOT0_OP	.text.espnow_v6_encode+0x1c1
+ 1ad:	988a      	add.n	a9, a8, a8
+ 1af:	23c880        	sext	a12, a8, 15
+ 1b2:	f48090        	extui	a8, a9, 0, 16
+ 1b5:	3088d0        	xor	a8, a8, a13
+ 1b8:	f48080        	extui	a8, a8, 0, 16
+ 1bb:	f49090        	extui	a9, a9, 0, 16
+ 1be:	b389c0        	movgez	a8, a9, a12
+ 1c1:	441b      	addi.n	a4, a4, 1
+ 1c3:	d594e7        	bne	a4, a14, 19c <espnow_v6_encode+0x19c>
+			1c3: R_XTENSA_SLOT0_OP	.text.espnow_v6_encode+0x19c
+ 1c6:	419880        	srli	a9, a8, 8
+ 1c9:	004a82        	s8i	a8, a10, 0
+ 1cc:	014a92        	s8i	a9, a10, 1
+ 1cf:	0001c6        	j	1da <espnow_v6_encode+0x1da>
+			1cf: R_XTENSA_SLOT0_OP	.text.espnow_v6_encode+0x1da
+ 1d2:	020c      	movi.n	a2, 0
+ 1d4:	000086        	j	1da <espnow_v6_encode+0x1da>
+			1d4: R_XTENSA_SLOT0_OP	.text.espnow_v6_encode+0x1da
+ 1d7:	00          	.byte	00
+ 1d8:	0128      	l32i.n	a2, a1, 0
+ 1da:	f01d      	retw.n
+
+before espnow_v6_decode disassembly:
+Disassembly of section .text.espnow_v6_decode:
+
+00000000 <espnow_v6_decode>:
+   0:	006136        	entry	a1, 48
+   3:	090c      	movi.n	a9, 0
+   5:	027d      	mov.n	a7, a2
+   7:	180c      	movi.n	a8, 1
+   9:	120c      	movi.n	a2, 1
+   b:	932970        	movnez	a2, a9, a7
+   e:	938940        	movnez	a8, a9, a4
+  11:	202280        	or	a2, a2, a8
+  14:	1a2256        	bnez	a2, 1ba <espnow_v6_decode+0x1ba>
+			14: R_XTENSA_SLOT0_OP	.text.espnow_v6_decode+0x1ba
+  17:	d8c382        	addi	a8, a3, -40
+  1a:	d2a092        	movi	a9, 210
+  1d:	02b987        	bgeu	a9, a8, 23 <espnow_v6_decode+0x23>
+			1d: R_XTENSA_SLOT0_OP	.text.espnow_v6_decode+0x23
+  20:	006606        	j	1bc <espnow_v6_decode+0x1bc>
+			20: R_XTENSA_SLOT0_OP	.text.espnow_v6_decode+0x1bc
+  23:	010782        	l8ui	a8, a7, 1
+  26:	0007a2        	l8ui	a10, a7, 0
+  29:	118880        	slli	a8, a8, 8
+  2c:	000091        	l32r	a9, fffc002c <espnow_v6_decode+0xfffc002c>
+			2c: R_XTENSA_SLOT0_OP	.literal.espnow_v6_decode+0x8
+  2f:	2088a0        	or	a8, a8, a10
+  32:	021897        	beq	a8, a9, 38 <espnow_v6_decode+0x38>
+			32: R_XTENSA_SLOT0_OP	.text.espnow_v6_decode+0x38
+  35:	0060c6        	j	1bc <espnow_v6_decode+0x1bc>
+			35: R_XTENSA_SLOT0_OP	.text.espnow_v6_decode+0x1bc
+  38:	020782        	l8ui	a8, a7, 2
+  3b:	026826        	beqi	a8, 6, 41 <espnow_v6_decode+0x41>
+			3b: R_XTENSA_SLOT0_OP	.text.espnow_v6_decode+0x41
+  3e:	005e86        	j	1bc <espnow_v6_decode+0x1bc>
+			3e: R_XTENSA_SLOT0_OP	.text.espnow_v6_decode+0x1bc
+  41:	030782        	l8ui	a8, a7, 3
+  44:	021826        	beqi	a8, 1, 4a <espnow_v6_decode+0x4a>
+			44: R_XTENSA_SLOT0_OP	.text.espnow_v6_decode+0x4a
+  47:	005c46        	j	1bc <espnow_v6_decode+0x1bc>
+			47: R_XTENSA_SLOT0_OP	.text.espnow_v6_decode+0x1bc
+  4a:	050752        	l8ui	a5, a7, 5
+  4d:	0607d2        	l8ui	a13, a7, 6
+  50:	34e050        	extui	a14, a5, 0, 4
+  53:	415450        	srli	a5, a5, 4
+  56:	62a5e0        	saltu	a10, a5, a14
+  59:	aa0b      	addi.n	a10, a10, -1
+  5b:	382c      	movi.n	a8, 35
+  5d:	60a0a0        	neg	a10, a10
+  60:	6288d0        	saltu	a8, a8, a13
+  63:	20aa80        	or	a10, a10, a8
+  66:	74a0a0        	extui	a10, a10, 0, 8
+  69:	14fa56        	bnez	a10, 1bc <espnow_v6_decode+0x1bc>
+			69: R_XTENSA_SLOT0_OP	.text.espnow_v6_decode+0x1bc
+  6c:	908dd0        	addx2	a8, a13, a13
+  6f:	888a      	add.n	a8, a8, a8
+  71:	28c892        	addi	a9, a8, 40
+  74:	021937        	beq	a9, a3, 7a <espnow_v6_decode+0x7a>
+			74: R_XTENSA_SLOT0_OP	.text.espnow_v6_decode+0x7a
+  77:	005046        	j	1bc <espnow_v6_decode+0x1bc>
+			77: R_XTENSA_SLOT0_OP	.text.espnow_v6_decode+0x1bc
+  7a:	26c882        	addi	a8, a8, 38
+  7d:	378a      	add.n	a3, a7, a8
+  7f:	010392        	l8ui	a9, a3, 1
+  82:	0003b2        	l8ui	a11, a3, 0
+  85:	119980        	slli	a9, a9, 8
+  88:	000081        	l32r	a8, fffc0088 <espnow_v6_decode+0xfffc0088>
+			88: R_XTENSA_SLOT0_OP	.literal.espnow_v6_decode
+  8b:	0000c1        	l32r	a12, fffc008c <espnow_v6_decode+0xfffc008c>
+			8b: R_XTENSA_SLOT0_OP	.literal.espnow_v6_decode+0x4
+  8e:	20b9b0        	or	a11, a9, a11
+  91:	07fd      	mov.n	a15, a7
+  93:	01e9      	s32i.n	a14, a1, 0
+  95:	000f92        	l8ui	a9, a15, 0
+  98:	860c      	movi.n	a6, 8
+  9a:	401600        	ssl	a6
+  9d:	a19900        	sll	a9, a9
+  a0:	308890        	xor	a8, a8, a9
+  a3:	069d      	mov.n	a9, a6
+  a5:	158976        	loop	a9, be <espnow_v6_decode+0xbe>
+			a5: R_XTENSA_SLOT0_OP	.text.espnow_v6_decode+0xbe
+  a8:	e88a      	add.n	a14, a8, a8
+  aa:	232880        	sext	a2, a8, 15
+  ad:	f480e0        	extui	a8, a14, 0, 16
+  b0:	3088c0        	xor	a8, a8, a12
+  b3:	f48080        	extui	a8, a8, 0, 16
+  b6:	f4e0e0        	extui	a14, a14, 0, 16
+  b9:	b38e20        	movgez	a8, a14, a2
+  bc:	660b      	addi.n	a6, a6, -1
+  be:	ff1b      	addi.n	a15, a15, 1
+  c0:	d193f7        	bne	a3, a15, 95 <espnow_v6_decode+0x95>
+			c0: R_XTENSA_SLOT0_OP	.text.espnow_v6_decode+0x95
+  c3:	0a2d      	mov.n	a2, a10
+  c5:	021b87        	beq	a11, a8, cb <espnow_v6_decode+0xcb>
+			c5: R_XTENSA_SLOT0_OP	.text.espnow_v6_decode+0xcb
+  c8:	003c06        	j	1bc <espnow_v6_decode+0x1bc>
+			c8: R_XTENSA_SLOT0_OP	.text.espnow_v6_decode+0x1bc
+  cb:	70a0c2        	movi	a12, 112
+  ce:	0b0c      	movi.n	a11, 0
+  d0:	04ad      	mov.n	a10, a4
+  d2:	11d9      	s32i.n	a13, a1, 4
+  d4:	000081        	l32r	a8, fffc00d4 <espnow_v6_decode+0xfffc00d4>
+			d4: R_XTENSA_SLOT0_OP	.literal.espnow_v6_decode+0xc
+			d4: R_XTENSA_ASM_EXPAND	memset
+  d7:	0008e0        	callx8	a8
+  da:	680c      	movi.n	a8, 6
+  dc:	004482        	s8i	a8, a4, 0
+  df:	040782        	l8ui	a8, a7, 4
+  e2:	01e8      	l32i.n	a14, a1, 0
+  e4:	024452        	s8i	a5, a4, 2
+  e7:	0344e2        	s8i	a14, a4, 3
+  ea:	014482        	s8i	a8, a4, 1
+  ed:	0907a2        	l8ui	a10, a7, 9
+  f0:	0807b2        	l8ui	a11, a7, 8
+  f3:	0a0792        	l8ui	a9, a7, 10
+  f6:	0b0782        	l8ui	a8, a7, 11
+  f9:	11aa80        	slli	a10, a10, 8
+  fc:	20aab0        	or	a10, a10, a11
+  ff:	119900        	slli	a9, a9, 16
+ 102:	2099a0        	or	a9, a9, a10
+ 105:	018880        	slli	a8, a8, 24
+ 108:	208890        	or	a8, a8, a9
+ 10b:	1489      	s32i.n	a8, a4, 4
+ 10d:	0d07a2        	l8ui	a10, a7, 13
+ 110:	0c07b2        	l8ui	a11, a7, 12
+ 113:	0e0792        	l8ui	a9, a7, 14
+ 116:	0f0782        	l8ui	a8, a7, 15
+ 119:	11aa80        	slli	a10, a10, 8
+ 11c:	20aab0        	or	a10, a10, a11
+ 11f:	119900        	slli	a9, a9, 16
+ 122:	2099a0        	or	a9, a9, a10
+ 125:	018880        	slli	a8, a8, 24
+ 128:	208890        	or	a8, a8, a9
+ 12b:	2489      	s32i.n	a8, a4, 8
+ 12d:	1107a2        	l8ui	a10, a7, 17
+ 130:	1007b2        	l8ui	a11, a7, 16
+ 133:	120792        	l8ui	a9, a7, 18
+ 136:	130782        	l8ui	a8, a7, 19
+ 139:	11aa80        	slli	a10, a10, 8
+ 13c:	20aab0        	or	a10, a10, a11
+ 13f:	119900        	slli	a9, a9, 16
+ 142:	2099a0        	or	a9, a9, a10
+ 145:	018880        	slli	a8, a8, 24
+ 148:	208890        	or	a8, a8, a9
+ 14b:	3489      	s32i.n	a8, a4, 12
+ 14d:	1507a2        	l8ui	a10, a7, 21
+ 150:	1407b2        	l8ui	a11, a7, 20
+ 153:	160792        	l8ui	a9, a7, 22
+ 156:	170782        	l8ui	a8, a7, 23
+ 159:	11aa80        	slli	a10, a10, 8
+ 15c:	20aab0        	or	a10, a10, a11
+ 15f:	119900        	slli	a9, a9, 16
+ 162:	2099a0        	or	a9, a9, a10
+ 165:	018880        	slli	a8, a8, 24
+ 168:	208890        	or	a8, a8, a9
+ 16b:	4489      	s32i.n	a8, a4, 16
+ 16d:	070782        	l8ui	a8, a7, 7
+ 170:	1ac7b2        	addi	a11, a7, 26
+ 173:	144482        	s8i	a8, a4, 20
+ 176:	180782        	l8ui	a8, a7, 24
+ 179:	cc0c      	movi.n	a12, 12
+ 17b:	154482        	s8i	a8, a4, 21
+ 17e:	190782        	l8ui	a8, a7, 25
+ 181:	18c4a2        	addi	a10, a4, 24
+ 184:	164482        	s8i	a8, a4, 22
+ 187:	11d8      	l32i.n	a13, a1, 4
+ 189:	26c772        	addi	a7, a7, 38
+ 18c:	1744d2        	s8i	a13, a4, 23
+ 18f:	000081        	l32r	a8, fffc0190 <espnow_v6_decode+0xfffc0190>
+			18f: R_XTENSA_SLOT0_OP	.literal.espnow_v6_decode+0x10
+			18f: R_XTENSA_ASM_EXPAND	memcpy
+ 192:	0008e0        	callx8	a8
+ 195:	140492        	l8ui	a9, a4, 20
+ 198:	34a8      	l32i.n	a10, a4, 12
+ 19a:	239900        	sext	a9, a9, 7
+ 19d:	082c      	movi.n	a8, 32
+ 19f:	dfafb2        	movi	a11, -33
+ 1a2:	208a80        	or	a8, a10, a8
+ 1a5:	81c992        	addi	a9, a9, -127
+ 1a8:	10aab0        	and	a10, a10, a11
+ 1ab:	838a90        	moveqz	a8, a10, a9
+ 1ae:	244462        	s8i	a6, a4, 36
+ 1b1:	a479      	s32i.n	a7, a4, 40
+ 1b3:	3489      	s32i.n	a8, a4, 12
+ 1b5:	120c      	movi.n	a2, 1
+ 1b7:	000046        	j	1bc <espnow_v6_decode+0x1bc>
+			1b7: R_XTENSA_SLOT0_OP	.text.espnow_v6_decode+0x1bc
+ 1ba:	092d      	mov.n	a2, a9
+ 1bc:	f01d      	retw.n
+
+before sections:
+/tmp/obd-espnow-crc-20261014/before-standalone.obj  :
+section                           size   addr
+.literal.espnow_crc16                8      0
+.literal.espnow_profile_hash        16      0
+.literal.espnow_snapshot_init        4      0
+.literal.espnow_v5_encode           36      0
+.literal.espnow_v6_frame_count       4      0
+.literal.espnow_v6_encode           24      0
+.literal.espnow_hello_encode         4      0
+.literal.espnow_classify             4      0
+.literal.espnow_v5_decode           20      0
+.literal.espnow_v6_decode           20      0
+.literal.espnow_hello_decode         4      0
+.literal.espnow_rx_apply            12      0
+.text                                0      0
+.data                                0      0
+.bss                                 0      0
+.text.invalidate_clear_bits        107      0
+.text.espnow_crc16                  66      0
+.text.espnow_profile_hash           70      0
+.text.espnow_snapshot_init          28      0
+.text.espnow_snapshot_put          200      0
+.text.espnow_snapshot_get           90      0
+.text.espnow_v5_encode             964      0
+.text.espnow_v6_frame_count         34      0
+.text.espnow_v6_encode             476      0
+.text.espnow_hello_encode           72      0
+.text.espnow_classify              105      0
+.text.espnow_v5_decode            1008      0
+.text.espnow_v6_decode             446      0
+.text.espnow_hello_decode           82      0
+.text.espnow_rx_record             122      0
+.text.espnow_rx_apply              364      0
+.debug_frame                       400      0
+.debug_info                      12185      0
+.debug_abbrev                     1250      0
+.debug_loc                       12261      0
+.debug_aranges                     152      0
+.debug_ranges                     2952      0
+.debug_line                      18127      0
+.debug_str                        1668      0
+.comment                            48      0
+.xtensa.info                        56      0
+.xt.lit                             96      0
+.xt.prop                          2520      0
+Total                            56105
+
+
+
+after espnow_crc16 disassembly:
+Disassembly of section .text.espnow_crc16:
+
+00000000 <espnow_crc16>:
+   0:	004136        	entry	a1, 32
+   3:	0000a1        	l32r	a10, fffc0004 <espnow_crc16+0xfffc0004>
+			3: R_XTENSA_SLOT0_OP	.literal.espnow_crc16
+   6:	239c      	beqz.n	a3, 1c <espnow_crc16+0x1c>
+			6: R_XTENSA_SLOT0_OP	.text.espnow_crc16+0x1c
+   8:	03cd      	mov.n	a12, a3
+   a:	02bd      	mov.n	a11, a2
+   c:	0a0c      	movi.n	a10, 0
+   e:	000081        	l32r	a8, fffc0010 <espnow_crc16+0xfffc0010>
+			e: R_XTENSA_SLOT0_OP	.literal.espnow_crc16+0x4
+			e: R_XTENSA_ASM_EXPAND	esp_rom_crc16_be
+  11:	0008e0        	callx8	a8
+  14:	f87c      	movi.n	a8, -1
+  16:	30aa80        	xor	a10, a10, a8
+  19:	f4a0a0        	extui	a10, a10, 0, 16
+  1c:	0a2d      	mov.n	a2, a10
+  1e:	f01d      	retw.n
+
+after espnow_v6_encode disassembly:
+Disassembly of section .text.espnow_v6_encode:
+
+00000000 <espnow_v6_encode>:
+   0:	008136        	entry	a1, 64
+   3:	40f280        	nsau	a8, a2
+   6:	027d      	mov.n	a7, a2
+   8:	05ad      	mov.n	a10, a5
+   a:	190c      	movi.n	a9, 1
+   c:	418580        	srli	a8, a8, 5
+   f:	1a7216        	beqz	a2, 1ba <espnow_v6_encode+0x1ba>
+			f: R_XTENSA_SLOT0_OP	.text.espnow_v6_encode+0x1ba
+  12:	838940        	moveqz	a8, a9, a4
+  15:	1a1856        	bnez	a8, 1ba <espnow_v6_encode+0x1ba>
+			15: R_XTENSA_SLOT0_OP	.text.espnow_v6_encode+0x1ba
+  18:	200282        	l8ui	a8, a2, 32
+  1b:	09dd      	mov.n	a13, a9
+  1d:	189c      	beqz.n	a8, 32 <espnow_v6_encode+0x32>
+			1d: R_XTENSA_SLOT0_OP	.text.espnow_v6_encode+0x32
+  1f:	000091        	l32r	a9, fffc0020 <espnow_v6_encode+0xfffc0020>
+			1f: R_XTENSA_SLOT0_OP	.literal.espnow_v6_encode
+  22:	22c8d2        	addi	a13, a8, 34
+  25:	b29d90        	mulsh	a9, a13, a9
+  28:	dd9a      	add.n	a13, a13, a9
+  2a:	21d5d0        	srai	a13, a13, 5
+  2d:	0d9d      	mov.n	a9, a13
+  2f:	ffffc6        	j	32 <espnow_v6_encode+0x32>
+			2f: R_XTENSA_SLOT0_OP	.text.espnow_v6_encode+0x32
+  32:	11d9      	s32i.n	a13, a1, 4
+  34:	020c      	movi.n	a2, 0
+  36:	023397        	bltu	a3, a9, 3c <espnow_v6_encode+0x3c>
+			36: R_XTENSA_SLOT0_OP	.text.espnow_v6_encode+0x3c
+  39:	006146        	j	1c2 <espnow_v6_encode+0x1c2>
+			39: R_XTENSA_SLOT0_OP	.text.espnow_v6_encode+0x1c2
+  3c:	a09330        	addx4	a9, a3, a3
+  3f:	f09990        	subx8	a9, a9, a9
+  42:	c08890        	sub	a8, a8, a9
+  45:	535820        	max	a5, a8, a2
+  48:	392c      	movi.n	a9, 35
+  4a:	435590        	min	a5, a5, a9
+  4d:	236580        	sext	a6, a5, 15
+  50:	906660        	addx2	a6, a6, a6
+  53:	2189      	s32i.n	a8, a1, 8
+  55:	666a      	add.n	a6, a6, a6
+  57:	1183e0        	slli	a8, a3, 2
+  5a:	0129      	s32i.n	a2, a1, 0
+  5c:	3189      	s32i.n	a8, a1, 12
+  5e:	28c622        	addi	a2, a6, 40
+  61:	02ba27        	bgeu	a10, a2, 67 <espnow_v6_encode+0x67>
+			61: R_XTENSA_SLOT0_OP	.text.espnow_v6_encode+0x67
+  64:	005606        	j	1c0 <espnow_v6_encode+0x1c0>
+			64: R_XTENSA_SLOT0_OP	.text.espnow_v6_encode+0x1c0
+  67:	01b8      	l32i.n	a11, a1, 0
+  69:	6c2c      	movi.n	a12, 38
+  6b:	20a440        	or	a10, a4, a4
+  6e:	000081        	l32r	a8, fffc0070 <espnow_v6_encode+0xfffc0070>
+			6e: R_XTENSA_SLOT0_OP	.literal.espnow_v6_encode+0x4
+			6e: R_XTENSA_ASM_EXPAND	memset
+  71:	0008e0        	callx8	a8
+  74:	294c      	movi.n	a9, 66
+  76:	004492        	s8i	a9, a4, 0
+  79:	f94c      	movi.n	a9, 79
+  7b:	014492        	s8i	a9, a4, 1
+  7e:	690c      	movi.n	a9, 6
+  80:	024492        	s8i	a9, a4, 2
+  83:	190c      	movi.n	a9, 1
+  85:	034492        	s8i	a9, a4, 3
+  88:	11d8      	l32i.n	a13, a1, 4
+  8a:	1007a2        	l8ui	a10, a7, 16
+  8d:	1193c0        	slli	a9, a3, 4
+  90:	2099d0        	or	a9, a9, a13
+  93:	0444a2        	s8i	a10, a4, 4
+  96:	054492        	s8i	a9, a4, 5
+  99:	064452        	s8i	a5, a4, 6
+  9c:	110792        	l8ui	a9, a7, 17
+  9f:	1ac482        	addi	a8, a4, 26
+  a2:	074492        	s8i	a9, a4, 7
+  a5:	0798      	l32i.n	a9, a7, 0
+  a7:	1189      	s32i.n	a8, a1, 4
+  a9:	41d890        	srli	a13, a9, 8
+  ac:	f5b090        	extui	a11, a9, 16, 16
+  af:	75a890        	extui	a10, a9, 24, 8
+  b2:	0944d2        	s8i	a13, a4, 9
+  b5:	0a44b2        	s8i	a11, a4, 10
+  b8:	0b44a2        	s8i	a10, a4, 11
+  bb:	084492        	s8i	a9, a4, 8
+  be:	1798      	l32i.n	a9, a7, 4
+  c0:	01b8      	l32i.n	a11, a1, 0
+  c2:	41e890        	srli	a14, a9, 8
+  c5:	f5d090        	extui	a13, a9, 16, 16
+  c8:	75a890        	extui	a10, a9, 24, 8
+  cb:	0d44e2        	s8i	a14, a4, 13
+  ce:	0e44d2        	s8i	a13, a4, 14
+  d1:	0f44a2        	s8i	a10, a4, 15
+  d4:	0c4492        	s8i	a9, a4, 12
+  d7:	2798      	l32i.n	a9, a7, 8
+  d9:	08ad      	mov.n	a10, a8
+  db:	41f890        	srli	a15, a9, 8
+  de:	f5e090        	extui	a14, a9, 16, 16
+  e1:	75d890        	extui	a13, a9, 24, 8
+  e4:	1144f2        	s8i	a15, a4, 17
+  e7:	1244e2        	s8i	a14, a4, 18
+  ea:	1344d2        	s8i	a13, a4, 19
+  ed:	104492        	s8i	a9, a4, 16
+  f0:	3798      	l32i.n	a9, a7, 12
+  f2:	14c782        	addi	a8, a7, 20
+  f5:	41f890        	srli	a15, a9, 8
+  f8:	4189      	s32i.n	a8, a1, 16
+  fa:	f5e090        	extui	a14, a9, 16, 16
+  fd:	75d890        	extui	a13, a9, 24, 8
+ 100:	144492        	s8i	a9, a4, 20
+ 103:	1544f2        	s8i	a15, a4, 21
+ 106:	1644e2        	s8i	a14, a4, 22
+ 109:	1744d2        	s8i	a13, a4, 23
+ 10c:	120792        	l8ui	a9, a7, 18
+ 10f:	cc0c      	movi.n	a12, 12
+ 111:	184492        	s8i	a9, a4, 24
+ 114:	130792        	l8ui	a9, a7, 19
+ 117:	194492        	s8i	a9, a4, 25
+ 11a:	000081        	l32r	a8, fffc011c <espnow_v6_encode+0xfffc011c>
+			11a: R_XTENSA_SLOT0_OP	.literal.espnow_v6_encode+0x8
+			11a: R_XTENSA_ASM_EXPAND	memset
+ 11d:	0008e0        	callx8	a8
+ 120:	01c8      	l32i.n	a12, a1, 0
+ 122:	2188      	l32i.n	a8, a1, 8
+ 124:	c90c      	movi.n	a9, 12
+ 126:	000206        	j	132 <espnow_v6_encode+0x132>
+			126: R_XTENSA_SLOT0_OP	.text.espnow_v6_encode+0x132
+ 129:	cc1b      	addi.n	a12, a12, 1
+ 12b:	990b      	addi.n	a9, a9, -1
+ 12d:	19cc      	bnez.n	a9, 132 <espnow_v6_encode+0x132>
+			12d: R_XTENSA_SLOT0_OP	.text.espnow_v6_encode+0x132
+ 12f:	0001c6        	j	13a <espnow_v6_encode+0x13a>
+			12f: R_XTENSA_SLOT0_OP	.text.espnow_v6_encode+0x13a
+ 132:	a7ca      	add.n	a10, a7, a12
+ 134:	140aa2        	l8ui	a10, a10, 20
+ 137:	feea56        	bnez	a10, 129 <espnow_v6_encode+0x129>
+			137: R_XTENSA_SLOT0_OP	.text.espnow_v6_encode+0x129
+ 13a:	41b8      	l32i.n	a11, a1, 16
+ 13c:	11a8      	l32i.n	a10, a1, 4
+ 13e:	0189      	s32i.n	a8, a1, 0
+ 140:	000081        	l32r	a8, fffc0140 <espnow_v6_encode+0xfffc0140>
+			140: R_XTENSA_SLOT0_OP	.literal.espnow_v6_encode+0xc
+			140: R_XTENSA_ASM_EXPAND	memcpy
+ 143:	0008e0        	callx8	a8
+ 146:	0188      	l32i.n	a8, a1, 0
+ 148:	26c4d2        	addi	a13, a4, 38
+ 14b:	4518a6        	blti	a8, 1, 194 <espnow_v6_encode+0x194>
+			14b: R_XTENSA_SLOT0_OP	.text.espnow_v6_encode+0x194
+ 14e:	3188      	l32i.n	a8, a1, 12
+ 150:	1b0c      	movi.n	a11, 1
+ 152:	809830        	add	a9, a8, a3
+ 155:	f09990        	subx8	a9, a9, a9
+ 158:	b09970        	addx8	a9, a9, a7
+ 15b:	208dd0        	or	a8, a13, a13
+ 15e:	53bb50        	max	a11, a11, a5
+ 161:	268b76        	loop	a11, 18b <espnow_v6_encode+0x18b>
+			161: R_XTENSA_SLOT0_OP	.text.espnow_v6_encode+0x18b
+ 164:	1219a2        	l16ui	a10, a9, 36
+ 167:	998b      	addi.n	a9, a9, 8
+ 169:	41c8a0        	srli	a12, a10, 8
+ 16c:	0148c2        	s8i	a12, a8, 1
+ 16f:	0048a2        	s8i	a10, a8, 0
+ 172:	89a8      	l32i.n	a10, a9, 32
+ 174:	41f8a0        	srli	a15, a10, 8
+ 177:	f5e0a0        	extui	a14, a10, 16, 16
+ 17a:	75c8a0        	extui	a12, a10, 24, 8
+ 17d:	0248a2        	s8i	a10, a8, 2
+ 180:	0348f2        	s8i	a15, a8, 3
+ 183:	0448e2        	s8i	a14, a8, 4
+ 186:	0548c2        	s8i	a12, a8, 5
+ 189:	886b      	addi.n	a8, a8, 6
+ 18b:	f45050        	extui	a5, a5, 0, 16
+ 18e:	905550        	addx2	a5, a5, a5
+ 191:	90d5d0        	addx2	a13, a5, a13
+ 194:	26c6c2        	addi	a12, a6, 38
+ 197:	04bd      	mov.n	a11, a4
+ 199:	0a0c      	movi.n	a10, 0
+ 19b:	0061d2        	s32i	a13, a1, 0
+ 19e:	000081        	l32r	a8, fffc01a0 <espnow_v6_encode+0xfffc01a0>
+			19e: R_XTENSA_SLOT0_OP	.literal.espnow_v6_encode+0x10
+			19e: R_XTENSA_ASM_EXPAND	esp_rom_crc16_be
+ 1a1:	0008e0        	callx8	a8
+ 1a4:	f87c      	movi.n	a8, -1
+ 1a6:	30aa80        	xor	a10, a10, a8
+ 1a9:	01d8      	l32i.n	a13, a1, 0
+ 1ab:	f4a0a0        	extui	a10, a10, 0, 16
+ 1ae:	4188a0        	srli	a8, a10, 8
+ 1b1:	004da2        	s8i	a10, a13, 0
+ 1b4:	014d82        	s8i	a8, a13, 1
+ 1b7:	0001c6        	j	1c2 <espnow_v6_encode+0x1c2>
+			1b7: R_XTENSA_SLOT0_OP	.text.espnow_v6_encode+0x1c2
+ 1ba:	020c      	movi.n	a2, 0
+ 1bc:	000086        	j	1c2 <espnow_v6_encode+0x1c2>
+			1bc: R_XTENSA_SLOT0_OP	.text.espnow_v6_encode+0x1c2
+ 1bf:	00          	.byte	00
+ 1c0:	0128      	l32i.n	a2, a1, 0
+ 1c2:	f01d      	retw.n
+
+after espnow_v6_decode disassembly:
+Disassembly of section .text.espnow_v6_decode:
+
+00000000 <espnow_v6_decode>:
+   0:	004136        	entry	a1, 32
+   3:	40f280        	nsau	a8, a2
+   6:	418580        	srli	a8, a8, 5
+   9:	528c      	beqz.n	a2, 12 <espnow_v6_decode+0x12>
+			9: R_XTENSA_SLOT0_OP	.text.espnow_v6_decode+0x12
+   b:	190c      	movi.n	a9, 1
+   d:	838940        	moveqz	a8, a9, a4
+  10:	488c      	beqz.n	a8, 18 <espnow_v6_decode+0x18>
+			10: R_XTENSA_SLOT0_OP	.text.espnow_v6_decode+0x18
+  12:	020c      	movi.n	a2, 0
+  14:	0059c6        	j	17f <espnow_v6_decode+0x17f>
+			14: R_XTENSA_SLOT0_OP	.text.espnow_v6_decode+0x17f
+  17:	00          	.byte	00
+  18:	d8c382        	addi	a8, a3, -40
+  1b:	d2a092        	movi	a9, 210
+  1e:	f03987        	bltu	a9, a8, 12 <espnow_v6_decode+0x12>
+			1e: R_XTENSA_SLOT0_OP	.text.espnow_v6_decode+0x12
+  21:	010282        	l8ui	a8, a2, 1
+  24:	0002a2        	l8ui	a10, a2, 0
+  27:	118880        	slli	a8, a8, 8
+  2a:	000091        	l32r	a9, fffc002c <espnow_v6_decode+0xfffc002c>
+			2a: R_XTENSA_SLOT0_OP	.literal.espnow_v6_decode
+  2d:	2088a0        	or	a8, a8, a10
+  30:	de9897        	bne	a8, a9, 12 <espnow_v6_decode+0x12>
+			30: R_XTENSA_SLOT0_OP	.text.espnow_v6_decode+0x12
+  33:	020282        	l8ui	a8, a2, 2
+  36:	d86866        	bnei	a8, 6, 12 <espnow_v6_decode+0x12>
+			36: R_XTENSA_SLOT0_OP	.text.espnow_v6_decode+0x12
+  39:	030282        	l8ui	a8, a2, 3
+  3c:	d21866        	bnei	a8, 1, 12 <espnow_v6_decode+0x12>
+			3c: R_XTENSA_SLOT0_OP	.text.espnow_v6_decode+0x12
+  3f:	050282        	l8ui	a8, a2, 5
+  42:	060262        	l8ui	a6, a2, 6
+  45:	392c      	movi.n	a9, 35
+  47:	345080        	extui	a5, a8, 0, 4
+  4a:	417480        	srli	a7, a8, 4
+  4d:	c13967        	bltu	a9, a6, 12 <espnow_v6_decode+0x12>
+			4d: R_XTENSA_SLOT0_OP	.text.espnow_v6_decode+0x12
+  50:	628750        	saltu	a8, a7, a5
+  53:	880b      	addi.n	a8, a8, -1
+  55:	608080        	neg	a8, a8
+  58:	74a080        	extui	a10, a8, 0, 8
+  5b:	fb3a56        	bnez	a10, 12 <espnow_v6_decode+0x12>
+			5b: R_XTENSA_SLOT0_OP	.text.espnow_v6_decode+0x12
+  5e:	908660        	addx2	a8, a6, a6
+  61:	888a      	add.n	a8, a8, a8
+  63:	28c892        	addi	a9, a8, 40
+  66:	a89937        	bne	a9, a3, 12 <espnow_v6_decode+0x12>
+			66: R_XTENSA_SLOT0_OP	.text.espnow_v6_decode+0x12
+  69:	26c8c2        	addi	a12, a8, 38
+  6c:	92ca      	add.n	a9, a2, a12
+  6e:	010982        	l8ui	a8, a9, 1
+  71:	000992        	l8ui	a9, a9, 0
+  74:	118880        	slli	a8, a8, 8
+  77:	02bd      	mov.n	a11, a2
+  79:	203890        	or	a3, a8, a9
+  7c:	000081        	l32r	a8, fffc007c <espnow_v6_decode+0xfffc007c>
+			7c: R_XTENSA_SLOT0_OP	.literal.espnow_v6_decode+0x4
+			7c: R_XTENSA_ASM_EXPAND	esp_rom_crc16_be
+  7f:	0008e0        	callx8	a8
+  82:	f87c      	movi.n	a8, -1
+  84:	308a80        	xor	a8, a10, a8
+  87:	f48080        	extui	a8, a8, 0, 16
+  8a:	849387        	bne	a3, a8, 12 <espnow_v6_decode+0x12>
+			8a: R_XTENSA_SLOT0_OP	.text.espnow_v6_decode+0x12
+  8d:	70a0c2        	movi	a12, 112
+  90:	0b0c      	movi.n	a11, 0
+  92:	04ad      	mov.n	a10, a4
+  94:	000081        	l32r	a8, fffc0094 <espnow_v6_decode+0xfffc0094>
+			94: R_XTENSA_SLOT0_OP	.literal.espnow_v6_decode+0x8
+			94: R_XTENSA_ASM_EXPAND	memset
+  97:	0008e0        	callx8	a8
+  9a:	680c      	movi.n	a8, 6
+  9c:	004482        	s8i	a8, a4, 0
+  9f:	040282        	l8ui	a8, a2, 4
+  a2:	024472        	s8i	a7, a4, 2
+  a5:	014482        	s8i	a8, a4, 1
+  a8:	034452        	s8i	a5, a4, 3
+  ab:	0902a2        	l8ui	a10, a2, 9
+  ae:	0802b2        	l8ui	a11, a2, 8
+  b1:	0a0292        	l8ui	a9, a2, 10
+  b4:	0b0282        	l8ui	a8, a2, 11
+  b7:	11aa80        	slli	a10, a10, 8
+  ba:	20aab0        	or	a10, a10, a11
+  bd:	119900        	slli	a9, a9, 16
+  c0:	2099a0        	or	a9, a9, a10
+  c3:	018880        	slli	a8, a8, 24
+  c6:	208890        	or	a8, a8, a9
+  c9:	1489      	s32i.n	a8, a4, 4
+  cb:	0d02a2        	l8ui	a10, a2, 13
+  ce:	0c02b2        	l8ui	a11, a2, 12
+  d1:	0e0292        	l8ui	a9, a2, 14
+  d4:	0f0282        	l8ui	a8, a2, 15
+  d7:	11aa80        	slli	a10, a10, 8
+  da:	20aab0        	or	a10, a10, a11
+  dd:	119900        	slli	a9, a9, 16
+  e0:	2099a0        	or	a9, a9, a10
+  e3:	018880        	slli	a8, a8, 24
+  e6:	208890        	or	a8, a8, a9
+  e9:	2489      	s32i.n	a8, a4, 8
+  eb:	1102a2        	l8ui	a10, a2, 17
+  ee:	1002b2        	l8ui	a11, a2, 16
+  f1:	120292        	l8ui	a9, a2, 18
+  f4:	130282        	l8ui	a8, a2, 19
+  f7:	11aa80        	slli	a10, a10, 8
+  fa:	20aab0        	or	a10, a10, a11
+  fd:	119900        	slli	a9, a9, 16
+ 100:	2099a0        	or	a9, a9, a10
+ 103:	018880        	slli	a8, a8, 24
+ 106:	208890        	or	a8, a8, a9
+ 109:	3489      	s32i.n	a8, a4, 12
+ 10b:	1502a2        	l8ui	a10, a2, 21
+ 10e:	1402b2        	l8ui	a11, a2, 20
+ 111:	160292        	l8ui	a9, a2, 22
+ 114:	170282        	l8ui	a8, a2, 23
+ 117:	11aa80        	slli	a10, a10, 8
+ 11a:	20aab0        	or	a10, a10, a11
+ 11d:	119900        	slli	a9, a9, 16
+ 120:	2099a0        	or	a9, a9, a10
+ 123:	018880        	slli	a8, a8, 24
+ 126:	208890        	or	a8, a8, a9
+ 129:	046482        	s32i	a8, a4, 16
+ 12c:	070282        	l8ui	a8, a2, 7
+ 12f:	1ac2b2        	addi	a11, a2, 26
+ 132:	144482        	s8i	a8, a4, 20
+ 135:	180282        	l8ui	a8, a2, 24
+ 138:	0ca0c2        	movi	a12, 12
+ 13b:	154482        	s8i	a8, a4, 21
+ 13e:	190282        	l8ui	a8, a2, 25
+ 141:	18c4a2        	addi	a10, a4, 24
+ 144:	164482        	s8i	a8, a4, 22
+ 147:	174462        	s8i	a6, a4, 23
+ 14a:	000081        	l32r	a8, fffc014c <espnow_v6_decode+0xfffc014c>
+			14a: R_XTENSA_SLOT0_OP	.literal.espnow_v6_decode+0xc
+			14a: R_XTENSA_ASM_EXPAND	memcpy
+ 14d:	0008e0        	callx8	a8
+ 150:	140492        	l8ui	a9, a4, 20
+ 153:	080c      	movi.n	a8, 0
+ 155:	26c222        	addi	a2, a2, 38
+ 158:	244482        	s8i	a8, a4, 36
+ 15b:	a429      	s32i.n	a2, a4, 40
+ 15d:	239900        	sext	a9, a9, 7
+ 160:	7fa0a2        	movi	a10, 127
+ 163:	3488      	l32i.n	a8, a4, 12
+ 165:	0c99a7        	bne	a9, a10, 175 <espnow_v6_decode+0x175>
+			165: R_XTENSA_SLOT0_OP	.text.espnow_v6_decode+0x175
+ 168:	dfaf92        	movi	a9, -33
+ 16b:	108890        	and	a8, a8, a9
+ 16e:	3489      	s32i.n	a8, a4, 12
+ 170:	120c      	movi.n	a2, 1
+ 172:	000246        	j	17f <espnow_v6_decode+0x17f>
+			172: R_XTENSA_SLOT0_OP	.text.espnow_v6_decode+0x17f
+ 175:	092c      	movi.n	a9, 32
+ 177:	208890        	or	a8, a8, a9
+ 17a:	3489      	s32i.n	a8, a4, 12
+ 17c:	fffc06        	j	170 <espnow_v6_decode+0x170>
+			17c: R_XTENSA_SLOT0_OP	.text.espnow_v6_decode+0x170
+ 17f:	f01d      	retw.n
+
+after sections:
+/tmp/obd-espnow-crc-20261014/after-standalone.obj  :
+section                           size   addr
+.literal.espnow_crc16                8      0
+.literal.espnow_profile_hash        16      0
+.literal.espnow_snapshot_init        4      0
+.literal.espnow_v5_encode           36      0
+.literal.espnow_v6_frame_count       4      0
+.literal.espnow_v6_encode           20      0
+.literal.espnow_hello_encode         4      0
+.literal.espnow_classify             4      0
+.literal.espnow_v5_decode           20      0
+.literal.espnow_v6_decode           16      0
+.literal.espnow_hello_decode         4      0
+.literal.espnow_rx_apply            12      0
+.text                                0      0
+.data                                0      0
+.bss                                 0      0
+.text.invalidate_clear_bits        107      0
+.text.espnow_crc16                  32      0
+.text.espnow_profile_hash           70      0
+.text.espnow_snapshot_init          28      0
+.text.espnow_snapshot_put          200      0
+.text.espnow_snapshot_get           90      0
+.text.espnow_v5_encode             964      0
+.text.espnow_v6_frame_count         34      0
+.text.espnow_v6_encode             452      0
+.text.espnow_hello_encode           72      0
+.text.espnow_classify              106      0
+.text.espnow_v5_decode            1008      0
+.text.espnow_v6_decode             385      0
+.text.espnow_hello_decode           82      0
+.text.espnow_rx_record             122      0
+.text.espnow_rx_apply              364      0
+.debug_frame                       400      0
+.debug_info                      12263      0
+.debug_abbrev                     1239      0
+.debug_loc                       12127      0
+.debug_aranges                     152      0
+.debug_ranges                     2880      0
+.debug_line                      17662      0
+.debug_str                        1691      0
+.comment                            48      0
+.xtensa.info                        56      0
+.xt.lit                             96      0
+.xt.prop                          2520      0
+Total                            55398
+
+
+
+normal: before 0x285640, after 0x2855f0, delta -80 bytes. ROM absolute address 0x40001cbc. No host CRC reference or SDK Linux LUT symbols.
+
+/tmp/obd-brz-build/obd_brz_gauge.elf:     file format elf32-xtensa-le
+
+
+Disassembly of section .iram0.vectors:
+
+Disassembly of section .iram0.text:
+
+Disassembly of section .flash.text:
+
+4201a21c <espnow_v6_encode>:
+4201a21c:	008136        	entry	a1, 64
+4201a21f:	40f280        	nsau	a8, a2
+4201a222:	027d      	mov.n	a7, a2
+4201a224:	05ad      	mov.n	a10, a5
+4201a226:	190c      	movi.n	a9, 1
+4201a228:	418580        	srli	a8, a8, 5
+4201a22b:	1a7216        	beqz	a2, 4201a3d6 <espnow_v6_encode+0x1ba>
+4201a22e:	838940        	moveqz	a8, a9, a4
+4201a231:	1a1856        	bnez	a8, 4201a3d6 <espnow_v6_encode+0x1ba>
+4201a234:	200282        	l8ui	a8, a2, 32
+4201a237:	09dd      	mov.n	a13, a9
+4201a239:	189c      	beqz.n	a8, 4201a24e <espnow_v6_encode+0x32>
+4201a23b:	9de391        	l32r	a9, 420019c8 <_stext+0x19a8> (ea0ea0eb <_rtc_reserved_end+0x89fea0eb>)
+4201a23e:	22c8d2        	addi	a13, a8, 34
+4201a241:	b29d90        	mulsh	a9, a13, a9
+4201a244:	dd9a      	add.n	a13, a13, a9
+4201a246:	21d5d0        	srai	a13, a13, 5
+4201a249:	0d9d      	mov.n	a9, a13
+4201a24b:	ffffc6        	j	4201a24e <espnow_v6_encode+0x32>
+4201a24e:	11d9      	s32i.n	a13, a1, 4
+4201a250:	020c      	movi.n	a2, 0
+4201a252:	023397        	bltu	a3, a9, 4201a258 <espnow_v6_encode+0x3c>
+4201a255:	006146        	j	4201a3de <espnow_v6_encode+0x1c2>
+4201a258:	a09330        	addx4	a9, a3, a3
+4201a25b:	f09990        	subx8	a9, a9, a9
+4201a25e:	c08890        	sub	a8, a8, a9
+4201a261:	535820        	max	a5, a8, a2
+4201a264:	392c      	movi.n	a9, 35
+4201a266:	435590        	min	a5, a5, a9
+4201a269:	236580        	sext	a6, a5, 15
+4201a26c:	906660        	addx2	a6, a6, a6
+4201a26f:	2189      	s32i.n	a8, a1, 8
+4201a271:	666a      	add.n	a6, a6, a6
+4201a273:	1183e0        	slli	a8, a3, 2
+4201a276:	0129      	s32i.n	a2, a1, 0
+4201a278:	3189      	s32i.n	a8, a1, 12
+4201a27a:	28c622        	addi	a2, a6, 40
+4201a27d:	02ba27        	bgeu	a10, a2, 4201a283 <espnow_v6_encode+0x67>
+4201a280:	005606        	j	4201a3dc <espnow_v6_encode+0x1c0>
+4201a283:	01b8      	l32i.n	a11, a1, 0
+4201a285:	6c2c      	movi.n	a12, 38
+4201a287:	20a440        	or	a10, a4, a4
+4201a28a:	978481        	l32r	a8, 4200009c <_stext+0x7c> (400011e8 <memset>)
+4201a28d:	0008e0        	callx8	a8
+4201a290:	294c      	movi.n	a9, 66
+4201a292:	004492        	s8i	a9, a4, 0
+4201a295:	f94c      	movi.n	a9, 79
+4201a297:	014492        	s8i	a9, a4, 1
+4201a29a:	690c      	movi.n	a9, 6
+4201a29c:	024492        	s8i	a9, a4, 2
+4201a29f:	190c      	movi.n	a9, 1
+4201a2a1:	034492        	s8i	a9, a4, 3
+4201a2a4:	11d8      	l32i.n	a13, a1, 4
+4201a2a6:	1007a2        	l8ui	a10, a7, 16
+4201a2a9:	1193c0        	slli	a9, a3, 4
+4201a2ac:	2099d0        	or	a9, a9, a13
+4201a2af:	0444a2        	s8i	a10, a4, 4
+4201a2b2:	054492        	s8i	a9, a4, 5
+4201a2b5:	064452        	s8i	a5, a4, 6
+4201a2b8:	110792        	l8ui	a9, a7, 17
+4201a2bb:	1ac482        	addi	a8, a4, 26
+4201a2be:	074492        	s8i	a9, a4, 7
+4201a2c1:	0798      	l32i.n	a9, a7, 0
+4201a2c3:	1189      	s32i.n	a8, a1, 4
+4201a2c5:	41d890        	srli	a13, a9, 8
+4201a2c8:	f5b090        	extui	a11, a9, 16, 16
+4201a2cb:	75a890        	extui	a10, a9, 24, 8
+4201a2ce:	0944d2        	s8i	a13, a4, 9
+4201a2d1:	0a44b2        	s8i	a11, a4, 10
+4201a2d4:	0b44a2        	s8i	a10, a4, 11
+4201a2d7:	084492        	s8i	a9, a4, 8
+4201a2da:	1798      	l32i.n	a9, a7, 4
+4201a2dc:	01b8      	l32i.n	a11, a1, 0
+4201a2de:	41e890        	srli	a14, a9, 8
+4201a2e1:	f5d090        	extui	a13, a9, 16, 16
+4201a2e4:	75a890        	extui	a10, a9, 24, 8
+4201a2e7:	0d44e2        	s8i	a14, a4, 13
+4201a2ea:	0e44d2        	s8i	a13, a4, 14
+4201a2ed:	0f44a2        	s8i	a10, a4, 15
+4201a2f0:	0c4492        	s8i	a9, a4, 12
+4201a2f3:	2798      	l32i.n	a9, a7, 8
+4201a2f5:	08ad      	mov.n	a10, a8
+4201a2f7:	41f890        	srli	a15, a9, 8
+4201a2fa:	f5e090        	extui	a14, a9, 16, 16
+4201a2fd:	75d890        	extui	a13, a9, 24, 8
+4201a300:	1144f2        	s8i	a15, a4, 17
+4201a303:	1244e2        	s8i	a14, a4, 18
+4201a306:	1344d2        	s8i	a13, a4, 19
+4201a309:	104492        	s8i	a9, a4, 16
+4201a30c:	3798      	l32i.n	a9, a7, 12
+4201a30e:	14c782        	addi	a8, a7, 20
+4201a311:	41f890        	srli	a15, a9, 8
+4201a314:	4189      	s32i.n	a8, a1, 16
+4201a316:	f5e090        	extui	a14, a9, 16, 16
+4201a319:	75d890        	extui	a13, a9, 24, 8
+4201a31c:	144492        	s8i	a9, a4, 20
+4201a31f:	1544f2        	s8i	a15, a4, 21
+4201a322:	1644e2        	s8i	a14, a4, 22
+4201a325:	1744d2        	s8i	a13, a4, 23
+4201a328:	120792        	l8ui	a9, a7, 18
+4201a32b:	cc0c      	movi.n	a12, 12
+4201a32d:	184492        	s8i	a9, a4, 24
+4201a330:	130792        	l8ui	a9, a7, 19
+4201a333:	194492        	s8i	a9, a4, 25
+4201a336:	975981        	l32r	a8, 4200009c <_stext+0x7c> (400011e8 <memset>)
+4201a339:	0008e0        	callx8	a8
+4201a33c:	01c8      	l32i.n	a12, a1, 0
+4201a33e:	2188      	l32i.n	a8, a1, 8
+4201a340:	c90c      	movi.n	a9, 12
+4201a342:	000206        	j	4201a34e <espnow_v6_encode+0x132>
+4201a345:	cc1b      	addi.n	a12, a12, 1
+4201a347:	990b      	addi.n	a9, a9, -1
+4201a349:	19cc      	bnez.n	a9, 4201a34e <espnow_v6_encode+0x132>
+4201a34b:	0001c6        	j	4201a356 <espnow_v6_encode+0x13a>
+4201a34e:	a7ca      	add.n	a10, a7, a12
+4201a350:	140aa2        	l8ui	a10, a10, 20
+4201a353:	feea56        	bnez	a10, 4201a345 <espnow_v6_encode+0x129>
+4201a356:	41b8      	l32i.n	a11, a1, 16
+4201a358:	11a8      	l32i.n	a10, a1, 4
+4201a35a:	0189      	s32i.n	a8, a1, 0
+4201a35c:	974281        	l32r	a8, 42000064 <_stext+0x44> (400011f4 <memcpy>)
+4201a35f:	0008e0        	callx8	a8
+4201a362:	0188      	l32i.n	a8, a1, 0
+4201a364:	26c4d2        	addi	a13, a4, 38
+4201a367:	4518a6        	blti	a8, 1, 4201a3b0 <espnow_v6_encode+0x194>
+4201a36a:	3188      	l32i.n	a8, a1, 12
+4201a36c:	1b0c      	movi.n	a11, 1
+4201a36e:	809830        	add	a9, a8, a3
+4201a371:	f09990        	subx8	a9, a9, a9
+4201a374:	b09970        	addx8	a9, a9, a7
+4201a377:	208dd0        	or	a8, a13, a13
+4201a37a:	53bb50        	max	a11, a11, a5
+4201a37d:	268b76        	loop	a11, 4201a3a7 <espnow_v6_encode+0x18b>
+4201a380:	1219a2        	l16ui	a10, a9, 36
+4201a383:	998b      	addi.n	a9, a9, 8
+4201a385:	41c8a0        	srli	a12, a10, 8
+4201a388:	0148c2        	s8i	a12, a8, 1
+4201a38b:	0048a2        	s8i	a10, a8, 0
+4201a38e:	89a8      	l32i.n	a10, a9, 32
+4201a390:	41f8a0        	srli	a15, a10, 8
+4201a393:	f5e0a0        	extui	a14, a10, 16, 16
+4201a396:	75c8a0        	extui	a12, a10, 24, 8
+4201a399:	0248a2        	s8i	a10, a8, 2
+4201a39c:	0348f2        	s8i	a15, a8, 3
+4201a39f:	0448e2        	s8i	a14, a8, 4
+4201a3a2:	0548c2        	s8i	a12, a8, 5
+4201a3a5:	886b      	addi.n	a8, a8, 6
+4201a3a7:	f45050        	extui	a5, a5, 0, 16
+4201a3aa:	905550        	addx2	a5, a5, a5
+4201a3ad:	90d5d0        	addx2	a13, a5, a13
+4201a3b0:	26c6c2        	addi	a12, a6, 38
+4201a3b3:	04bd      	mov.n	a11, a4
+4201a3b5:	0a0c      	movi.n	a10, 0
+4201a3b7:	0061d2        	s32i	a13, a1, 0
+4201a3ba:	9d8481        	l32r	a8, 420019cc <_stext+0x19ac> (40001cbc <r_lld_init_sched_hook>)
+4201a3bd:	0008e0        	callx8	a8
+4201a3c0:	f87c      	movi.n	a8, -1
+4201a3c2:	30aa80        	xor	a10, a10, a8
+4201a3c5:	01d8      	l32i.n	a13, a1, 0
+4201a3c7:	f4a0a0        	extui	a10, a10, 0, 16
+4201a3ca:	4188a0        	srli	a8, a10, 8
+4201a3cd:	004da2        	s8i	a10, a13, 0
+4201a3d0:	014d82        	s8i	a8, a13, 1
+4201a3d3:	0001c6        	j	4201a3de <espnow_v6_encode+0x1c2>
+4201a3d6:	020c      	movi.n	a2, 0
+4201a3d8:	000086        	j	4201a3de <espnow_v6_encode+0x1c2>
+4201a3db:	012800        	slli	a2, a8, 32
+4201a3de:	f01d      	retw.n
+
+
+/tmp/obd-brz-build/obd_brz_gauge.elf:     file format elf32-xtensa-le
+
+
+Disassembly of section .iram0.vectors:
+
+Disassembly of section .iram0.text:
+
+Disassembly of section .flash.text:
+
+4201a884 <espnow_v6_decode>:
+4201a884:	004136        	entry	a1, 32
+4201a887:	40f280        	nsau	a8, a2
+4201a88a:	418580        	srli	a8, a8, 5
+4201a88d:	528c      	beqz.n	a2, 4201a896 <espnow_v6_decode+0x12>
+4201a88f:	190c      	movi.n	a9, 1
+4201a891:	838940        	moveqz	a8, a9, a4
+4201a894:	488c      	beqz.n	a8, 4201a89c <espnow_v6_decode+0x18>
+4201a896:	020c      	movi.n	a2, 0
+4201a898:	0059c6        	j	4201aa03 <espnow_v6_decode+0x17f>
+4201a89b:	c38200        	movf	a8, a2, b0
+4201a89e:	92d8      	l32i.n	a13, a2, 36
+4201a8a0:	87d2a0        	ee.stf.64.xp	f13, f8, a10, a2
+4201a8a3:	f039      	s32i.n	a3, a0, 60
+4201a8a5:	010282        	l8ui	a8, a2, 1
+4201a8a8:	0002a2        	l8ui	a10, a2, 0
+4201a8ab:	118880        	slli	a8, a8, 8
+4201a8ae:	9c1691        	l32r	a9, 42001908 <_stext+0x18e8> (4f42 <UserFrameTotalSize+0x4e42>)
+4201a8b1:	2088a0        	or	a8, a8, a10
+4201a8b4:	de9897        	bne	a8, a9, 4201a896 <espnow_v6_decode+0x12>
+4201a8b7:	020282        	l8ui	a8, a2, 2
+4201a8ba:	d86866        	bnei	a8, 6, 4201a896 <espnow_v6_decode+0x12>
+4201a8bd:	030282        	l8ui	a8, a2, 3
+4201a8c0:	d21866        	bnei	a8, 1, 4201a896 <espnow_v6_decode+0x12>
+4201a8c3:	050282        	l8ui	a8, a2, 5
+4201a8c6:	060262        	l8ui	a6, a2, 6
+4201a8c9:	392c      	movi.n	a9, 35
+4201a8cb:	345080        	extui	a5, a8, 0, 4
+4201a8ce:	417480        	srli	a7, a8, 4
+4201a8d1:	c13967        	bltu	a9, a6, 4201a896 <espnow_v6_decode+0x12>
+4201a8d4:	628750        	saltu	a8, a7, a5
+4201a8d7:	880b      	addi.n	a8, a8, -1
+4201a8d9:	608080        	neg	a8, a8
+4201a8dc:	74a080        	extui	a10, a8, 0, 8
+4201a8df:	fb3a56        	bnez	a10, 4201a896 <espnow_v6_decode+0x12>
+4201a8e2:	908660        	addx2	a8, a6, a6
+4201a8e5:	888a      	add.n	a8, a8, a8
+4201a8e7:	28c892        	addi	a9, a8, 40
+4201a8ea:	a89937        	bne	a9, a3, 4201a896 <espnow_v6_decode+0x12>
+4201a8ed:	26c8c2        	addi	a12, a8, 38
+4201a8f0:	92ca      	add.n	a9, a2, a12
+4201a8f2:	010982        	l8ui	a8, a9, 1
+4201a8f5:	000992        	l8ui	a9, a9, 0
+4201a8f8:	118880        	slli	a8, a8, 8
+4201a8fb:	02bd      	mov.n	a11, a2
+4201a8fd:	203890        	or	a3, a8, a9
+4201a900:	9c3381        	l32r	a8, 420019cc <_stext+0x19ac> (40001cbc <r_lld_init_sched_hook>)
+4201a903:	0008e0        	callx8	a8
+4201a906:	f87c      	movi.n	a8, -1
+4201a908:	308a80        	xor	a8, a10, a8
+4201a90b:	f48080        	extui	a8, a8, 0, 16
+4201a90e:	849387        	bne	a3, a8, 4201a896 <espnow_v6_decode+0x12>
+4201a911:	70a0c2        	movi	a12, 112
+4201a914:	0b0c      	movi.n	a11, 0
+4201a916:	04ad      	mov.n	a10, a4
+4201a918:	95e181        	l32r	a8, 4200009c <_stext+0x7c> (400011e8 <memset>)
+4201a91b:	0008e0        	callx8	a8
+4201a91e:	680c      	movi.n	a8, 6
+4201a920:	004482        	s8i	a8, a4, 0
+4201a923:	040282        	l8ui	a8, a2, 4
+4201a926:	024472        	s8i	a7, a4, 2
+4201a929:	014482        	s8i	a8, a4, 1
+4201a92c:	034452        	s8i	a5, a4, 3
+4201a92f:	0902a2        	l8ui	a10, a2, 9
+4201a932:	0802b2        	l8ui	a11, a2, 8
+4201a935:	0a0292        	l8ui	a9, a2, 10
+4201a938:	0b0282        	l8ui	a8, a2, 11
+4201a93b:	11aa80        	slli	a10, a10, 8
+4201a93e:	20aab0        	or	a10, a10, a11
+4201a941:	119900        	slli	a9, a9, 16
+4201a944:	2099a0        	or	a9, a9, a10
+4201a947:	018880        	slli	a8, a8, 24
+4201a94a:	208890        	or	a8, a8, a9
+4201a94d:	1489      	s32i.n	a8, a4, 4
+4201a94f:	0d02a2        	l8ui	a10, a2, 13
+4201a952:	0c02b2        	l8ui	a11, a2, 12
+4201a955:	0e0292        	l8ui	a9, a2, 14
+4201a958:	0f0282        	l8ui	a8, a2, 15
+4201a95b:	11aa80        	slli	a10, a10, 8
+4201a95e:	20aab0        	or	a10, a10, a11
+4201a961:	119900        	slli	a9, a9, 16
+4201a964:	2099a0        	or	a9, a9, a10
+4201a967:	018880        	slli	a8, a8, 24
+4201a96a:	208890        	or	a8, a8, a9
+4201a96d:	2489      	s32i.n	a8, a4, 8
+4201a96f:	1102a2        	l8ui	a10, a2, 17
+4201a972:	1002b2        	l8ui	a11, a2, 16
+4201a975:	120292        	l8ui	a9, a2, 18
+4201a978:	130282        	l8ui	a8, a2, 19
+4201a97b:	11aa80        	slli	a10, a10, 8
+4201a97e:	20aab0        	or	a10, a10, a11
+4201a981:	119900        	slli	a9, a9, 16
+4201a984:	2099a0        	or	a9, a9, a10
+4201a987:	018880        	slli	a8, a8, 24
+4201a98a:	208890        	or	a8, a8, a9
+4201a98d:	3489      	s32i.n	a8, a4, 12
+4201a98f:	1502a2        	l8ui	a10, a2, 21
+4201a992:	1402b2        	l8ui	a11, a2, 20
+4201a995:	160292        	l8ui	a9, a2, 22
+4201a998:	170282        	l8ui	a8, a2, 23
+4201a99b:	11aa80        	slli	a10, a10, 8
+4201a99e:	20aab0        	or	a10, a10, a11
+4201a9a1:	119900        	slli	a9, a9, 16
+4201a9a4:	2099a0        	or	a9, a9, a10
+4201a9a7:	018880        	slli	a8, a8, 24
+4201a9aa:	208890        	or	a8, a8, a9
+4201a9ad:	046482        	s32i	a8, a4, 16
+4201a9b0:	070282        	l8ui	a8, a2, 7
+4201a9b3:	1ac2b2        	addi	a11, a2, 26
+4201a9b6:	144482        	s8i	a8, a4, 20
+4201a9b9:	180282        	l8ui	a8, a2, 24
+4201a9bc:	0ca0c2        	movi	a12, 12
+4201a9bf:	154482        	s8i	a8, a4, 21
+4201a9c2:	190282        	l8ui	a8, a2, 25
+4201a9c5:	18c4a2        	addi	a10, a4, 24
+4201a9c8:	164482        	s8i	a8, a4, 22
+4201a9cb:	174462        	s8i	a6, a4, 23
+4201a9ce:	95a581        	l32r	a8, 42000064 <_stext+0x44> (400011f4 <memcpy>)
+4201a9d1:	0008e0        	callx8	a8
+4201a9d4:	140492        	l8ui	a9, a4, 20
+4201a9d7:	080c      	movi.n	a8, 0
+4201a9d9:	26c222        	addi	a2, a2, 38
+4201a9dc:	244482        	s8i	a8, a4, 36
+4201a9df:	a429      	s32i.n	a2, a4, 40
+4201a9e1:	239900        	sext	a9, a9, 7
+4201a9e4:	7fa0a2        	movi	a10, 127
+4201a9e7:	3488      	l32i.n	a8, a4, 12
+4201a9e9:	0c99a7        	bne	a9, a10, 4201a9f9 <espnow_v6_decode+0x175>
+4201a9ec:	dfaf92        	movi	a9, -33
+4201a9ef:	108890        	and	a8, a8, a9
+4201a9f2:	3489      	s32i.n	a8, a4, 12
+4201a9f4:	120c      	movi.n	a2, 1
+4201a9f6:	000246        	j	4201aa03 <espnow_v6_decode+0x17f>
+4201a9f9:	092c      	movi.n	a9, 32
+4201a9fb:	208890        	or	a8, a8, a9
+4201a9fe:	3489      	s32i.n	a8, a4, 12
+4201aa00:	fffc06        	j	4201a9f4 <espnow_v6_decode+0x170>
+4201aa03:	f01d      	retw.n
+
+
+40d1a25afeb26f1e6e7d094bf3e746f53f062fa24a3f8a9320c625eed18a06fd /tmp/obd-brz-build/obd_brz_gauge.elf
+9483c7f9a7da477b13d6d3d86b8902a686a55b4dbb3aa7091fffb643b290affd /tmp/obd-brz-build/obd_brz_gauge.bin
+stats: before 0x285e80, after 0x285e20, delta -96 bytes. ROM absolute address 0x40001cbc. No host CRC reference or SDK Linux LUT symbols.
+
+/tmp/obd-perf-idf-build/obd_brz_gauge.elf:     file format elf32-xtensa-le
+
+
+Disassembly of section .iram0.vectors:
+
+Disassembly of section .iram0.text:
+
+Disassembly of section .flash.text:
+
+4201a62c <espnow_v6_encode>:
+4201a62c:	008136        	entry	a1, 64
+4201a62f:	40f280        	nsau	a8, a2
+4201a632:	027d      	mov.n	a7, a2
+4201a634:	05ad      	mov.n	a10, a5
+4201a636:	190c      	movi.n	a9, 1
+4201a638:	418580        	srli	a8, a8, 5
+4201a63b:	1a7216        	beqz	a2, 4201a7e6 <espnow_v6_encode+0x1ba>
+4201a63e:	838940        	moveqz	a8, a9, a4
+4201a641:	1a1856        	bnez	a8, 4201a7e6 <espnow_v6_encode+0x1ba>
+4201a644:	200282        	l8ui	a8, a2, 32
+4201a647:	09dd      	mov.n	a13, a9
+4201a649:	189c      	beqz.n	a8, 4201a65e <espnow_v6_encode+0x32>
+4201a64b:	9ced91        	l32r	a9, 42001a00 <_stext+0x19e0> (ea0ea0eb <_rtc_reserved_end+0x89fea0eb>)
+4201a64e:	22c8d2        	addi	a13, a8, 34
+4201a651:	b29d90        	mulsh	a9, a13, a9
+4201a654:	dd9a      	add.n	a13, a13, a9
+4201a656:	21d5d0        	srai	a13, a13, 5
+4201a659:	0d9d      	mov.n	a9, a13
+4201a65b:	ffffc6        	j	4201a65e <espnow_v6_encode+0x32>
+4201a65e:	11d9      	s32i.n	a13, a1, 4
+4201a660:	020c      	movi.n	a2, 0
+4201a662:	023397        	bltu	a3, a9, 4201a668 <espnow_v6_encode+0x3c>
+4201a665:	006146        	j	4201a7ee <espnow_v6_encode+0x1c2>
+4201a668:	a09330        	addx4	a9, a3, a3
+4201a66b:	f09990        	subx8	a9, a9, a9
+4201a66e:	c08890        	sub	a8, a8, a9
+4201a671:	535820        	max	a5, a8, a2
+4201a674:	392c      	movi.n	a9, 35
+4201a676:	435590        	min	a5, a5, a9
+4201a679:	236580        	sext	a6, a5, 15
+4201a67c:	906660        	addx2	a6, a6, a6
+4201a67f:	2189      	s32i.n	a8, a1, 8
+4201a681:	666a      	add.n	a6, a6, a6
+4201a683:	1183e0        	slli	a8, a3, 2
+4201a686:	0129      	s32i.n	a2, a1, 0
+4201a688:	3189      	s32i.n	a8, a1, 12
+4201a68a:	28c622        	addi	a2, a6, 40
+4201a68d:	02ba27        	bgeu	a10, a2, 4201a693 <espnow_v6_encode+0x67>
+4201a690:	005606        	j	4201a7ec <espnow_v6_encode+0x1c0>
+4201a693:	01b8      	l32i.n	a11, a1, 0
+4201a695:	6c2c      	movi.n	a12, 38
+4201a697:	20a440        	or	a10, a4, a4
+4201a69a:	968081        	l32r	a8, 4200009c <_stext+0x7c> (400011e8 <memset>)
+4201a69d:	0008e0        	callx8	a8
+4201a6a0:	294c      	movi.n	a9, 66
+4201a6a2:	004492        	s8i	a9, a4, 0
+4201a6a5:	f94c      	movi.n	a9, 79
+4201a6a7:	014492        	s8i	a9, a4, 1
+4201a6aa:	690c      	movi.n	a9, 6
+4201a6ac:	024492        	s8i	a9, a4, 2
+4201a6af:	190c      	movi.n	a9, 1
+4201a6b1:	034492        	s8i	a9, a4, 3
+4201a6b4:	11d8      	l32i.n	a13, a1, 4
+4201a6b6:	1007a2        	l8ui	a10, a7, 16
+4201a6b9:	1193c0        	slli	a9, a3, 4
+4201a6bc:	2099d0        	or	a9, a9, a13
+4201a6bf:	0444a2        	s8i	a10, a4, 4
+4201a6c2:	054492        	s8i	a9, a4, 5
+4201a6c5:	064452        	s8i	a5, a4, 6
+4201a6c8:	110792        	l8ui	a9, a7, 17
+4201a6cb:	1ac482        	addi	a8, a4, 26
+4201a6ce:	074492        	s8i	a9, a4, 7
+4201a6d1:	0798      	l32i.n	a9, a7, 0
+4201a6d3:	1189      	s32i.n	a8, a1, 4
+4201a6d5:	41d890        	srli	a13, a9, 8
+4201a6d8:	f5b090        	extui	a11, a9, 16, 16
+4201a6db:	75a890        	extui	a10, a9, 24, 8
+4201a6de:	0944d2        	s8i	a13, a4, 9
+4201a6e1:	0a44b2        	s8i	a11, a4, 10
+4201a6e4:	0b44a2        	s8i	a10, a4, 11
+4201a6e7:	084492        	s8i	a9, a4, 8
+4201a6ea:	1798      	l32i.n	a9, a7, 4
+4201a6ec:	01b8      	l32i.n	a11, a1, 0
+4201a6ee:	41e890        	srli	a14, a9, 8
+4201a6f1:	f5d090        	extui	a13, a9, 16, 16
+4201a6f4:	75a890        	extui	a10, a9, 24, 8
+4201a6f7:	0d44e2        	s8i	a14, a4, 13
+4201a6fa:	0e44d2        	s8i	a13, a4, 14
+4201a6fd:	0f44a2        	s8i	a10, a4, 15
+4201a700:	0c4492        	s8i	a9, a4, 12
+4201a703:	2798      	l32i.n	a9, a7, 8
+4201a705:	08ad      	mov.n	a10, a8
+4201a707:	41f890        	srli	a15, a9, 8
+4201a70a:	f5e090        	extui	a14, a9, 16, 16
+4201a70d:	75d890        	extui	a13, a9, 24, 8
+4201a710:	1144f2        	s8i	a15, a4, 17
+4201a713:	1244e2        	s8i	a14, a4, 18
+4201a716:	1344d2        	s8i	a13, a4, 19
+4201a719:	104492        	s8i	a9, a4, 16
+4201a71c:	3798      	l32i.n	a9, a7, 12
+4201a71e:	14c782        	addi	a8, a7, 20
+4201a721:	41f890        	srli	a15, a9, 8
+4201a724:	4189      	s32i.n	a8, a1, 16
+4201a726:	f5e090        	extui	a14, a9, 16, 16
+4201a729:	75d890        	extui	a13, a9, 24, 8
+4201a72c:	144492        	s8i	a9, a4, 20
+4201a72f:	1544f2        	s8i	a15, a4, 21
+4201a732:	1644e2        	s8i	a14, a4, 22
+4201a735:	1744d2        	s8i	a13, a4, 23
+4201a738:	120792        	l8ui	a9, a7, 18
+4201a73b:	cc0c      	movi.n	a12, 12
+4201a73d:	184492        	s8i	a9, a4, 24
+4201a740:	130792        	l8ui	a9, a7, 19
+4201a743:	194492        	s8i	a9, a4, 25
+4201a746:	965581        	l32r	a8, 4200009c <_stext+0x7c> (400011e8 <memset>)
+4201a749:	0008e0        	callx8	a8
+4201a74c:	01c8      	l32i.n	a12, a1, 0
+4201a74e:	2188      	l32i.n	a8, a1, 8
+4201a750:	c90c      	movi.n	a9, 12
+4201a752:	000206        	j	4201a75e <espnow_v6_encode+0x132>
+4201a755:	cc1b      	addi.n	a12, a12, 1
+4201a757:	990b      	addi.n	a9, a9, -1
+4201a759:	19cc      	bnez.n	a9, 4201a75e <espnow_v6_encode+0x132>
+4201a75b:	0001c6        	j	4201a766 <espnow_v6_encode+0x13a>
+4201a75e:	a7ca      	add.n	a10, a7, a12
+4201a760:	140aa2        	l8ui	a10, a10, 20
+4201a763:	feea56        	bnez	a10, 4201a755 <espnow_v6_encode+0x129>
+4201a766:	41b8      	l32i.n	a11, a1, 16
+4201a768:	11a8      	l32i.n	a10, a1, 4
+4201a76a:	0189      	s32i.n	a8, a1, 0
+4201a76c:	963e81        	l32r	a8, 42000064 <_stext+0x44> (400011f4 <memcpy>)
+4201a76f:	0008e0        	callx8	a8
+4201a772:	0188      	l32i.n	a8, a1, 0
+4201a774:	26c4d2        	addi	a13, a4, 38
+4201a777:	4518a6        	blti	a8, 1, 4201a7c0 <espnow_v6_encode+0x194>
+4201a77a:	3188      	l32i.n	a8, a1, 12
+4201a77c:	1b0c      	movi.n	a11, 1
+4201a77e:	809830        	add	a9, a8, a3
+4201a781:	f09990        	subx8	a9, a9, a9
+4201a784:	b09970        	addx8	a9, a9, a7
+4201a787:	208dd0        	or	a8, a13, a13
+4201a78a:	53bb50        	max	a11, a11, a5
+4201a78d:	268b76        	loop	a11, 4201a7b7 <espnow_v6_encode+0x18b>
+4201a790:	1219a2        	l16ui	a10, a9, 36
+4201a793:	998b      	addi.n	a9, a9, 8
+4201a795:	41c8a0        	srli	a12, a10, 8
+4201a798:	0148c2        	s8i	a12, a8, 1
+4201a79b:	0048a2        	s8i	a10, a8, 0
+4201a79e:	89a8      	l32i.n	a10, a9, 32
+4201a7a0:	41f8a0        	srli	a15, a10, 8
+4201a7a3:	f5e0a0        	extui	a14, a10, 16, 16
+4201a7a6:	75c8a0        	extui	a12, a10, 24, 8
+4201a7a9:	0248a2        	s8i	a10, a8, 2
+4201a7ac:	0348f2        	s8i	a15, a8, 3
+4201a7af:	0448e2        	s8i	a14, a8, 4
+4201a7b2:	0548c2        	s8i	a12, a8, 5
+4201a7b5:	886b      	addi.n	a8, a8, 6
+4201a7b7:	f45050        	extui	a5, a5, 0, 16
+4201a7ba:	905550        	addx2	a5, a5, a5
+4201a7bd:	90d5d0        	addx2	a13, a5, a13
+4201a7c0:	26c6c2        	addi	a12, a6, 38
+4201a7c3:	04bd      	mov.n	a11, a4
+4201a7c5:	0a0c      	movi.n	a10, 0
+4201a7c7:	0061d2        	s32i	a13, a1, 0
+4201a7ca:	9c8e81        	l32r	a8, 42001a04 <_stext+0x19e4> (40001cbc <r_lld_init_sched_hook>)
+4201a7cd:	0008e0        	callx8	a8
+4201a7d0:	f87c      	movi.n	a8, -1
+4201a7d2:	30aa80        	xor	a10, a10, a8
+4201a7d5:	01d8      	l32i.n	a13, a1, 0
+4201a7d7:	f4a0a0        	extui	a10, a10, 0, 16
+4201a7da:	4188a0        	srli	a8, a10, 8
+4201a7dd:	004da2        	s8i	a10, a13, 0
+4201a7e0:	014d82        	s8i	a8, a13, 1
+4201a7e3:	0001c6        	j	4201a7ee <espnow_v6_encode+0x1c2>
+4201a7e6:	020c      	movi.n	a2, 0
+4201a7e8:	000086        	j	4201a7ee <espnow_v6_encode+0x1c2>
+4201a7eb:	012800        	slli	a2, a8, 32
+4201a7ee:	f01d      	retw.n
+
+
+/tmp/obd-perf-idf-build/obd_brz_gauge.elf:     file format elf32-xtensa-le
+
+
+Disassembly of section .iram0.vectors:
+
+Disassembly of section .iram0.text:
+
+Disassembly of section .flash.text:
+
+4201ac94 <espnow_v6_decode>:
+4201ac94:	004136        	entry	a1, 32
+4201ac97:	40f280        	nsau	a8, a2
+4201ac9a:	418580        	srli	a8, a8, 5
+4201ac9d:	528c      	beqz.n	a2, 4201aca6 <espnow_v6_decode+0x12>
+4201ac9f:	190c      	movi.n	a9, 1
+4201aca1:	838940        	moveqz	a8, a9, a4
+4201aca4:	488c      	beqz.n	a8, 4201acac <espnow_v6_decode+0x18>
+4201aca6:	020c      	movi.n	a2, 0
+4201aca8:	0059c6        	j	4201ae13 <espnow_v6_decode+0x17f>
+4201acab:	c38200        	movf	a8, a2, b0
+4201acae:	92d8      	l32i.n	a13, a2, 36
+4201acb0:	87d2a0        	ee.stf.64.xp	f13, f8, a10, a2
+4201acb3:	f039      	s32i.n	a3, a0, 60
+4201acb5:	010282        	l8ui	a8, a2, 1
+4201acb8:	0002a2        	l8ui	a10, a2, 0
+4201acbb:	118880        	slli	a8, a8, 8
+4201acbe:	9b2091        	l32r	a9, 42001940 <_stext+0x1920> (4f42 <UserFrameTotalSize+0x4e42>)
+4201acc1:	2088a0        	or	a8, a8, a10
+4201acc4:	de9897        	bne	a8, a9, 4201aca6 <espnow_v6_decode+0x12>
+4201acc7:	020282        	l8ui	a8, a2, 2
+4201acca:	d86866        	bnei	a8, 6, 4201aca6 <espnow_v6_decode+0x12>
+4201accd:	030282        	l8ui	a8, a2, 3
+4201acd0:	d21866        	bnei	a8, 1, 4201aca6 <espnow_v6_decode+0x12>
+4201acd3:	050282        	l8ui	a8, a2, 5
+4201acd6:	060262        	l8ui	a6, a2, 6
+4201acd9:	392c      	movi.n	a9, 35
+4201acdb:	345080        	extui	a5, a8, 0, 4
+4201acde:	417480        	srli	a7, a8, 4
+4201ace1:	c13967        	bltu	a9, a6, 4201aca6 <espnow_v6_decode+0x12>
+4201ace4:	628750        	saltu	a8, a7, a5
+4201ace7:	880b      	addi.n	a8, a8, -1
+4201ace9:	608080        	neg	a8, a8
+4201acec:	74a080        	extui	a10, a8, 0, 8
+4201acef:	fb3a56        	bnez	a10, 4201aca6 <espnow_v6_decode+0x12>
+4201acf2:	908660        	addx2	a8, a6, a6
+4201acf5:	888a      	add.n	a8, a8, a8
+4201acf7:	28c892        	addi	a9, a8, 40
+4201acfa:	a89937        	bne	a9, a3, 4201aca6 <espnow_v6_decode+0x12>
+4201acfd:	26c8c2        	addi	a12, a8, 38
+4201ad00:	92ca      	add.n	a9, a2, a12
+4201ad02:	010982        	l8ui	a8, a9, 1
+4201ad05:	000992        	l8ui	a9, a9, 0
+4201ad08:	118880        	slli	a8, a8, 8
+4201ad0b:	02bd      	mov.n	a11, a2
+4201ad0d:	203890        	or	a3, a8, a9
+4201ad10:	9b3d81        	l32r	a8, 42001a04 <_stext+0x19e4> (40001cbc <r_lld_init_sched_hook>)
+4201ad13:	0008e0        	callx8	a8
+4201ad16:	f87c      	movi.n	a8, -1
+4201ad18:	308a80        	xor	a8, a10, a8
+4201ad1b:	f48080        	extui	a8, a8, 0, 16
+4201ad1e:	849387        	bne	a3, a8, 4201aca6 <espnow_v6_decode+0x12>
+4201ad21:	70a0c2        	movi	a12, 112
+4201ad24:	0b0c      	movi.n	a11, 0
+4201ad26:	04ad      	mov.n	a10, a4
+4201ad28:	94dd81        	l32r	a8, 4200009c <_stext+0x7c> (400011e8 <memset>)
+4201ad2b:	0008e0        	callx8	a8
+4201ad2e:	680c      	movi.n	a8, 6
+4201ad30:	004482        	s8i	a8, a4, 0
+4201ad33:	040282        	l8ui	a8, a2, 4
+4201ad36:	024472        	s8i	a7, a4, 2
+4201ad39:	014482        	s8i	a8, a4, 1
+4201ad3c:	034452        	s8i	a5, a4, 3
+4201ad3f:	0902a2        	l8ui	a10, a2, 9
+4201ad42:	0802b2        	l8ui	a11, a2, 8
+4201ad45:	0a0292        	l8ui	a9, a2, 10
+4201ad48:	0b0282        	l8ui	a8, a2, 11
+4201ad4b:	11aa80        	slli	a10, a10, 8
+4201ad4e:	20aab0        	or	a10, a10, a11
+4201ad51:	119900        	slli	a9, a9, 16
+4201ad54:	2099a0        	or	a9, a9, a10
+4201ad57:	018880        	slli	a8, a8, 24
+4201ad5a:	208890        	or	a8, a8, a9
+4201ad5d:	1489      	s32i.n	a8, a4, 4
+4201ad5f:	0d02a2        	l8ui	a10, a2, 13
+4201ad62:	0c02b2        	l8ui	a11, a2, 12
+4201ad65:	0e0292        	l8ui	a9, a2, 14
+4201ad68:	0f0282        	l8ui	a8, a2, 15
+4201ad6b:	11aa80        	slli	a10, a10, 8
+4201ad6e:	20aab0        	or	a10, a10, a11
+4201ad71:	119900        	slli	a9, a9, 16
+4201ad74:	2099a0        	or	a9, a9, a10
+4201ad77:	018880        	slli	a8, a8, 24
+4201ad7a:	208890        	or	a8, a8, a9
+4201ad7d:	2489      	s32i.n	a8, a4, 8
+4201ad7f:	1102a2        	l8ui	a10, a2, 17
+4201ad82:	1002b2        	l8ui	a11, a2, 16
+4201ad85:	120292        	l8ui	a9, a2, 18
+4201ad88:	130282        	l8ui	a8, a2, 19
+4201ad8b:	11aa80        	slli	a10, a10, 8
+4201ad8e:	20aab0        	or	a10, a10, a11
+4201ad91:	119900        	slli	a9, a9, 16
+4201ad94:	2099a0        	or	a9, a9, a10
+4201ad97:	018880        	slli	a8, a8, 24
+4201ad9a:	208890        	or	a8, a8, a9
+4201ad9d:	3489      	s32i.n	a8, a4, 12
+4201ad9f:	1502a2        	l8ui	a10, a2, 21
+4201ada2:	1402b2        	l8ui	a11, a2, 20
+4201ada5:	160292        	l8ui	a9, a2, 22
+4201ada8:	170282        	l8ui	a8, a2, 23
+4201adab:	11aa80        	slli	a10, a10, 8
+4201adae:	20aab0        	or	a10, a10, a11
+4201adb1:	119900        	slli	a9, a9, 16
+4201adb4:	2099a0        	or	a9, a9, a10
+4201adb7:	018880        	slli	a8, a8, 24
+4201adba:	208890        	or	a8, a8, a9
+4201adbd:	046482        	s32i	a8, a4, 16
+4201adc0:	070282        	l8ui	a8, a2, 7
+4201adc3:	1ac2b2        	addi	a11, a2, 26
+4201adc6:	144482        	s8i	a8, a4, 20
+4201adc9:	180282        	l8ui	a8, a2, 24
+4201adcc:	0ca0c2        	movi	a12, 12
+4201adcf:	154482        	s8i	a8, a4, 21
+4201add2:	190282        	l8ui	a8, a2, 25
+4201add5:	18c4a2        	addi	a10, a4, 24
+4201add8:	164482        	s8i	a8, a4, 22
+4201addb:	174462        	s8i	a6, a4, 23
+4201adde:	94a181        	l32r	a8, 42000064 <_stext+0x44> (400011f4 <memcpy>)
+4201ade1:	0008e0        	callx8	a8
+4201ade4:	140492        	l8ui	a9, a4, 20
+4201ade7:	080c      	movi.n	a8, 0
+4201ade9:	26c222        	addi	a2, a2, 38
+4201adec:	244482        	s8i	a8, a4, 36
+4201adef:	a429      	s32i.n	a2, a4, 40
+4201adf1:	239900        	sext	a9, a9, 7
+4201adf4:	7fa0a2        	movi	a10, 127
+4201adf7:	3488      	l32i.n	a8, a4, 12
+4201adf9:	0c99a7        	bne	a9, a10, 4201ae09 <espnow_v6_decode+0x175>
+4201adfc:	dfaf92        	movi	a9, -33
+4201adff:	108890        	and	a8, a8, a9
+4201ae02:	3489      	s32i.n	a8, a4, 12
+4201ae04:	120c      	movi.n	a2, 1
+4201ae06:	000246        	j	4201ae13 <espnow_v6_decode+0x17f>
+4201ae09:	092c      	movi.n	a9, 32
+4201ae0b:	208890        	or	a8, a8, a9
+4201ae0e:	3489      	s32i.n	a8, a4, 12
+4201ae10:	fffc06        	j	4201ae04 <espnow_v6_decode+0x170>
+4201ae13:	f01d      	retw.n
+
+
+8d90ebc56e29e6655079ab0ad491e4924822e76d8000fe3f2ec45659ed697d4d /tmp/obd-perf-idf-build/obd_brz_gauge.elf
+b92a92c35fcb7da04814cc0d95910bfc9208b5b7bf0b0848c5f418f807a3bde7 /tmp/obd-perf-idf-build/obd_brz_gauge.bin
+no-slot: before 0x276000, after 0x275fa0, delta -96 bytes. ROM absolute address 0x40001cbc. No host CRC reference or SDK Linux LUT symbols.
+
+/tmp/obd-perf-storage-no-slot/obd_brz_gauge.elf:     file format elf32-xtensa-le
+
+
+Disassembly of section .iram0.vectors:
+
+Disassembly of section .iram0.text:
+
+Disassembly of section .flash.text:
+
+42019414 <espnow_v6_encode>:
+42019414:	008136        	entry	a1, 64
+42019417:	40f280        	nsau	a8, a2
+4201941a:	027d      	mov.n	a7, a2
+4201941c:	05ad      	mov.n	a10, a5
+4201941e:	190c      	movi.n	a9, 1
+42019420:	418580        	srli	a8, a8, 5
+42019423:	1a7216        	beqz	a2, 420195ce <espnow_v6_encode+0x1ba>
+42019426:	838940        	moveqz	a8, a9, a4
+42019429:	1a1856        	bnez	a8, 420195ce <espnow_v6_encode+0x1ba>
+4201942c:	200282        	l8ui	a8, a2, 32
+4201942f:	09dd      	mov.n	a13, a9
+42019431:	189c      	beqz.n	a8, 42019446 <espnow_v6_encode+0x32>
+42019433:	a13b91        	l32r	a9, 42001920 <_stext+0x1900> (ea0ea0eb <_rtc_reserved_end+0x89fea0eb>)
+42019436:	22c8d2        	addi	a13, a8, 34
+42019439:	b29d90        	mulsh	a9, a13, a9
+4201943c:	dd9a      	add.n	a13, a13, a9
+4201943e:	21d5d0        	srai	a13, a13, 5
+42019441:	0d9d      	mov.n	a9, a13
+42019443:	ffffc6        	j	42019446 <espnow_v6_encode+0x32>
+42019446:	11d9      	s32i.n	a13, a1, 4
+42019448:	020c      	movi.n	a2, 0
+4201944a:	023397        	bltu	a3, a9, 42019450 <espnow_v6_encode+0x3c>
+4201944d:	006146        	j	420195d6 <espnow_v6_encode+0x1c2>
+42019450:	a09330        	addx4	a9, a3, a3
+42019453:	f09990        	subx8	a9, a9, a9
+42019456:	c08890        	sub	a8, a8, a9
+42019459:	535820        	max	a5, a8, a2
+4201945c:	392c      	movi.n	a9, 35
+4201945e:	435590        	min	a5, a5, a9
+42019461:	236580        	sext	a6, a5, 15
+42019464:	906660        	addx2	a6, a6, a6
+42019467:	2189      	s32i.n	a8, a1, 8
+42019469:	666a      	add.n	a6, a6, a6
+4201946b:	1183e0        	slli	a8, a3, 2
+4201946e:	0129      	s32i.n	a2, a1, 0
+42019470:	3189      	s32i.n	a8, a1, 12
+42019472:	28c622        	addi	a2, a6, 40
+42019475:	02ba27        	bgeu	a10, a2, 4201947b <espnow_v6_encode+0x67>
+42019478:	005606        	j	420195d4 <espnow_v6_encode+0x1c0>
+4201947b:	01b8      	l32i.n	a11, a1, 0
+4201947d:	6c2c      	movi.n	a12, 38
+4201947f:	20a440        	or	a10, a4, a4
+42019482:	9b0681        	l32r	a8, 4200009c <_stext+0x7c> (400011e8 <memset>)
+42019485:	0008e0        	callx8	a8
+42019488:	294c      	movi.n	a9, 66
+4201948a:	004492        	s8i	a9, a4, 0
+4201948d:	f94c      	movi.n	a9, 79
+4201948f:	014492        	s8i	a9, a4, 1
+42019492:	690c      	movi.n	a9, 6
+42019494:	024492        	s8i	a9, a4, 2
+42019497:	190c      	movi.n	a9, 1
+42019499:	034492        	s8i	a9, a4, 3
+4201949c:	11d8      	l32i.n	a13, a1, 4
+4201949e:	1007a2        	l8ui	a10, a7, 16
+420194a1:	1193c0        	slli	a9, a3, 4
+420194a4:	2099d0        	or	a9, a9, a13
+420194a7:	0444a2        	s8i	a10, a4, 4
+420194aa:	054492        	s8i	a9, a4, 5
+420194ad:	064452        	s8i	a5, a4, 6
+420194b0:	110792        	l8ui	a9, a7, 17
+420194b3:	1ac482        	addi	a8, a4, 26
+420194b6:	074492        	s8i	a9, a4, 7
+420194b9:	0798      	l32i.n	a9, a7, 0
+420194bb:	1189      	s32i.n	a8, a1, 4
+420194bd:	41d890        	srli	a13, a9, 8
+420194c0:	f5b090        	extui	a11, a9, 16, 16
+420194c3:	75a890        	extui	a10, a9, 24, 8
+420194c6:	0944d2        	s8i	a13, a4, 9
+420194c9:	0a44b2        	s8i	a11, a4, 10
+420194cc:	0b44a2        	s8i	a10, a4, 11
+420194cf:	084492        	s8i	a9, a4, 8
+420194d2:	1798      	l32i.n	a9, a7, 4
+420194d4:	01b8      	l32i.n	a11, a1, 0
+420194d6:	41e890        	srli	a14, a9, 8
+420194d9:	f5d090        	extui	a13, a9, 16, 16
+420194dc:	75a890        	extui	a10, a9, 24, 8
+420194df:	0d44e2        	s8i	a14, a4, 13
+420194e2:	0e44d2        	s8i	a13, a4, 14
+420194e5:	0f44a2        	s8i	a10, a4, 15
+420194e8:	0c4492        	s8i	a9, a4, 12
+420194eb:	2798      	l32i.n	a9, a7, 8
+420194ed:	08ad      	mov.n	a10, a8
+420194ef:	41f890        	srli	a15, a9, 8
+420194f2:	f5e090        	extui	a14, a9, 16, 16
+420194f5:	75d890        	extui	a13, a9, 24, 8
+420194f8:	1144f2        	s8i	a15, a4, 17
+420194fb:	1244e2        	s8i	a14, a4, 18
+420194fe:	1344d2        	s8i	a13, a4, 19
+42019501:	104492        	s8i	a9, a4, 16
+42019504:	3798      	l32i.n	a9, a7, 12
+42019506:	14c782        	addi	a8, a7, 20
+42019509:	41f890        	srli	a15, a9, 8
+4201950c:	4189      	s32i.n	a8, a1, 16
+4201950e:	f5e090        	extui	a14, a9, 16, 16
+42019511:	75d890        	extui	a13, a9, 24, 8
+42019514:	144492        	s8i	a9, a4, 20
+42019517:	1544f2        	s8i	a15, a4, 21
+4201951a:	1644e2        	s8i	a14, a4, 22
+4201951d:	1744d2        	s8i	a13, a4, 23
+42019520:	120792        	l8ui	a9, a7, 18
+42019523:	cc0c      	movi.n	a12, 12
+42019525:	184492        	s8i	a9, a4, 24
+42019528:	130792        	l8ui	a9, a7, 19
+4201952b:	194492        	s8i	a9, a4, 25
+4201952e:	9adb81        	l32r	a8, 4200009c <_stext+0x7c> (400011e8 <memset>)
+42019531:	0008e0        	callx8	a8
+42019534:	01c8      	l32i.n	a12, a1, 0
+42019536:	2188      	l32i.n	a8, a1, 8
+42019538:	c90c      	movi.n	a9, 12
+4201953a:	000206        	j	42019546 <espnow_v6_encode+0x132>
+4201953d:	cc1b      	addi.n	a12, a12, 1
+4201953f:	990b      	addi.n	a9, a9, -1
+42019541:	19cc      	bnez.n	a9, 42019546 <espnow_v6_encode+0x132>
+42019543:	0001c6        	j	4201954e <espnow_v6_encode+0x13a>
+42019546:	a7ca      	add.n	a10, a7, a12
+42019548:	140aa2        	l8ui	a10, a10, 20
+4201954b:	feea56        	bnez	a10, 4201953d <espnow_v6_encode+0x129>
+4201954e:	41b8      	l32i.n	a11, a1, 16
+42019550:	11a8      	l32i.n	a10, a1, 4
+42019552:	0189      	s32i.n	a8, a1, 0
+42019554:	9ac481        	l32r	a8, 42000064 <_stext+0x44> (400011f4 <memcpy>)
+42019557:	0008e0        	callx8	a8
+4201955a:	0188      	l32i.n	a8, a1, 0
+4201955c:	26c4d2        	addi	a13, a4, 38
+4201955f:	4518a6        	blti	a8, 1, 420195a8 <espnow_v6_encode+0x194>
+42019562:	3188      	l32i.n	a8, a1, 12
+42019564:	1b0c      	movi.n	a11, 1
+42019566:	809830        	add	a9, a8, a3
+42019569:	f09990        	subx8	a9, a9, a9
+4201956c:	b09970        	addx8	a9, a9, a7
+4201956f:	208dd0        	or	a8, a13, a13
+42019572:	53bb50        	max	a11, a11, a5
+42019575:	268b76        	loop	a11, 4201959f <espnow_v6_encode+0x18b>
+42019578:	1219a2        	l16ui	a10, a9, 36
+4201957b:	998b      	addi.n	a9, a9, 8
+4201957d:	41c8a0        	srli	a12, a10, 8
+42019580:	0148c2        	s8i	a12, a8, 1
+42019583:	0048a2        	s8i	a10, a8, 0
+42019586:	89a8      	l32i.n	a10, a9, 32
+42019588:	41f8a0        	srli	a15, a10, 8
+4201958b:	f5e0a0        	extui	a14, a10, 16, 16
+4201958e:	75c8a0        	extui	a12, a10, 24, 8
+42019591:	0248a2        	s8i	a10, a8, 2
+42019594:	0348f2        	s8i	a15, a8, 3
+42019597:	0448e2        	s8i	a14, a8, 4
+4201959a:	0548c2        	s8i	a12, a8, 5
+4201959d:	886b      	addi.n	a8, a8, 6
+4201959f:	f45050        	extui	a5, a5, 0, 16
+420195a2:	905550        	addx2	a5, a5, a5
+420195a5:	90d5d0        	addx2	a13, a5, a13
+420195a8:	26c6c2        	addi	a12, a6, 38
+420195ab:	04bd      	mov.n	a11, a4
+420195ad:	0a0c      	movi.n	a10, 0
+420195af:	0061d2        	s32i	a13, a1, 0
+420195b2:	a0dc81        	l32r	a8, 42001924 <_stext+0x1904> (40001cbc <r_lld_init_sched_hook>)
+420195b5:	0008e0        	callx8	a8
+420195b8:	f87c      	movi.n	a8, -1
+420195ba:	30aa80        	xor	a10, a10, a8
+420195bd:	01d8      	l32i.n	a13, a1, 0
+420195bf:	f4a0a0        	extui	a10, a10, 0, 16
+420195c2:	4188a0        	srli	a8, a10, 8
+420195c5:	004da2        	s8i	a10, a13, 0
+420195c8:	014d82        	s8i	a8, a13, 1
+420195cb:	0001c6        	j	420195d6 <espnow_v6_encode+0x1c2>
+420195ce:	020c      	movi.n	a2, 0
+420195d0:	000086        	j	420195d6 <espnow_v6_encode+0x1c2>
+420195d3:	012800        	slli	a2, a8, 32
+420195d6:	f01d      	retw.n
+
+
+/tmp/obd-perf-storage-no-slot/obd_brz_gauge.elf:     file format elf32-xtensa-le
+
+
+Disassembly of section .iram0.vectors:
+
+Disassembly of section .iram0.text:
+
+Disassembly of section .flash.text:
+
+42019a7c <espnow_v6_decode>:
+42019a7c:	004136        	entry	a1, 32
+42019a7f:	40f280        	nsau	a8, a2
+42019a82:	418580        	srli	a8, a8, 5
+42019a85:	528c      	beqz.n	a2, 42019a8e <espnow_v6_decode+0x12>
+42019a87:	190c      	movi.n	a9, 1
+42019a89:	838940        	moveqz	a8, a9, a4
+42019a8c:	488c      	beqz.n	a8, 42019a94 <espnow_v6_decode+0x18>
+42019a8e:	020c      	movi.n	a2, 0
+42019a90:	0059c6        	j	42019bfb <espnow_v6_decode+0x17f>
+42019a93:	c38200        	movf	a8, a2, b0
+42019a96:	92d8      	l32i.n	a13, a2, 36
+42019a98:	87d2a0        	ee.stf.64.xp	f13, f8, a10, a2
+42019a9b:	f039      	s32i.n	a3, a0, 60
+42019a9d:	010282        	l8ui	a8, a2, 1
+42019aa0:	0002a2        	l8ui	a10, a2, 0
+42019aa3:	118880        	slli	a8, a8, 8
+42019aa6:	9f6e91        	l32r	a9, 42001860 <_stext+0x1840> (4f42 <UserFrameTotalSize+0x4e42>)
+42019aa9:	2088a0        	or	a8, a8, a10
+42019aac:	de9897        	bne	a8, a9, 42019a8e <espnow_v6_decode+0x12>
+42019aaf:	020282        	l8ui	a8, a2, 2
+42019ab2:	d86866        	bnei	a8, 6, 42019a8e <espnow_v6_decode+0x12>
+42019ab5:	030282        	l8ui	a8, a2, 3
+42019ab8:	d21866        	bnei	a8, 1, 42019a8e <espnow_v6_decode+0x12>
+42019abb:	050282        	l8ui	a8, a2, 5
+42019abe:	060262        	l8ui	a6, a2, 6
+42019ac1:	392c      	movi.n	a9, 35
+42019ac3:	345080        	extui	a5, a8, 0, 4
+42019ac6:	417480        	srli	a7, a8, 4
+42019ac9:	c13967        	bltu	a9, a6, 42019a8e <espnow_v6_decode+0x12>
+42019acc:	628750        	saltu	a8, a7, a5
+42019acf:	880b      	addi.n	a8, a8, -1
+42019ad1:	608080        	neg	a8, a8
+42019ad4:	74a080        	extui	a10, a8, 0, 8
+42019ad7:	fb3a56        	bnez	a10, 42019a8e <espnow_v6_decode+0x12>
+42019ada:	908660        	addx2	a8, a6, a6
+42019add:	888a      	add.n	a8, a8, a8
+42019adf:	28c892        	addi	a9, a8, 40
+42019ae2:	a89937        	bne	a9, a3, 42019a8e <espnow_v6_decode+0x12>
+42019ae5:	26c8c2        	addi	a12, a8, 38
+42019ae8:	92ca      	add.n	a9, a2, a12
+42019aea:	010982        	l8ui	a8, a9, 1
+42019aed:	000992        	l8ui	a9, a9, 0
+42019af0:	118880        	slli	a8, a8, 8
+42019af3:	02bd      	mov.n	a11, a2
+42019af5:	203890        	or	a3, a8, a9
+42019af8:	9f8b81        	l32r	a8, 42001924 <_stext+0x1904> (40001cbc <r_lld_init_sched_hook>)
+42019afb:	0008e0        	callx8	a8
+42019afe:	f87c      	movi.n	a8, -1
+42019b00:	308a80        	xor	a8, a10, a8
+42019b03:	f48080        	extui	a8, a8, 0, 16
+42019b06:	849387        	bne	a3, a8, 42019a8e <espnow_v6_decode+0x12>
+42019b09:	70a0c2        	movi	a12, 112
+42019b0c:	0b0c      	movi.n	a11, 0
+42019b0e:	04ad      	mov.n	a10, a4
+42019b10:	996381        	l32r	a8, 4200009c <_stext+0x7c> (400011e8 <memset>)
+42019b13:	0008e0        	callx8	a8
+42019b16:	680c      	movi.n	a8, 6
+42019b18:	004482        	s8i	a8, a4, 0
+42019b1b:	040282        	l8ui	a8, a2, 4
+42019b1e:	024472        	s8i	a7, a4, 2
+42019b21:	014482        	s8i	a8, a4, 1
+42019b24:	034452        	s8i	a5, a4, 3
+42019b27:	0902a2        	l8ui	a10, a2, 9
+42019b2a:	0802b2        	l8ui	a11, a2, 8
+42019b2d:	0a0292        	l8ui	a9, a2, 10
+42019b30:	0b0282        	l8ui	a8, a2, 11
+42019b33:	11aa80        	slli	a10, a10, 8
+42019b36:	20aab0        	or	a10, a10, a11
+42019b39:	119900        	slli	a9, a9, 16
+42019b3c:	2099a0        	or	a9, a9, a10
+42019b3f:	018880        	slli	a8, a8, 24
+42019b42:	208890        	or	a8, a8, a9
+42019b45:	1489      	s32i.n	a8, a4, 4
+42019b47:	0d02a2        	l8ui	a10, a2, 13
+42019b4a:	0c02b2        	l8ui	a11, a2, 12
+42019b4d:	0e0292        	l8ui	a9, a2, 14
+42019b50:	0f0282        	l8ui	a8, a2, 15
+42019b53:	11aa80        	slli	a10, a10, 8
+42019b56:	20aab0        	or	a10, a10, a11
+42019b59:	119900        	slli	a9, a9, 16
+42019b5c:	2099a0        	or	a9, a9, a10
+42019b5f:	018880        	slli	a8, a8, 24
+42019b62:	208890        	or	a8, a8, a9
+42019b65:	2489      	s32i.n	a8, a4, 8
+42019b67:	1102a2        	l8ui	a10, a2, 17
+42019b6a:	1002b2        	l8ui	a11, a2, 16
+42019b6d:	120292        	l8ui	a9, a2, 18
+42019b70:	130282        	l8ui	a8, a2, 19
+42019b73:	11aa80        	slli	a10, a10, 8
+42019b76:	20aab0        	or	a10, a10, a11
+42019b79:	119900        	slli	a9, a9, 16
+42019b7c:	2099a0        	or	a9, a9, a10
+42019b7f:	018880        	slli	a8, a8, 24
+42019b82:	208890        	or	a8, a8, a9
+42019b85:	3489      	s32i.n	a8, a4, 12
+42019b87:	1502a2        	l8ui	a10, a2, 21
+42019b8a:	1402b2        	l8ui	a11, a2, 20
+42019b8d:	160292        	l8ui	a9, a2, 22
+42019b90:	170282        	l8ui	a8, a2, 23
+42019b93:	11aa80        	slli	a10, a10, 8
+42019b96:	20aab0        	or	a10, a10, a11
+42019b99:	119900        	slli	a9, a9, 16
+42019b9c:	2099a0        	or	a9, a9, a10
+42019b9f:	018880        	slli	a8, a8, 24
+42019ba2:	208890        	or	a8, a8, a9
+42019ba5:	046482        	s32i	a8, a4, 16
+42019ba8:	070282        	l8ui	a8, a2, 7
+42019bab:	1ac2b2        	addi	a11, a2, 26
+42019bae:	144482        	s8i	a8, a4, 20
+42019bb1:	180282        	l8ui	a8, a2, 24
+42019bb4:	0ca0c2        	movi	a12, 12
+42019bb7:	154482        	s8i	a8, a4, 21
+42019bba:	190282        	l8ui	a8, a2, 25
+42019bbd:	18c4a2        	addi	a10, a4, 24
+42019bc0:	164482        	s8i	a8, a4, 22
+42019bc3:	174462        	s8i	a6, a4, 23
+42019bc6:	992781        	l32r	a8, 42000064 <_stext+0x44> (400011f4 <memcpy>)
+42019bc9:	0008e0        	callx8	a8
+42019bcc:	140492        	l8ui	a9, a4, 20
+42019bcf:	080c      	movi.n	a8, 0
+42019bd1:	26c222        	addi	a2, a2, 38
+42019bd4:	244482        	s8i	a8, a4, 36
+42019bd7:	a429      	s32i.n	a2, a4, 40
+42019bd9:	239900        	sext	a9, a9, 7
+42019bdc:	7fa0a2        	movi	a10, 127
+42019bdf:	3488      	l32i.n	a8, a4, 12
+42019be1:	0c99a7        	bne	a9, a10, 42019bf1 <espnow_v6_decode+0x175>
+42019be4:	dfaf92        	movi	a9, -33
+42019be7:	108890        	and	a8, a8, a9
+42019bea:	3489      	s32i.n	a8, a4, 12
+42019bec:	120c      	movi.n	a2, 1
+42019bee:	000246        	j	42019bfb <espnow_v6_decode+0x17f>
+42019bf1:	092c      	movi.n	a9, 32
+42019bf3:	208890        	or	a8, a8, a9
+42019bf6:	3489      	s32i.n	a8, a4, 12
+42019bf8:	fffc06        	j	42019bec <espnow_v6_decode+0x170>
+42019bfb:	f01d      	retw.n
+
+
+bc3f532211211c3101bb58a74f5b93386634623e6e666b51936e3af8cd1d3703 /tmp/obd-perf-storage-no-slot/obd_brz_gauge.elf
+9ecd38273710f60e766c65f349fc63ff30dfae8f64ed1c4c9ec942ef075f26c8 /tmp/obd-perf-storage-no-slot/obd_brz_gauge.bin
+
+Verification and hashes:
+{
+  "whitespace": "pass including new files",
+  "bilingual_heading_code_table_mirrors": "all headings match; PERFORMANCE code/tables match; existing DEVELOPMENT code/tables unchanged",
+  "reverse_source_patch": "exact baseline",
+  "frozen_crc_reference": "exact old function",
+  "platform": "macOS-26.3.1-arm64-arm-64bit",
+  "compiler": "Apple clang version 21.0.0 (clang-2100.1.1.101)",
+  "tests": {
+    "host-asan": {
+      "passed": 7,
+      "total": 7
+    },
+    "host-release": {
+      "passed": 7,
+      "total": 7
+    },
+    "host-portable": {
+      "passed": 5,
+      "total": 5
+    }
+  },
+  "negative_controls": {
+    "wrong_seed": {
+      "returncode": 1,
+      "summary": "espnow_crc: 17420636 checks, 84410 failures"
+    },
+    "missing_final_complement": {
+      "returncode": 1,
+      "summary": "espnow_crc: 17420636 checks, 84410 failures"
+    },
+    "reflected_polynomial": {
+      "returncode": 1,
+      "summary": "espnow_crc: 17420636 checks, 84314 failures"
+    }
+  },
+  "firmware": {
+    "before": {
+      "espnow_crc16": {
+        "text_bytes": 66,
+        "static_frame_bytes": 32
+      },
+      "espnow_v6_encode": {
+        "text_bytes": 476,
+        "static_frame_bytes": 64
+      },
+      "espnow_v6_decode": {
+        "text_bytes": 446,
+        "static_frame_bytes": 48
+      },
+      "totals": {
+        ".text": 4234,
+        ".literal": 156,
+        ".bss": 0,
+        ".data": 0
+      }
+    },
+    "after": {
+      "espnow_crc16": {
+        "text_bytes": 32,
+        "static_frame_bytes": 32
+      },
+      "espnow_v6_encode": {
+        "text_bytes": 452,
+        "static_frame_bytes": 64
+      },
+      "espnow_v6_decode": {
+        "text_bytes": 385,
+        "static_frame_bytes": 32
+      },
+      "totals": {
+        ".text": 4116,
+        ".literal": 148,
+        ".bss": 0,
+        ".data": 0
+      }
+    },
+    "normal": {
+      "before_bytes": 2643520,
+      "after_bytes": 2643440,
+      "delta_bytes": -80,
+      "rom_address": "0x40001cbc"
+    },
+    "stats": {
+      "before_bytes": 2645632,
+      "after_bytes": 2645536,
+      "delta_bytes": -96,
+      "rom_address": "0x40001cbc"
+    },
+    "no-slot": {
+      "before_bytes": 2580480,
+      "after_bytes": 2580384,
+      "delta_bytes": -96,
+      "rom_address": "0x40001cbc"
+    }
+  },
+  "sha256": {
+    "main/bsp_obd_dsp/espnow_v6.c": "4724bc04141c074e241d9e5e1c7c9e74d9cf7bfa15fce6ded4b1f31415ff83dd",
+    "test/host/espnow/CMakeLists.txt": "c7ea08aec6de276b0e358b87c759970aa91708b2c377e150d2696256664318ce",
+    "test/host/espnow/test_crc.c": "9fde44473c11520b13587fd1f08a28f8e302f58e6f7cc48aedefb9074b7b2ad2",
+    "test/host/espnow/codec_portable.c": "79bdd0187add512d8aa8606c6be6ecd606a256df8a830b81000ea6fa9abb5b2f",
+    "test/host/espnow/crc_reference.c": "fe39c0c035597a36af9c6514730ac416d2d7ad3e416cf7c56157341bd67c07f9",
+    "test/host/espnow/bench_crc.c": "c7a87f02cf417ca59e69f8a22892361cdb4d0218721b9b28f5ab9293f16bec20",
+    "docs/PERFORMANCE.md": "b7c76a8ae971e97095ca86522b3c6cf095148cb3b5706117a20cb36dedc3d1ed",
+    "docs/PERFORMANCE.en.md": "4a0fc36ba07ea8fad04a78d7607c73a007b9b31064995bbbc44b8652c3d2f10f",
+    "docs/DEVELOPMENT.md": "da93eff004cfc7f5a53f0c00ae2fcf50c98b4d2bf60f637b760c9615471c296c",
+    "docs/DEVELOPMENT.en.md": "3a1a22e062d86f02d32b864a8919b41cf3de9291e01d466a293c80e7ce50db4f",
+    "CHANGELOG.md": "c3e3c5b370a181eda9371cf085b7142bf94269cadc924c1999ef37aa7c8b31af",
+    "CHANGELOG.en.md": "9058395c420f33eca684d991e50f7150b34af79b5b0816cb1a5ed2d217fa4bb3",
+    "docs/performance/espnow-crc-host-2026-10-14.csv": "d7230a14407dfd1a58ff0bffc806afbc6f13947e54ad50150442173b5ce70e93",
+    "docs/performance/espnow-crc-host-repeat-2026-10-14.csv": "6134bde715d1717c088618080501b593f02fcf23e5d7b1d45a85894b0e60871f",
+    "/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_rom/include/esp_rom_crc.h": "bd91ce2ccc86f340f73b91d953635a8ea9e6c999a2658328066ec8c0c8d93f5c",
+    "/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_rom/linux/esp_rom_crc.c": "a16c4d0eb8614370288bf2ef9c3362376ecb020037051b019b8943d115cb52cc",
+    "/tmp/obd-espnow-crc-20261014/host-release/bench_espnow_crc": "b539894c77454e410ed4995e9dda57a7fe7db2f9c02e58e82ea0cf0a58395742",
+    "/tmp/obd-espnow-crc-20261014/host-release/test_espnow_crc_rom": "a61a3847afe133c7299b1948595d25204fd06593d9d417f7e67a77a225473ce4",
+    "/tmp/obd-espnow-crc-20261014/host-asan/test_espnow_crc_rom": "13d154a020c328ee6832065d048fad911b1254031c4c1d750987f86087620c34"
+  }
+}
+
+Release actual compiler/link commands:
+/usr/bin/cc  -I/Users/parklu/personProject/obd_brz_gauge/main/bsp_obd_dsp -I/Users/parklu/personProject/obd_brz_gauge/main/app_obd_dsp -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_rom/include -O3 -DNDEBUG -std=c11 -arch arm64 -Wall -Wextra -Werror -Wshadow -MD -MT CMakeFiles/bench_espnow_crc.dir/bench_crc.c.o -MF CMakeFiles/bench_espnow_crc.dir/bench_crc.c.o.d -o CMakeFiles/bench_espnow_crc.dir/bench_crc.c.o -c /Users/parklu/personProject/obd_brz_gauge/test/host/espnow/bench_crc.c
+/usr/bin/cc  -I/Users/parklu/personProject/obd_brz_gauge/main/bsp_obd_dsp -I/Users/parklu/personProject/obd_brz_gauge/main/app_obd_dsp -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_rom/include -O3 -DNDEBUG -std=c11 -arch arm64 -Wall -Wextra -Werror -Wshadow -MD -MT CMakeFiles/bench_espnow_crc.dir/codec_portable.c.o -MF CMakeFiles/bench_espnow_crc.dir/codec_portable.c.o.d -o CMakeFiles/bench_espnow_crc.dir/codec_portable.c.o -c /Users/parklu/personProject/obd_brz_gauge/test/host/espnow/codec_portable.c
+/usr/bin/cc -DESP_PLATFORM -I/Users/parklu/personProject/obd_brz_gauge/main/bsp_obd_dsp -I/Users/parklu/personProject/obd_brz_gauge/main/app_obd_dsp -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_rom/include -O3 -DNDEBUG -std=c11 -arch arm64 -Wall -Wextra -Werror -Wshadow -Wconversion -Wno-sign-conversion -MD -MT CMakeFiles/espnow_rom_codec.dir/Users/parklu/personProject/obd_brz_gauge/main/bsp_obd_dsp/espnow_v6.c.o -MF CMakeFiles/espnow_rom_codec.dir/Users/parklu/personProject/obd_brz_gauge/main/bsp_obd_dsp/espnow_v6.c.o.d -o CMakeFiles/espnow_rom_codec.dir/Users/parklu/personProject/obd_brz_gauge/main/bsp_obd_dsp/espnow_v6.c.o -c /Users/parklu/personProject/obd_brz_gauge/main/bsp_obd_dsp/espnow_v6.c
+/usr/bin/cc -DESP_PLATFORM -I/Users/parklu/personProject/obd_brz_gauge/main/bsp_obd_dsp -I/Users/parklu/personProject/obd_brz_gauge/main/app_obd_dsp -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_rom/include -O3 -DNDEBUG -std=c11 -arch arm64 -Wall -Wextra -Werror -Wshadow -Wconversion -Wno-sign-conversion -MD -MT CMakeFiles/espnow_rom_codec.dir/Users/parklu/personProject/obd_brz_gauge/main/app_obd_dsp/signal_registry.c.o -MF CMakeFiles/espnow_rom_codec.dir/Users/parklu/personProject/obd_brz_gauge/main/app_obd_dsp/signal_registry.c.o.d -o CMakeFiles/espnow_rom_codec.dir/Users/parklu/personProject/obd_brz_gauge/main/app_obd_dsp/signal_registry.c.o -c /Users/parklu/personProject/obd_brz_gauge/main/app_obd_dsp/signal_registry.c
+/usr/bin/cc  -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_rom/include -O3 -DNDEBUG -std=c11 -arch arm64 -MD -MT CMakeFiles/espnow_rom_compat.dir/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_rom/linux/esp_rom_crc.c.o -MF CMakeFiles/espnow_rom_compat.dir/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_rom/linux/esp_rom_crc.c.o.d -o CMakeFiles/espnow_rom_compat.dir/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_rom/linux/esp_rom_crc.c.o -c /Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_rom/linux/esp_rom_crc.c
+: && /opt/homebrew/bin/cmake -E rm -f libespnow_rom_compat.a && /usr/bin/ar qc libespnow_rom_compat.a  CMakeFiles/espnow_rom_compat.dir/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_rom/linux/esp_rom_crc.c.o && /usr/bin/ranlib libespnow_rom_compat.a && /opt/homebrew/bin/cmake -E touch libespnow_rom_compat.a && :
+: && /opt/homebrew/bin/cmake -E rm -f libespnow_rom_codec.a && /usr/bin/ar qc libespnow_rom_codec.a  CMakeFiles/espnow_rom_codec.dir/Users/parklu/personProject/obd_brz_gauge/main/bsp_obd_dsp/espnow_v6.c.o CMakeFiles/espnow_rom_codec.dir/Users/parklu/personProject/obd_brz_gauge/main/app_obd_dsp/signal_registry.c.o && /usr/bin/ranlib libespnow_rom_codec.a && /opt/homebrew/bin/cmake -E touch libespnow_rom_codec.a && :
+: && /usr/bin/cc -O3 -DNDEBUG -arch arm64 -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/bench_espnow_crc.dir/bench_crc.c.o CMakeFiles/bench_espnow_crc.dir/codec_portable.c.o -o bench_espnow_crc  libespnow_rom_codec.a  libespnow_rom_compat.a && :
+/usr/bin/cc -DEH_HAVE_ROM -I/Users/parklu/personProject/obd_brz_gauge/main/bsp_obd_dsp -I/Users/parklu/personProject/obd_brz_gauge/main/app_obd_dsp -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_rom/include -O3 -DNDEBUG -std=c11 -arch arm64 -Wall -Wextra -Werror -Wshadow -MD -MT CMakeFiles/test_espnow_crc_rom.dir/test_crc.c.o -MF CMakeFiles/test_espnow_crc_rom.dir/test_crc.c.o.d -o CMakeFiles/test_espnow_crc_rom.dir/test_crc.c.o -c /Users/parklu/personProject/obd_brz_gauge/test/host/espnow/test_crc.c
+/usr/bin/cc -DEH_HAVE_ROM -I/Users/parklu/personProject/obd_brz_gauge/main/bsp_obd_dsp -I/Users/parklu/personProject/obd_brz_gauge/main/app_obd_dsp -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_rom/include -O3 -DNDEBUG -std=c11 -arch arm64 -Wall -Wextra -Werror -Wshadow -MD -MT CMakeFiles/test_espnow_crc_rom.dir/crc_reference.c.o -MF CMakeFiles/test_espnow_crc_rom.dir/crc_reference.c.o.d -o CMakeFiles/test_espnow_crc_rom.dir/crc_reference.c.o -c /Users/parklu/personProject/obd_brz_gauge/test/host/espnow/crc_reference.c
+/usr/bin/cc -DEH_HAVE_ROM -I/Users/parklu/personProject/obd_brz_gauge/main/bsp_obd_dsp -I/Users/parklu/personProject/obd_brz_gauge/main/app_obd_dsp -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_rom/include -O3 -DNDEBUG -std=c11 -arch arm64 -Wall -Wextra -Werror -Wshadow -MD -MT CMakeFiles/test_espnow_crc_rom.dir/codec_portable.c.o -MF CMakeFiles/test_espnow_crc_rom.dir/codec_portable.c.o.d -o CMakeFiles/test_espnow_crc_rom.dir/codec_portable.c.o -c /Users/parklu/personProject/obd_brz_gauge/test/host/espnow/codec_portable.c
+: && /usr/bin/cc -O3 -DNDEBUG -arch arm64 -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/test_espnow_crc_rom.dir/test_crc.c.o CMakeFiles/test_espnow_crc_rom.dir/crc_reference.c.o CMakeFiles/test_espnow_crc_rom.dir/codec_portable.c.o -o test_espnow_crc_rom  libespnow_rom_codec.a  libespnow_rom_compat.a && :
+
+
+host-asan complete CTest output:
+Start testing: Oct 14 13:12 CST
+----------------------------------------------------------
+1/7 Testing: espnow_proto
+1/7 Test: espnow_proto
+Command: "/tmp/obd-espnow-crc-20261014/host-asan/test_espnow_proto"
+Directory: /tmp/obd-espnow-crc-20261014/host-asan
+"espnow_proto" start time: Oct 14 13:12 CST
+Output:
+----------------------------------------------------------
+espnow_proto: 1026 checks, 0 failures
+<end of output>
+Test time =   0.89 sec
+----------------------------------------------------------
+Test Passed.
+"espnow_proto" end time: Oct 14 13:12 CST
+"espnow_proto" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/7 Testing: racechrono_filter
+2/7 Test: racechrono_filter
+Command: "/tmp/obd-espnow-crc-20261014/host-asan/test_racechrono_filter"
+Directory: /tmp/obd-espnow-crc-20261014/host-asan
+"racechrono_filter" start time: Oct 14 13:12 CST
+Output:
+----------------------------------------------------------
+deadline mode=0 wakes=10 snapshots=10 notifications=80
+deadline mode=1 wakes=10 snapshots=10 notifications=10
+deadline mode=2 wakes=0 snapshots=0 notifications=0
+deadline mode=3 wakes=46 snapshots=46 notifications=0
+deadline mode=4 wakes=9 snapshots=9 notifications=72
+RaceChrono mode=0 ticks=50 snapshots=10 slot_reads=80 notifications=80
+RaceChrono mode=1 ticks=50 snapshots=10 slot_reads=10 notifications=10
+RaceChrono mode=2 ticks=50 snapshots=0 slot_reads=0 notifications=0
+racechrono_filter: 269071 checks, 0 failures
+<end of output>
+Test time =   0.56 sec
+----------------------------------------------------------
+Test Passed.
+"racechrono_filter" end time: Oct 14 13:12 CST
+"racechrono_filter" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/7 Testing: racechrono_stream
+3/7 Test: racechrono_stream
+Command: "/tmp/obd-espnow-crc-20261014/host-asan/test_racechrono_stream"
+Directory: /tmp/obd-espnow-crc-20261014/host-asan
+"racechrono_stream" start time: Oct 14 13:12 CST
+Output:
+----------------------------------------------------------
+all: snapshots=10 slots=80 packets=80 timed_wakes=10 event_gives=6
+one: snapshots=10 slots=10 packets=10 timed_wakes=10 event_gives=8
+deny: snapshots=0 slots=0 packets=0 timed_wakes=0 event_gives=7
+disconnected: snapshots=0 slots=0 packets=0 timed_wakes=0 event_gives=5
+notify_off: snapshots=0 slots=0 packets=0 timed_wakes=0 event_gives=5
+retired: snapshots=0 slots=0 packets=0 timed_wakes=0 event_gives=8
+invalid: snapshots=46 slots=368 packets=0 timed_wakes=46 event_gives=6
+event_storm: snapshots=46 slots=368 packets=0 timed_wakes=0 event_gives=1006
+101ms: snapshots=9 slots=72 packets=72 timed_wakes=9 event_gives=7
+shutdown_before_take: snapshots=0 slots=0 packets=0 timed_wakes=0 event_gives=6
+reconfigure: snapshots=6 slots=6 packets=6 timed_wakes=5 event_gives=12
+notify_off_during_snapshot: snapshots=10 slots=80 packets=72 timed_wakes=10 event_gives=8
+racechrono_stream: all deterministic firmware-wrapper scenarios pass
+<end of output>
+Test time =   0.84 sec
+----------------------------------------------------------
+Test Passed.
+"racechrono_stream" end time: Oct 14 13:12 CST
+"racechrono_stream" time elapsed: 00:00:00
+----------------------------------------------------------
+
+4/7 Testing: espnow_link
+4/7 Test: espnow_link
+Command: "/tmp/obd-espnow-crc-20261014/host-asan/test_espnow_link"
+Directory: /tmp/obd-espnow-crc-20261014/host-asan
+"espnow_link" start time: Oct 14 13:12 CST
+Output:
+----------------------------------------------------------
+idle           packets=10 cfg=10 override=0 waits=10 gives=0 tasks=1
+local          packets=422 cfg=422 override=416 waits=423 gives=1 tasks=1
+remote         packets=422 cfg=422 override=416 waits=423 gives=1 tasks=1
+v6             packets=50 cfg=50 override=50 waits=51 gives=1 tasks=1
+restart        packets=834 cfg=834 override=831 waits=836 gives=2 tasks=1
+threshold      packets=422 cfg=422 override=416 waits=423 gives=1 tasks=1
+saturate       packets=422 cfg=422 override=416 waits=423 gives=1 tasks=1
+storm          packets=50 cfg=50 override=50 waits=1001 gives=1000 tasks=1
+before_take    packets=50 cfg=50 override=49 waits=51 gives=1 tasks=1
+ota_active     packets=7 cfg=7 override=9 waits=8 gives=1 tasks=1
+ota_idle       packets=2 cfg=2 override=2 waits=2 gives=0 tasks=1
+create_fail    packets=0 cfg=0 override=1 waits=0 gives=0 tasks=1
+slave          packets=0 cfg=0 override=0 waits=0 gives=0 tasks=1
+64bit_clock    packets=422 cfg=422 override=416 waits=423 gives=1 tasks=1
+zero_threshold packets=422 cfg=422 override=416 waits=423 gives=1 tasks=1
+remote_idle    packets=50 cfg=50 override=49 waits=50 gives=1 tasks=1
+snapshot_restart packets=834 cfg=834 override=831 waits=836 gives=2 tasks=1
+17 real ESP-NOW worker/callback/lifecycle scenarios passed
+<end of output>
+Test time =   1.06 sec
+----------------------------------------------------------
+Test Passed.
+"espnow_link" end time: Oct 14 13:12 CST
+"espnow_link" time elapsed: 00:00:01
+----------------------------------------------------------
+
+5/7 Testing: espnow_crc_portable
+5/7 Test: espnow_crc_portable
+Command: "/tmp/obd-espnow-crc-20261014/host-asan/test_espnow_crc"
+Directory: /tmp/obd-espnow-crc-20261014/host-asan
+"espnow_crc_portable" start time: Oct 14 13:12 CST
+Output:
+----------------------------------------------------------
+espnow_crc: 643162 checks, 0 failures
+<end of output>
+Test time =   4.04 sec
+----------------------------------------------------------
+Test Passed.
+"espnow_crc_portable" end time: Oct 14 13:12 CST
+"espnow_crc_portable" time elapsed: 00:00:04
+----------------------------------------------------------
+
+6/7 Testing: espnow_proto_rom
+6/7 Test: espnow_proto_rom
+Command: "/tmp/obd-espnow-crc-20261014/host-asan/test_espnow_proto_rom"
+Directory: /tmp/obd-espnow-crc-20261014/host-asan
+"espnow_proto_rom" start time: Oct 14 13:12 CST
+Output:
+----------------------------------------------------------
+espnow_proto: 1026 checks, 0 failures
+<end of output>
+Test time =   0.54 sec
+----------------------------------------------------------
+Test Passed.
+"espnow_proto_rom" end time: Oct 14 13:12 CST
+"espnow_proto_rom" time elapsed: 00:00:00
+----------------------------------------------------------
+
+7/7 Testing: espnow_crc_rom
+7/7 Test: espnow_crc_rom
+Command: "/tmp/obd-espnow-crc-20261014/host-asan/test_espnow_crc_rom"
+Directory: /tmp/obd-espnow-crc-20261014/host-asan
+"espnow_crc_rom" start time: Oct 14 13:12 CST
+Output:
+----------------------------------------------------------
+espnow_crc: 17420636 checks, 0 failures
+<end of output>
+Test time =   3.76 sec
+----------------------------------------------------------
+Test Passed.
+"espnow_crc_rom" end time: Oct 14 13:12 CST
+"espnow_crc_rom" time elapsed: 00:00:03
+----------------------------------------------------------
+
+End testing: Oct 14 13:12 CST
+
+
+host-release complete CTest output:
+Start testing: Oct 14 13:13 CST
+----------------------------------------------------------
+1/7 Testing: espnow_proto
+1/7 Test: espnow_proto
+Command: "/tmp/obd-espnow-crc-20261014/host-release/test_espnow_proto"
+Directory: /tmp/obd-espnow-crc-20261014/host-release
+"espnow_proto" start time: Oct 14 13:13 CST
+Output:
+----------------------------------------------------------
+espnow_proto: 1026 checks, 0 failures
+<end of output>
+Test time =   0.67 sec
+----------------------------------------------------------
+Test Passed.
+"espnow_proto" end time: Oct 14 13:13 CST
+"espnow_proto" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/7 Testing: racechrono_filter
+2/7 Test: racechrono_filter
+Command: "/tmp/obd-espnow-crc-20261014/host-release/test_racechrono_filter"
+Directory: /tmp/obd-espnow-crc-20261014/host-release
+"racechrono_filter" start time: Oct 14 13:13 CST
+Output:
+----------------------------------------------------------
+deadline mode=0 wakes=10 snapshots=10 notifications=80
+deadline mode=1 wakes=10 snapshots=10 notifications=10
+deadline mode=2 wakes=0 snapshots=0 notifications=0
+deadline mode=3 wakes=46 snapshots=46 notifications=0
+deadline mode=4 wakes=9 snapshots=9 notifications=72
+RaceChrono mode=0 ticks=50 snapshots=10 slot_reads=80 notifications=80
+RaceChrono mode=1 ticks=50 snapshots=10 slot_reads=10 notifications=10
+RaceChrono mode=2 ticks=50 snapshots=0 slot_reads=0 notifications=0
+racechrono_filter: 269071 checks, 0 failures
+<end of output>
+Test time =   0.50 sec
+----------------------------------------------------------
+Test Passed.
+"racechrono_filter" end time: Oct 14 13:13 CST
+"racechrono_filter" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/7 Testing: racechrono_stream
+3/7 Test: racechrono_stream
+Command: "/tmp/obd-espnow-crc-20261014/host-release/test_racechrono_stream"
+Directory: /tmp/obd-espnow-crc-20261014/host-release
+"racechrono_stream" start time: Oct 14 13:13 CST
+Output:
+----------------------------------------------------------
+all: snapshots=10 slots=80 packets=80 timed_wakes=10 event_gives=6
+one: snapshots=10 slots=10 packets=10 timed_wakes=10 event_gives=8
+deny: snapshots=0 slots=0 packets=0 timed_wakes=0 event_gives=7
+disconnected: snapshots=0 slots=0 packets=0 timed_wakes=0 event_gives=5
+notify_off: snapshots=0 slots=0 packets=0 timed_wakes=0 event_gives=5
+retired: snapshots=0 slots=0 packets=0 timed_wakes=0 event_gives=8
+invalid: snapshots=46 slots=368 packets=0 timed_wakes=46 event_gives=6
+event_storm: snapshots=46 slots=368 packets=0 timed_wakes=0 event_gives=1006
+101ms: snapshots=9 slots=72 packets=72 timed_wakes=9 event_gives=7
+shutdown_before_take: snapshots=0 slots=0 packets=0 timed_wakes=0 event_gives=6
+reconfigure: snapshots=6 slots=6 packets=6 timed_wakes=5 event_gives=12
+notify_off_during_snapshot: snapshots=10 slots=80 packets=72 timed_wakes=10 event_gives=8
+racechrono_stream: all deterministic firmware-wrapper scenarios pass
+<end of output>
+Test time =   0.47 sec
+----------------------------------------------------------
+Test Passed.
+"racechrono_stream" end time: Oct 14 13:13 CST
+"racechrono_stream" time elapsed: 00:00:00
+----------------------------------------------------------
+
+4/7 Testing: espnow_link
+4/7 Test: espnow_link
+Command: "/tmp/obd-espnow-crc-20261014/host-release/test_espnow_link"
+Directory: /tmp/obd-espnow-crc-20261014/host-release
+"espnow_link" start time: Oct 14 13:13 CST
+Output:
+----------------------------------------------------------
+idle           packets=10 cfg=10 override=0 waits=10 gives=0 tasks=1
+local          packets=422 cfg=422 override=416 waits=423 gives=1 tasks=1
+remote         packets=422 cfg=422 override=416 waits=423 gives=1 tasks=1
+v6             packets=50 cfg=50 override=50 waits=51 gives=1 tasks=1
+restart        packets=834 cfg=834 override=831 waits=836 gives=2 tasks=1
+threshold      packets=422 cfg=422 override=416 waits=423 gives=1 tasks=1
+saturate       packets=422 cfg=422 override=416 waits=423 gives=1 tasks=1
+storm          packets=50 cfg=50 override=50 waits=1001 gives=1000 tasks=1
+before_take    packets=50 cfg=50 override=49 waits=51 gives=1 tasks=1
+ota_active     packets=7 cfg=7 override=9 waits=8 gives=1 tasks=1
+ota_idle       packets=2 cfg=2 override=2 waits=2 gives=0 tasks=1
+create_fail    packets=0 cfg=0 override=1 waits=0 gives=0 tasks=1
+slave          packets=0 cfg=0 override=0 waits=0 gives=0 tasks=1
+64bit_clock    packets=422 cfg=422 override=416 waits=423 gives=1 tasks=1
+zero_threshold packets=422 cfg=422 override=416 waits=423 gives=1 tasks=1
+remote_idle    packets=50 cfg=50 override=49 waits=50 gives=1 tasks=1
+snapshot_restart packets=834 cfg=834 override=831 waits=836 gives=2 tasks=1
+17 real ESP-NOW worker/callback/lifecycle scenarios passed
+<end of output>
+Test time =   0.47 sec
+----------------------------------------------------------
+Test Passed.
+"espnow_link" end time: Oct 14 13:13 CST
+"espnow_link" time elapsed: 00:00:00
+----------------------------------------------------------
+
+5/7 Testing: espnow_crc_portable
+5/7 Test: espnow_crc_portable
+Command: "/tmp/obd-espnow-crc-20261014/host-release/test_espnow_crc"
+Directory: /tmp/obd-espnow-crc-20261014/host-release
+"espnow_crc_portable" start time: Oct 14 13:13 CST
+Output:
+----------------------------------------------------------
+espnow_crc: 643162 checks, 0 failures
+<end of output>
+Test time =   1.05 sec
+----------------------------------------------------------
+Test Passed.
+"espnow_crc_portable" end time: Oct 14 13:13 CST
+"espnow_crc_portable" time elapsed: 00:00:01
+----------------------------------------------------------
+
+6/7 Testing: espnow_proto_rom
+6/7 Test: espnow_proto_rom
+Command: "/tmp/obd-espnow-crc-20261014/host-release/test_espnow_proto_rom"
+Directory: /tmp/obd-espnow-crc-20261014/host-release
+"espnow_proto_rom" start time: Oct 14 13:13 CST
+Output:
+----------------------------------------------------------
+espnow_proto: 1026 checks, 0 failures
+<end of output>
+Test time =   0.48 sec
+----------------------------------------------------------
+Test Passed.
+"espnow_proto_rom" end time: Oct 14 13:13 CST
+"espnow_proto_rom" time elapsed: 00:00:00
+----------------------------------------------------------
+
+7/7 Testing: espnow_crc_rom
+7/7 Test: espnow_crc_rom
+Command: "/tmp/obd-espnow-crc-20261014/host-release/test_espnow_crc_rom"
+Directory: /tmp/obd-espnow-crc-20261014/host-release
+"espnow_crc_rom" start time: Oct 14 13:13 CST
+Output:
+----------------------------------------------------------
+espnow_crc: 17420636 checks, 0 failures
+<end of output>
+Test time =   0.93 sec
+----------------------------------------------------------
+Test Passed.
+"espnow_crc_rom" end time: Oct 14 13:13 CST
+"espnow_crc_rom" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Oct 14 13:13 CST
+
+
+host-portable complete CTest output:
+Start testing: Oct 14 13:18 CST
+----------------------------------------------------------
+1/5 Testing: espnow_proto
+1/5 Test: espnow_proto
+Command: "/tmp/obd-espnow-crc-20261014/host-portable/test_espnow_proto"
+Directory: /tmp/obd-espnow-crc-20261014/host-portable
+"espnow_proto" start time: Oct 14 13:18 CST
+Output:
+----------------------------------------------------------
+espnow_proto: 1026 checks, 0 failures
+<end of output>
+Test time =   0.87 sec
+----------------------------------------------------------
+Test Passed.
+"espnow_proto" end time: Oct 14 13:18 CST
+"espnow_proto" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/5 Testing: racechrono_filter
+2/5 Test: racechrono_filter
+Command: "/tmp/obd-espnow-crc-20261014/host-portable/test_racechrono_filter"
+Directory: /tmp/obd-espnow-crc-20261014/host-portable
+"racechrono_filter" start time: Oct 14 13:18 CST
+Output:
+----------------------------------------------------------
+deadline mode=0 wakes=10 snapshots=10 notifications=80
+deadline mode=1 wakes=10 snapshots=10 notifications=10
+deadline mode=2 wakes=0 snapshots=0 notifications=0
+deadline mode=3 wakes=46 snapshots=46 notifications=0
+deadline mode=4 wakes=9 snapshots=9 notifications=72
+RaceChrono mode=0 ticks=50 snapshots=10 slot_reads=80 notifications=80
+RaceChrono mode=1 ticks=50 snapshots=10 slot_reads=10 notifications=10
+RaceChrono mode=2 ticks=50 snapshots=0 slot_reads=0 notifications=0
+racechrono_filter: 269071 checks, 0 failures
+<end of output>
+Test time =   0.38 sec
+----------------------------------------------------------
+Test Passed.
+"racechrono_filter" end time: Oct 14 13:18 CST
+"racechrono_filter" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/5 Testing: racechrono_stream
+3/5 Test: racechrono_stream
+Command: "/tmp/obd-espnow-crc-20261014/host-portable/test_racechrono_stream"
+Directory: /tmp/obd-espnow-crc-20261014/host-portable
+"racechrono_stream" start time: Oct 14 13:18 CST
+Output:
+----------------------------------------------------------
+all: snapshots=10 slots=80 packets=80 timed_wakes=10 event_gives=6
+one: snapshots=10 slots=10 packets=10 timed_wakes=10 event_gives=8
+deny: snapshots=0 slots=0 packets=0 timed_wakes=0 event_gives=7
+disconnected: snapshots=0 slots=0 packets=0 timed_wakes=0 event_gives=5
+notify_off: snapshots=0 slots=0 packets=0 timed_wakes=0 event_gives=5
+retired: snapshots=0 slots=0 packets=0 timed_wakes=0 event_gives=8
+invalid: snapshots=46 slots=368 packets=0 timed_wakes=46 event_gives=6
+event_storm: snapshots=46 slots=368 packets=0 timed_wakes=0 event_gives=1006
+101ms: snapshots=9 slots=72 packets=72 timed_wakes=9 event_gives=7
+shutdown_before_take: snapshots=0 slots=0 packets=0 timed_wakes=0 event_gives=6
+reconfigure: snapshots=6 slots=6 packets=6 timed_wakes=5 event_gives=12
+notify_off_during_snapshot: snapshots=10 slots=80 packets=72 timed_wakes=10 event_gives=8
+racechrono_stream: all deterministic firmware-wrapper scenarios pass
+<end of output>
+Test time =   0.91 sec
+----------------------------------------------------------
+Test Passed.
+"racechrono_stream" end time: Oct 14 13:18 CST
+"racechrono_stream" time elapsed: 00:00:00
+----------------------------------------------------------
+
+4/5 Testing: espnow_link
+4/5 Test: espnow_link
+Command: "/tmp/obd-espnow-crc-20261014/host-portable/test_espnow_link"
+Directory: /tmp/obd-espnow-crc-20261014/host-portable
+"espnow_link" start time: Oct 14 13:18 CST
+Output:
+----------------------------------------------------------
+idle           packets=10 cfg=10 override=0 waits=10 gives=0 tasks=1
+local          packets=422 cfg=422 override=416 waits=423 gives=1 tasks=1
+remote         packets=422 cfg=422 override=416 waits=423 gives=1 tasks=1
+v6             packets=50 cfg=50 override=50 waits=51 gives=1 tasks=1
+restart        packets=834 cfg=834 override=831 waits=836 gives=2 tasks=1
+threshold      packets=422 cfg=422 override=416 waits=423 gives=1 tasks=1
+saturate       packets=422 cfg=422 override=416 waits=423 gives=1 tasks=1
+storm          packets=50 cfg=50 override=50 waits=1001 gives=1000 tasks=1
+before_take    packets=50 cfg=50 override=49 waits=51 gives=1 tasks=1
+ota_active     packets=7 cfg=7 override=9 waits=8 gives=1 tasks=1
+ota_idle       packets=2 cfg=2 override=2 waits=2 gives=0 tasks=1
+create_fail    packets=0 cfg=0 override=1 waits=0 gives=0 tasks=1
+slave          packets=0 cfg=0 override=0 waits=0 gives=0 tasks=1
+64bit_clock    packets=422 cfg=422 override=416 waits=423 gives=1 tasks=1
+zero_threshold packets=422 cfg=422 override=416 waits=423 gives=1 tasks=1
+remote_idle    packets=50 cfg=50 override=49 waits=50 gives=1 tasks=1
+snapshot_restart packets=834 cfg=834 override=831 waits=836 gives=2 tasks=1
+17 real ESP-NOW worker/callback/lifecycle scenarios passed
+<end of output>
+Test time =   0.36 sec
+----------------------------------------------------------
+Test Passed.
+"espnow_link" end time: Oct 14 13:18 CST
+"espnow_link" time elapsed: 00:00:00
+----------------------------------------------------------
+
+5/5 Testing: espnow_crc_portable
+5/5 Test: espnow_crc_portable
+Command: "/tmp/obd-espnow-crc-20261014/host-portable/test_espnow_crc"
+Directory: /tmp/obd-espnow-crc-20261014/host-portable
+"espnow_crc_portable" start time: Oct 14 13:18 CST
+Output:
+----------------------------------------------------------
+espnow_crc: 643162 checks, 0 failures
+<end of output>
+Test time =   1.21 sec
+----------------------------------------------------------
+Test Passed.
+"espnow_crc_portable" end time: Oct 14 13:18 CST
+"espnow_crc_portable" time elapsed: 00:00:01
+----------------------------------------------------------
+
+End testing: Oct 14 13:18 CST

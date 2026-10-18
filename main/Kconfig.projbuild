@@ -22,4 +22,30 @@ menu "OBD DSP Configuration"
         config OBD_HW_VERSION_V3_NEW
             bool "V3: New board B (ST77916 v2 init, direct GPIO, no TCA9554/ADS1115)"
     endchoice
+
+    choice OBD_SD_SLOT
+        prompt "SD card slot"
+        default OBD_SD_SLOT_SDMMC_1BIT if OBD_HW_VERSION_V1_WAVESHARE
+        default OBD_SD_SLOT_NONE
+        help
+            V1 (Waveshare 1.85) has a TF slot wired to SDMMC 1-bit
+            (CLK GPIO14, CMD GPIO17, D0 GPIO16). Boards without a slot
+            select NONE; every SD feature then reports "no card".
+
+        config OBD_SD_SLOT_SDMMC_1BIT
+            bool "SDMMC 1-bit"
+
+        config OBD_SD_SLOT_NONE
+            bool "None"
+    endchoice
+    config OBD_PERF_STATS
+        bool "Log performance statistics every 5 seconds"
+        default n
+        help
+            Opt-in on-device diagnostics for LVGL/UI/theme, OBD scheduling,
+            SD I/O, video processing, and RaceChrono signal snapshots.
+            Logs count/min/mean/p95 bucket bound/max plus heap headroom.
+            Adds a low-priority logger task and timing/aggregation overhead.
+            Disable for production and final throughput measurements.
+
 endmenu

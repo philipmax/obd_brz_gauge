@@ -1,0 +1,92 @@
+{
+  "id": "mazda.mx5nd",
+  "legacy": {
+    "rev": "4b056c0",
+    "idx": 5,
+    "name": "MX-5 ND"
+  },
+  "init": ["ATZ", "ATE0", "ATL0", "ATS1", "ATH0", "ATAT1", "ATST0A", "ATSP0", "ATSH7E0"],
+  "gap_ms": 1,
+  "requests": [
+    {
+      "sig": "obd.rpm",
+      "src": 0,
+      "hdr": "7E0",
+      "tx": "010C",
+      "class": "fast"
+    },
+    {
+      "sig": "obd.intake_temp",
+      "src": 0,
+      "hdr": "7E0",
+      "tx": "010F",
+      "class": "round"
+    },
+    {
+      "sig": "obd.speed",
+      "src": 0,
+      "hdr": "7E0",
+      "tx": "010D",
+      "class": "round"
+    },
+    {
+      "sig": "obd.coolant_temp",
+      "src": 0,
+      "hdr": "7E0",
+      "tx": "0105",
+      "class": "round"
+    },
+    {
+      "sig": "obd.load",
+      "src": 0,
+      "hdr": "7E0",
+      "tx": "0104",
+      "class": "round"
+    },
+    {
+      "sig": "obd.throttle",
+      "src": 0,
+      "hdr": "7E0",
+      "tx": "0111",
+      "class": "round"
+    },
+    {
+      "sig": "obd.oil_temp",
+      "src": 0,
+      "hdr": "7E0",
+      "tx": "221310",
+      "class": "round"
+    },
+    {
+      "sig": "obd.oil_temp",
+      "src": 1,
+      "hdr": "7E0",
+      "tx": "22111F",
+      "class": "round"
+    },
+    {
+      "sig": "obd.battery_voltage",
+      "src": 0,
+      "hdr": "7E0",
+      "tx": "0142",
+      "class": "round"
+    },
+    {
+      "sig": "obd.afr",
+      "src": 0,
+      "hdr": "7E0",
+      "tx": "0144",
+      "class": "round"
+    }
+  ],
+  "requires": [],
+  "monitor": null,
+  "can": [],
+  "drivetrain": {
+    "fd": 2.866,
+    "tire_m": 0.3,
+    "gears": [5.087, 2.991, 2.035, 1.594, 1.286, 1],
+    "tol": 0.15
+  },
+  "notes": ["ATSP0: bus.proto is 0. Legacy sent ATSP with the saved or auto-detected protocol (nvs_user_cfg_t.protocol); v1 does the same (vp_engine_cfg_t.proto)."]
+}

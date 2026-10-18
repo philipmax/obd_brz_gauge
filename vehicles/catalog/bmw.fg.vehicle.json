@@ -3,162 +3,161 @@
   "id": "bmw.fg",
   "rev": 1,
   "name": "BMW F/G",
-  "drivetrain": {
-    "final_drive": 2.813,
-    "tire_radius_m": 0.33,
-    "gear_tolerance": 0.09,
-    "gears": [
-      {
-        "gear": 1,
-        "ratio": 5.25
-      },
-      {
-        "gear": 2,
-        "ratio": 3.36
-      },
-      {
-        "gear": 3,
-        "ratio": 2.172
-      },
-      {
-        "gear": 4,
-        "ratio": 1.72
-      },
-      {
-        "gear": 5,
-        "ratio": 1.316
-      },
-      {
-        "gear": 6,
-        "ratio": 1.0
-      },
-      {
-        "gear": 7,
-        "ratio": 0.822
-      },
-      {
-        "gear": 8,
-        "ratio": 0.64
-      }
-    ]
+  "origin": {
+    "from": "legacy 4b056c0",
+    "legacy_idx": 6,
+    "legacy_name": "BMW F/G"
   },
   "bus": {
-    "protocol": 6,
-    "_protocol_note": "ISO 15765-4 CAN 11-bit 500k",
+    "proto": 6,
     "hdr": "7DF",
     "atst": 15,
-    "poll_gap_ms": 1
+    "gap_ms": 1
+  },
+  "drivetrain": {
+    "fd": 2.813,
+    "tire_m": 0.33,
+    "gears": [5.25, 3.36, 2.172, 1.72, 1.316, 1, 0.822, 0.64],
+    "tol": 0.09
   },
   "signals": [
     {
-      "key": "obd.rpm",
+      "id": "obd.rpm",
+      "rate": "every",
       "src": [
         {
-          "req": "01 0C",
-          "scale": 0.25,
-          "offset": 0.0
+          "req": "010C",
+          "len": 2,
+          "expr": "(A*256+B)/4",
+          "rpn": [["A", 0], ["k", 256], "*", ["A", 1], "+", ["k", 4], "/"]
         }
       ]
     },
     {
-      "key": "obd.speed",
+      "id": "obd.intake_temp",
       "src": [
         {
-          "req": "01 0D",
-          "scale": 1.0,
-          "offset": 0.0
+          "req": "010F",
+          "len": 1,
+          "expr": "A-40",
+          "rpn": [["A", 0], ["k", 40], "-"]
         }
       ]
     },
     {
-      "key": "obd.coolant_temp",
+      "id": "obd.speed",
+      "post": {
+        "zero_le": 2
+      },
       "src": [
         {
-          "req": "01 05",
-          "scale": 1.0,
-          "offset": -40.0
+          "req": "010D",
+          "len": 1,
+          "expr": "A",
+          "rpn": [["A", 0]]
         }
       ]
     },
     {
-      "key": "obd.tps",
+      "id": "obd.coolant_temp",
       "src": [
         {
-          "req": "01 11",
-          "scale": 0.39215686274509803,
-          "offset": 0.0
+          "req": "0105",
+          "len": 1,
+          "expr": "A-40",
+          "rpn": [["A", 0], ["k", 40], "-"]
         }
       ]
     },
     {
-      "key": "obd.load",
+      "id": "obd.load",
       "src": [
         {
-          "req": "01 04",
-          "scale": 0.39215686274509803,
-          "offset": 0.0
+          "req": "0104",
+          "len": 1,
+          "expr": "A*100/255",
+          "rpn": [["A", 0], ["k", 100], "*", ["k", 255], "/"]
         }
       ]
     },
     {
-      "key": "obd.intake_temp",
+      "id": "obd.throttle",
       "src": [
         {
-          "req": "01 0F",
-          "scale": 1.0,
-          "offset": -40.0
+          "req": "0111",
+          "len": 1,
+          "expr": "A*100/255",
+          "rpn": [["A", 0], ["k", 100], "*", ["k", 255], "/"]
         }
       ]
     },
     {
-      "key": "obd.battery",
+      "id": "obd.oil_temp",
+      "valid": [-20, 150],
+      "filter": "temp_hyst",
       "src": [
         {
-          "req": "01 42",
-          "scale": 0.001,
-          "offset": 0.0
+          "req": "015C",
+          "len": 1,
+          "valid": [-40, 215],
+          "expr": "A-40",
+          "rpn": [["A", 0], ["k", 40], "-"]
         }
       ]
     },
     {
-      "key": "obd.boost",
+      "id": "obd.battery_voltage",
+      "unit": "mV",
       "src": [
         {
-          "req": "01 0B",
-          "scale": 1.0,
-          "offset": -101.3,
-          "_note": "MAP absolute kPa − 101.3 ≈ boost gauge kPa"
+          "req": "0142",
+          "len": 2,
+          "expr": "A*256+B",
+          "rpn": [["R", 0, 16, "be"]]
         }
       ]
     },
     {
-      "key": "obd.oil_temp",
+      "id": "obd.boost",
+      "unit": "kPa_rel",
+      "post": {
+        "clamp": [0, 155]
+      },
       "src": [
         {
-          "req": "01 5C",
-          "scale": 1.0,
-          "offset": -40.0,
-          "bytes": 1,
-          "byte_index": 0
+          "req": "010B",
+          "len": 1,
+          "expr": "A-100",
+          "rpn": [["A", 0], ["k", 100], "-"]
         }
       ]
     },
     {
-      "key": "obd.oil_pressure",
+      "id": "obd.afr",
       "src": [
         {
-          "req": "adc",
-          "_note": "external ADS1115 sensor"
+          "req": "0144",
+          "len": 2,
+          "valid": [8, 22],
+          "expr": "(A*256+B)*14.7/32768",
+          "rpn": [["R", 0, 16, "be"], ["k", 14.7], "*", ["k", 32768], "/"]
         }
       ]
     },
     {
-      "key": "obd.gear",
+      "id": "obd.gear",
+      "fallback": "ratio",
       "src": [
         {
           "raw": "18 03 22 DA 2E",
           "hdr": "6F1",
-          "rx": "618"
+          "rx": "618",
+          "expect": "62DA2E",
+          "len": 1,
+          "valid": [0, 8],
+          "fail_after": 1,
+          "expr": "A",
+          "rpn": [["A", 0]]
         }
       ]
     }

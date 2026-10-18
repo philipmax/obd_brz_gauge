@@ -2,95 +2,172 @@
 
 English | [简体中文](DEVELOPMENT.md)
 
-Vehicles: [VEHICLES.en.md](VEHICLES.en.md) · Theming: [THEMES.en.md](THEMES.en.md) ·
+Vehicles: [VEHICLES.en.md](VEHICLES.en.md) · PID / signal definitions: [PID_GUIDE.en.md](PID_GUIDE.en.md) ·
+Theming: [THEMES.en.md](THEMES.en.md) ·
 Flash & update: [FLASH.en.md](FLASH.en.md) · App protocol: [APP_PROTOCOL.en.md](APP_PROTOCOL.en.md).
+For the performance audit, benchmarks, and device statistics, see [PERFORMANCE.en.md](PERFORMANCE.en.md).
 
 ## Code architecture
 
 ```
 main/
-├── app_main.c            # Entry: hardware init, LVGL lock, BLE/RS485/ESP-NOW tasks, OTA self-check
+├── app_main.c            # Entry: see "Boot order" below
 │
 ├── app_obd_dsp/          # Application layer (board-agnostic logic)
-│   ├── obd_data_cache    # OBD data cache (the only data plane between UI and acquisition)
-│   ├── vehicle_profiles  # 17 vehicle profiles + gear-range math (see VEHICLES.en.md)
-│   ├── vehicle_custom_config.h  # CAN rules / oil formulas / UDS header override tables
-│   ├── ota_wifi_server   # WiFi SoftAP HTTP OTA service (all /ota/* endpoints)
+│   ├── signal_registry / signal_store  # runtime signal table (PSRAM; generated from contracts/signals.json, see below)
+│   ├── obd_data_cache    # legacy signal facade, forwards to signal_store (new code uses signal_store directly)
+│   ├── storage_service   # 1 Hz SD poll scheduler: import scan / config mirror / theme-selection jobs
+│   ├── sd_import / inbox_import  # /OBD/IMPORT drop-folder processing (*.vehicle.json / *.gaugeproj.json
+│   │                     #   / *.bin / ACTIVATE.TXT / RESET.TXT), results logged to IMPORT.LOG
+│   ├── first_boot_migration  # one-shot partition v1→v2 migration (old NVS vehicle index → catalog id,
+│   │                     #   old theme/boot animation moved to SD, config partition formatted + restored from SD mirror)
+│   ├── theme_library     # SD theme-library enumeration (/OBD/THEMES/<key>/theme.bin) + background selection state machine
+│   ├── theme_mount / boot_media_mount  # legacy theme_0 / bootmedia migration access
+│   ├── coredump_store    # crash dump reader (GET /ota/coredump; 204 when empty)
+│   ├── ota_wifi_server   # WiFi SoftAP HTTP service: /ota/* endpoints (App contract unchanged)
+│   ├── api_v1_handlers / device_web_page.html  # new /api/v1/* + the device's own web page (OTA mode only)
 │   ├── device_identity   # Device manifest JSON (GET /ota/info, hardware + build_tag)
-│   ├── boot_media_mount / boot_block_player  # bootmedia partition mount & boot-animation playback
-│   └── theme_mount       # theme_0 partition mount helpers
+│   └── flash_writer / upload_sink / storage_util  # shared partition/file write helpers
 │
 ├── bsp_obd_dsp/          # Board support package (porting a new board happens here)
 │   ├── elm327_ble_client # ELM327 BLE client + single-thread poll state machine + protocol auto-detect
-│   ├── espnow_link       # Triple-gauge ESP-NOW link (MASTER/SLAVE/STANDALONE)
+│   ├── espnow_link / espnow_v6  # Triple-gauge ESP-NOW link (v6 TLV; v5 still accepted during the transition)
+│   ├── ble_hub           # GAP/GATTC/GATTS events dispatched by app_id; arbitrates scanning and connections
 │   ├── racechrono_ble_diy # RaceChrono DIY BLE GATT service + pairing service
 │   ├── gauge_pair_ble_client # slave FIND MASTER scan (shares the page with the OBD scan)
-│   ├── nvs_storage       # NVS persistence for user config and stats (new fields append at the END only)
-│   ├── ads1115_oil_pressure # ADS1115 I2C oil-pressure ADC (V1 board; unused by cars with an OBD DID)
-│   ├── rs485_brake_temp  # RS485 Modbus RTU brake-temperature task (paused during OTA)
+│   ├── nvs_app / nvs_storage  # app-private NVS (nvs_app partition) and user-config NVS (new fields append at the end only)
+│   ├── config_part       # config partition (LittleFS) mount helpers
+│   ├── sd_card           # SDMMC 1-bit mount (V1; boards without a slot select `OBD_SD_SLOT_NONE`, every SD feature reports no card)
+│   ├── ads1115_oil_pressure # ADS1115 I2C oil-pressure ADC (V1 board only; unused when the active vehicle profile reads OBD oil pressure)
 │   ├── lcd_driver/       # ST77916 QSPI LCD (V2/V3 boards use different init sequences)
 │   ├── touch_driver/     # CST816 touch (I2C)
 │   ├── exio/             # TCA9554 IO expander (V1 board only)
 │   └── i2c_driver/       # I2C master driver
 │
-├── export_path/          # LVGL UI (SquareLine export + hand-written extensions)
-│   ├── ui.c              # page creation order, gesture navigation (carousel), linked-warning logic
-│   ├── screens/          # 24 screens: Logo/Main/Gear/ThemeGauge/Rpm/Speed/ODBProtocal/
-│   │                     #   EasterEgg(version)/BLEScan/OTAMode/Temp/TempCustom/
-│   │                     #   OilPressure(chart)/ChartConfig/ChartAlarm/Info/InfoCustom/
-│   │                     #   Settings/OilWarn/RpmWarn/Needle/NeedleConfig/MultiGauge/Intro
-│   ├── ui_ext.c          # hand-written extensions (sweep, showroom, boot animation) — survives SquareLine re-exports
-│   ├── ui_disp_item.c    # display-item enum (the data sources mappable onto TEMP/INFO pages)
-│   └── ui_theme*         # compiled-theme runtime (active theme, NVS, accessors; generated files: THEMES.en.md)
+├── vehicle/              # Vehicle runtime core (pure C, no ESP-IDF dependency, builds on the host)
+│   ├── vp_engine         # request scheduling + response decoding engine, drives the ELM327 state machine
+│   ├── vp_manager        # lifecycle INSTALLED→PENDING→ACTIVE; verification window, rollback, safe mode
+│   ├── vp_compile / vp_validate  # JSON → compiled profile; service-ID / AT-command allowlist validation
+│   ├── vp_rpn / vp_rpn_json  # safe RPN executor (fixed opcodes, ≤32 instructions, stack depth ≤8)
+│   └── vp_builtin_generic  # the one built-in vehicle, `obd2.generic` (generated by tools/vehicles/gen_builtin.py)
 │
-└── theme_engine/         # runtime theme engine (theme_0 partition → pages/colors/artwork/data binding)
+├── media/                # boot / theme video
+│   ├── boot_video / video_player / video_view / video_elem
+│   ├── obv1_parser.c, obv1_format.h  # OBV1 MJPEG container (produced by tools/make_video.py)
+│   ├── delta_varint      # legacy SD bootmedia format decoder (backward compatibility)
+│   └── media_jpeg        # esp_new_jpeg wrapper
+│
+├── theme_engine/         # theme engine (editor theme.bin → pages/colors/artwork/data binding)
+│   ├── theme_loader / theme_page / theme_layout / theme_overlay
+│   ├── theme_sidecar* / theme_pixconv / theme_jsplit / theme_img_cache
+│   └── rules/            # rules engine (tr_parse/tr_eval/tr_format; e.g. the custom RPM flash is now a rule)
+│
+└── export_path/          # LVGL UI (SquareLine export + hand-written extensions)
+    ├── ui.c              # page creation order, gesture navigation (carousel), linked-warning logic
+    ├── screens/          # 24 screens: Logo/Main/Gear/ThemeGauge/Rpm/Speed/ODBProtocal/
+    │                     #   EasterEgg(version)/BLEScan/OTAMode/Temp/TempCustom/
+    │                     #   OilPressure(chart)/ChartConfig/ChartAlarm/Info/InfoCustom/
+    │                     #   Settings/OilWarn/RpmWarn/Needle/NeedleConfig/MultiGauge/
+    │                     #   Intro/Storage/Vehicle
+    ├── ui_ext.c          # hand-written extensions (sweep, showroom, boot animation scheduling, theme-library write poll) —
+    │                     #   survives SquareLine re-exports
+    ├── ui_disp_item.c    # display-item enum (data sources mappable onto TEMP/INFO pages; append-only, see AGENTS.md)
+    └── ui_theme*         # compiled-theme runtime (active theme, NVS, accessors; generated files: THEMES.en.md)
+```
+
+The repo root also has: `vehicles/catalog/` (17 `*.vehicle.json` profiles; the
+firmware only builds in `obd2.generic`, the rest install on demand from SD /
+App / the vehicle page), `contracts/` (signal table, vehicle JSON schema,
+rules-engine golden vectors), `test/host/` (7 pure-C unit-test suites),
+`tools/vehicles/` (legacy-table → JSON converters and golden-fixture
+generators), `bootmedia/slot_a/` (legacy animation source, generating
+`build/bootmedia.bin` for SD installation).
+
+### Boot order (`main/app_main.c`)
+
+```
+cJSON hooks (PSRAM; internal RAM only as a fallback once PSRAM is exhausted)
+→ nvs_app_init → nvs_storage_init → signal_store_init → sd_card_init (warn only on failure)
+→ storage_service_boot (first-boot migration or regular config mount; resumes SD theme selection;
+  handles boot-time /OBD/IMPORT RESET.TXT / ACTIVATE.TXT / vehicle JSON)
+→ coredump_store_boot_check (after the migration — the migration erases the region
+  the old bootmedia occupied in the coredump partition)
+→ vp_manager_init (falls back to obd2.generic when no vehicle is pending)
+→ task WDT 10 s → I2C/EXIO/LCD/LVGL init → ble_hub_init (before the UI) → boot animation
+→ ui_init (incl. theme_engine_init) → ui_ext_init → app_event_init
+→ role branch: slave = ESP-NOW slave + RaceChrono; master/standalone = ELM327 BLE
+  (auto-connect only with a bound MAC) + ADS1115 oil pressure (V1 board only, and only
+  when the active vehicle profile does NOT read oil pressure over OBD)
+  + ESP-NOW master (MASTER only) + RaceChrono
+→ storage_service_start (state-based 1/3/10 s SD poll; card jobs fire 5 s after start / on card insert / after OTA ends)
+→ ota_valid task (15 s self-check marks the slot valid)
 ```
 
 ### Data flow
 
 ```
-ELM327 BLE adapter ──BLE──→ elm327_ble_client (single-thread poll: standard PIDs / manufacturer oil temp / gear DID / ATMA*)
+ELM327 BLE adapter ──BLE──→ elm327_ble_client (single-thread state machine, driven by the vehicle's vp_engine)
                                    │
                                    ▼
-                            obd_data_cache ←── rs485_brake_temp (brake temperature)
-                                   │      ←── ads1115_oil_pressure (oil pressure, V1 board)
+                            signal_store (obd.* / sys.* / veh.*, contracts/signals.json)
+                                   │      ←── ads1115_oil_pressure (oil pressure, V1 board, when the vehicle doesn't read OBD oil pressure)
                  ┌─────────────────┼──────────────────┐
                  ▼                 ▼                  ▼
-           LVGL page refresh   theme_update_data()   espnow_link (master broadcast)
-           (built-in gauges)   (runtime theme pages)       │
-                                                          ▼
+           LVGL page refresh     theme_tick()     espnow_link (master broadcast, v6 TLV)
+           (built-in gauges,     (runtime theme         │
+            via obd_data_cache)      pages)             ▼
                                               slave espnow_link receive → direct render
 ```
 
-*ATMA CAN monitoring is enabled only for the `ZN/C6 CAN` profile; everything
-else stays on OBD polling to avoid dual-path adapter contention.
+Each vehicle profile (`vehicles/catalog/*.vehicle.json`, compiled into a
+`vp_profile_t`) declares its own request/decode rules and writes its `veh.*`
+slots in `signal_store`; whether `vp_engine` sends an ATMA monitor probe,
+switches CAN headers, etc. is driven entirely by the profile — no more
+branches hard-coded on the vehicle's name.
 
 **The ELM327 poll loop is a single-threaded state machine**: init →
 (optional) protocol auto-detect → poll loop. Never introduce parallel
-requests when touching it — one adapter serves one request stream at a time.
+requests when touching it — one adapter serves one request stream at a time
+(an AGENTS.md hard rule).
 
 ## Build configuration
 
 Environment: ESP-IDF 5.5.3 + Python toolchain. Component dependencies
 (`main/idf_component.yml`): `lvgl/lvgl`, `espressif/esp_lcd_touch`,
-`espressif/button`, `espressif/knob` — pulled into `managed_components/` on
-the first build.
+`joltwallet/littlefs`, `espressif/esp_new_jpeg` (1.0.2) — pulled into
+`managed_components/` on the first build. The `button`/`knob` components
+were removed (unused).
 
 ```bash
 idf.py set-target esp32s3
 idf.py menuconfig     # OBD DSP Configuration
 idf.py build
 idf.py -p PORT flash monitor
+cp build/bootmedia.bin /Volumes/SDCARD/OBD/BOOT/bootmedia.raw
 ```
+
+> **After changing `sdkconfig.defaults`, delete the local `sdkconfig` before
+> the next build** (`defaults` only takes effect while generating a fresh
+> `sdkconfig`; it never overwrites one that already exists). Defaults this
+> change touches: `CONFIG_FATFS_LFN_HEAP`/`CONFIG_FATFS_MAX_LFN=255` (SD long
+> file names), `CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH` + `_DATA_FORMAT_ELF` +
+> `_CHECKSUM_CRC32` (crash dumps), `OBD_SD_SLOT_*` (see the table below).
+
+The device's own web page (`device_web_page.html`, OTA mode only) is
+gzip-embedded at build time by `tools/gzip_asset.py`; the compressed size has
+a hard cap of **48 KB** and the build fails above it.
 
 `menuconfig → OBD DSP Configuration`:
 
 | Option | Values | Notes |
 |--------|--------|-------|
-| Hardware version | **V1** (default) | Waveshare ESP32-S3-Touch-LCD-1.85: ST77916 v2 init + TCA9554 + ADS1115 |
+| Hardware version | **V1** (default, this refactor's target board) | Waveshare ESP32-S3-Touch-LCD-1.85: ST77916 v2 init + TCA9554 + ADS1115 |
 | | V2 | New board A: ST77916 **v1** init, direct GPIO, no TCA9554 / ADS1115 |
 | | V3 | New board B: ST77916 v2 init, direct GPIO, no TCA9554 / ADS1115 |
-| RS485 pins | TX 13 / RX 12 / DE-RE −1 | Brake-temperature module; avoid GPIO43/44 for TX (onboard USB-UART) |
+| SD card slot | **SDMMC 1-bit** (V1 default) / None | V1 uses SDMMC 1-bit (CLK14/CMD17/D0 16); boards with None report "no card" for every SD feature |
+
+> Brake temperature (RS485) and its BLE OTA service were removed in this
+> refactor — see CHANGELOG.en.md.
 
 The build runs `tools/gen_themes.py` at CMake configure time to generate the
 theme table, and injects the git branch / commit count / short hash as
@@ -106,24 +183,44 @@ on the version page — so commit *before* releasing, see
    `touch_driver/`, `exio/` (IO expander present?), pin definitions
 3. Resolution / color-depth macros live in `ST77916.h`; the UI assumes
    360×360, so a different screen means touching `export_path/`
-4. Nothing vehicle-related needs to change — all car logic lives in
-   `app_obd_dsp/`
+4. Nothing vehicle-related needs to change — car logic lives in
+   `main/vehicle/` (engine/lifecycle) + `vehicles/catalog/*.vehicle.json`
+   (the actual vehicles), independent of the board
 
 ## Tool scripts
 
 | Script | Purpose |
 |--------|---------|
 | `tools/gen_themes.py` | compiled-theme codegen (runs from CMake; `--check` for CI) |
-| `tools/theme_packer/pack_theme.py` | packs a runtime theme into a 4 MB theme.bin |
-| `tools/gen_release.py` | build/ artifacts → firmware/release/ + latest.json |
-| `tools/release.sh` | one-shot release (commit → build → gen_release → push) |
-| `tools/make_boot_block.py` | encodes video into boot_block.bin/txt (ffmpeg + Pillow; auto _v2 when frames > 65535) |
-| `tools/convert_rpm_flash.py` | 3 PNGs → RPM warning flash images (imgRpmFlash1..3.c) |
+| `tools/gen_signals.py` | generates `signal_registry.{h,c}` from `contracts/signals.json` (`--check` for CI) |
+| `tools/gen_layout.py` | generates partition layout constants/CRC from `partitions.csv`; `--check` verifies the FLASH.md/.en.md address tables against the CSV |
+| `tools/gen_release.py` | build/ artifacts → firmware/release/ + latest.json (checks firmware size, bootmedia format, build tag matches HEAD) |
+| `tools/release.sh` | one-shot release (commit source → build → gen_release → commit artifacts `build:` → push) |
+| `tools/make_video.py` | encodes boot / theme video into OBV1 (`.obv`, MJPEG container); `inspect`/`verify` subcommands |
+| `tools/make_bootmedia_raw.py` | packs `bootmedia/slot_a/` into the raw `build/bootmedia.bin` layout (legacy boot animation; runs from CMake) |
+| `tools/gzip_asset.py` | gzip-compresses the device web page asset, fails outright above the size cap (runs from CMake) |
+| `tools/check_bss.py` | compares two link maps, fails when internal-DRAM static usage grows past a threshold with no warning |
+| `tools/vehicles/dump_legacy.py` | exports an intermediate JSON from the legacy `vehicle_profiles.c` / `vehicle_custom_config.h` (or a given git revision) |
+| `tools/vehicles/legacy_to_v1.py` | intermediate JSON → `vehicles/catalog/*.vehicle.json` (`--check` for CI) |
+| `tools/vehicles/expr2rpn.py` | compiles a profile formula (infix) into the device's executable RPN array; `--check` cross-verifies |
+| `tools/vehicles/gen_builtin.py` | `vehicles/catalog/obd2.generic.vehicle.json` → `main/vehicle/vp_builtin_generic.c` |
+| `tools/vehicles/legacy_golden.py` | generates/checks the legacy-firmware-behavior golden fixtures under `test/host/vehicle` |
+| `tools/fixtures_node/run_ts_crosscheck.mjs` | cross-checks `contracts/fixtures/` against the editor repo's (`obd_theme_store`) own TypeScript sources |
+| `contracts/check_contracts.py` | checks the signal table / vehicle JSON schema / fixtures are consistent (CI `contracts` job) |
 | `tools/fake_elm327.py` | fake ELM327 TCP server: logs every app request, answers unknown PIDs positively |
 | `tools/one_shot.py` | one-shot PID hunting: starts the fake server → you record once → pids_full.csv |
-| `tools/analyze_proble.py` | correlates injected signals with Car Scanner recordings to recover PID mappings and formulas |
+| `tools/analyze_probe.py` | correlates injected signals with Car Scanner recordings to recover PID mappings and formulas |
 | `tools/parse_carscanner_backup.py` | parses a CarScanner backup directory into a per-car PID CSV |
-| `main/python_quick_rs485_check.py` | direct RS485/Modbus self-check (troubleshooting) |
+
+> Removed: `tools/convert_rpm_flash.py` (the custom RPM flash is now a theme
+> rule, see THEMES.en.md), `tools/theme_packer/pack_theme.py` (runtime themes
+> are now uniformly the editor's exported theme.bin), `tools/make_boot_block.py`
+> (replaced by `make_video.py`), `main/python_quick_rs485_check.py` (the
+> brake-temperature module was removed). Boot animation media is now independent
+> of the selected theme and lives in the shared SD directory (prefer
+> `/OBD/BOOT/boot.obv`, see THEMES.en.md); it is no longer a static image
+> compiled into the firmware, and custom animation is skipped when no usable SD
+> media is present.
 
 ### PID-hunting workflow (find private PIDs without a car)
 
@@ -142,16 +239,208 @@ python3 tools/one_shot.py
 How it works: the fake server answers every unknown PID positively (so the
 app never marks it unsupported and asks its whole profile), and each injected
 signal corresponds to one real app request — pairing them in order recovers
-which PID drives which gauge and its decode formula. Feed the results into a
-vehicle profile per [VEHICLES.en.md](VEHICLES.en.md#adding-a-vehicle).
+which PID drives which gauge and its decode formula. For how to turn that
+into an `rpn` formula, see [PID_GUIDE.en.md](PID_GUIDE.en.md); then feed the
+results into a vehicle profile per
+[VEHICLES.en.md](VEHICLES.en.md#adding-or-editing-a-vehicle).
+
+## Host unit tests and CI
+
+`main/vehicle/`, `main/theme_engine/`, `main/media/` (OBV1),
+`main/bsp_obd_dsp/espnow_v6.c` and other pure-C modules have no ESP-IDF /
+FreeRTOS dependency, so they build and run on the host — no device, no
+`idf.py` needed:
+
+```bash
+cmake -S test/host/<suite> -B build/host/<suite> -G Ninja
+cmake --build build/host/<suite>
+ctest --test-dir build/host/<suite> --output-on-failure
+```
+
+`<suite>` is one of the directories under `test/host/`: `rules` (rules
+engine, 38 golden vectors + output-cache comparisons), `vehicle` (vehicle RPN compile/validate +
+golden request sequences), `espnow` (v5/v6 codec + RaceChrono filter scheduling), `media` (OBV1 parser +
+legacy delta stream + CRC comparisons + real-player control waits), `engine` (the vehicle polling engine, golden request
+sequences), `theme` (theme engine: layout/overlay/sidecar/pixel conversion; theme_tick caches the active page and indexes dynamic bindings), `signal_store` (batched reads, staleness checks, and performance histograms),
+`storage` (real storage service, slot/no-slot configurations, boot/hotplug/OTA/retry timing; SDK/RTOS boundary stubs).
+
+`signal_store` also contains delivered-unit conversion comparisons: `SS_SANITIZE=ON` (the
+default) enables ASAN/UBSAN, and `SS_DELIVERY_BENCHMARK=ON` builds the conversion benchmark.
+The benchmark command and ESP32 target-code check are documented in [PERFORMANCE.en.md](PERFORMANCE.en.md);
+it measures only conversion functions, not lock, page, or device end-to-end time.
+
+`engine`'s `EH_CAN_BENCHMARK=ON` builds only the CAN rule-selection experiment, which is not
+used by firmware. `EH_REQUEST_BENCHMARK=ON` builds the vehicle request-dispatch index
+microbenchmark; it checks linear versus request-to-source checksums and reports desktop
+selection time for fixed inputs, not firmware timing. The complete command and target compile
+result are documented in [PERFORMANCE.en.md](PERFORMANCE.en.md).
+
+`engine_poll_plan` includes the actual engine and compares full state/slot sequences with the
+old planning loop 100,352 times, covering shared-request deadlines, round resets, source switches,
+and time wrap. `EH_POLL_BENCHMARK=ON` builds the separate-driver local-mask deduplication benchmark;
+inputs, results, and measurement boundaries are in [PERFORMANCE.en.md](PERFORMANCE.en.md).
+The production engine contains no test hooks.
+
+`engine_queue_copy` includes the real engine and runs 246,272 complete-state, popped-step and
+drop-log comparisons against an independent old implementation, covering all queue heads/counts,
+truncation/NUL boundaries and continuous wraparound. `EH_QUEUE_BENCHMARK=ON` builds a separate
+push/pop/checksum driver; correctness tests run by default, timing does not. `EH_QUEUE_SOURCE`
+may point to an engine copy only for temporary baselines/negative controls; normal tests must leave it
+empty and compile production source. This override does not affect firmware. Commands and
+measurement boundaries are in [PERFORMANCE.en.md](PERFORMANCE.en.md).
+
+`engine_state_format` reuses the real-engine/queue probe for 178,928 complete-state/step/log
+comparisons with independent old formatting, covering ID masks/widths, address off sentinels,
+the CAF default branch and req metadata. `EH_STATE_BENCHMARK=ON` builds a separate driver;
+only correctness runs by default. `EH_STATE_BASELINE_SOURCE` may point to complete old source
+with the same layout. Only the optional benchmark links it in a separate translation unit
+with symbol aliases, alternating two actual production wrappers in one process; without it,
+the private reference is used. `EH_QUEUE_SOURCE` remains for temporary source baselines/negative
+controls; leave it empty for normal tests. Reproduction commands, raw data, host constant-path
+slowdowns and target footprint costs are in [PERFORMANCE.en.md](PERFORMANCE.en.md).
+The production engine contains no test hooks.
+
+`engine_rx_append` compares an independent old receive loop in 219,423 complete-engine-byte
+and real-CAN-monitor-callback replays, covering NUL/empty input, all byte values, chunk splits,
+prompts beyond capacity, busy/kind gates and timestamp wrap. Normal tests leave `EH_RX_SOURCE`
+empty; this override is only for temporary experiments/negative controls. `EH_RX_BENCHMARK=ON`
+requires complete old source with matching layout via `EH_RX_BASELINE_SOURCE`, alternating actual
+receive wrappers in one process on the same address. Timing is off by default. Long all-NUL
+chunks regress in the repeat run; full measurement boundaries and reproduction commands are
+in [PERFORMANCE.en.md](PERFORMANCE.en.md). These options do not affect firmware.
+
+`vehicle_rpn_integer` includes the actual production RPN source in a private probe and
+compares independent old double rules against 1,001,690 bit patterns and 610,140 complete
+formulas by default. `VH_INTEGER_SOURCE` is only for temporary probe experiments/negative
+controls; leave it empty for normal tests. Optional Release `--exhaustive` covers every
+Binary32 bit pattern and is outside default CI. `VH_INTEGER_BENCHMARK=ON` requires complete
+old source via `VH_INTEGER_BASELINE_SOURCE`, alternating whole evaluators in one process
+and adding the old evaluator to formula comparisons. Timing is off by default; these options
+do not affect firmware. Boundary proofs, small host gains/regressions, target software-float
+dependencies and static frame changes are in [PERFORMANCE.en.md](PERFORMANCE.en.md).
+
+`vehicle_rpn_raw_float` reuses the private RPN probe for 4,274,988 complete formula comparisons
+by default: independent per-bit extraction, old 64-bit conversion float patterns and untouched
+error sentinels. Leave `VH_INTEGER_SOURCE` empty here too; temporary overrides do not affect
+normal `vehicle_core`. Optional Release `test_rpn_raw_float --exhaustive` covers signed/unsigned
+complete formulas for all raw32 values; default CI excludes exhaustive checks.
+`VH_INTEGER_BENCHMARK=ON` with complete old source via `VH_INTEGER_BASELINE_SOURCE` also provides
+`bench_rpn_raw_float` and old-evaluator comparisons, sharing a driver with cases selected by a
+compile definition. Host regressions, target hardware-conversion rationale and the 32-byte
+firmware cost are in [PERFORMANCE.en.md](PERFORMANCE.en.md). These options do not affect firmware.
+
+`engine_write_rounding` includes real private writeback, comparing 1,720,944 rounding inputs
+and 33,280 complete states/callbacks against original double rules by default. `EH_WRITE_SOURCE`
+is for temporary negative controls; ordinary tests keep it empty. Optional Release
+`test_write_rounding --exhaustive` checks all Binary32 rounding inputs outside default CI;
+`EH_WRITE_BENCHMARK=ON` builds the rounding-only benchmark. Boundary fixes, host regressions and
+target hardware instructions are documented in [PERFORMANCE.en.md](PERFORMANCE.en.md).
+These tests/options do not enter firmware.
+
+`signal_store` adds `signal_lookup`, checking every 16-bit ID and each vehicle count
+against the real store, frozen old scan and independent linear oracle.
+`signal_lookup_generator` generates and compiles eight reordered/sparse registries to
+verify ID-to-slot mapping. Optional Release `SS_LOOKUP_BENCHMARK=ON` enables local
+lookup and real ESP-NOW apply timing, off by default. Desktop locks are stubs; evidence,
+local RPM regression and first-run variation are in [PERFORMANCE.en.md](PERFORMANCE.en.md).
+These tests and benchmarks do not enter firmware.
+
+`espnow` adds `snapshot_append`, comparing unique append against frozen old insertion
+across all 16-bit IDs, validity masks, gear and capacity bounds. `master_collect` includes
+the real private collector, comparing full snapshots and all v5/v6 bytes over 35,012 inputs.
+Append requires caller-guaranteed unique IDs; replacement keeps general insertion.
+Optional Release `EH_COLLECT_BENCHMARK=ON` builds insertion, real collection and complete
+collection-plus-encode timing, off by default. Stubs exclude real locks and radio; desktop
+encode uses portable CRC. Target code cost and measurement limits are in
+[PERFORMANCE.en.md](PERFORMANCE.en.md). These tests/options do not enter firmware.
+
+`espnow` adds portable CRC comparison. When SDK sources are available, the real
+`ESP_PLATFORM` codec also runs the full protocol suite, exhaustive two-byte CRC/state
+transitions and complete fragment-byte comparison. Select SDK sources with
+`EH_ESP_ROM_DIR` or disable compatibility with `EH_ROM_CRC=OFF`.
+`EH_CRC_BENCHMARK=ON` enables desktop CRC/full-codec timing in Release, off by default.
+These tests and SDK Linux tables do not enter firmware, which uses ROM. Evidence
+and measurement limits are in [PERFORMANCE.en.md](PERFORMANCE.en.md).
+
+`media` runs pure-C container and CRC tests by default. When ESP-IDF `esp_rom` sources
+are available, it also compiles the `ESP_PLATFORM` path against the SDK Linux CRC
+implementation. Set `MH_ESP_ROM_DIR` to its source directory, or `MH_ROM_CRC=OFF` to
+disable these two compatibility tests; the basic tests need no SDK installation.
+See [PERFORMANCE.en.md](PERFORMANCE.en.md) for the distinction between desktop benchmarks
+and ROM device timings.
+`media_video_player_wait` / `media_video_player_stats` compile the real `video_player.c` and
+`lvgl_runtime.c` with SDK/RTOS/LVGL/JPEG/LCD stubs for 47 isolated scenarios in each normal/statistics
+configuration: full-ring, pause/resume, header/watermark, UI handoff, deadlines, stop wakeups, LVGL
+notification registration/coalescing/wait gaps, retired-session late notifications, decode/publication
+interleavings and pending-frame lifetimes. Player controls run in the LVGL task or while holding `lvgl_mux`; workers do not call LVGL. Virtual 1 kHz ticks do not model device performance; production has no test hooks.
+Only negative controls should point `MH_PLAYER_SOURCE` / `MH_RUNTIME_SOURCE` at temporary implementation copies;
+by default it must test the repository production source.
+
+`theme_resample` compares the real channel conversion, old axis builder/full resample loop
+and public production path. Defaults cover 295,186 Binary32 inputs, 10,464 full images,
+100,303 axis pairs and allocation failures. Release `test_resample --exhaustive` checks
+all Binary32 patterns; `--axes-exhaustive` checks all 4,190,209 legal axis pairs.
+`TE_RESAMPLE_BENCHMARK=ON` builds complete-image timing with peak requested-byte tracing.
+It compares capacity changes by default; `bench_resample --rounding` preserves the earlier
+channel-quantizer comparison. `TE_RESAMPLE_SOURCE` is only for host negative controls and
+stays empty in ordinary tests. Target code/memory costs and measurement limits are in
+[PERFORMANCE.en.md](PERFORMANCE.en.md).
+
+The default `theme` suite also compares RGBA round-panel row clipping against the original
+per-pixel planner, covering all rim boundaries and randomized windows. Enable
+`TE_PLAN_BENCHMARK=ON` for image-planning timing; commands and scope are in
+[PERFORMANCE.en.md](PERFORMANCE.en.md).
+
+`theme` can additionally compile `theme_page.c` with real LVGL 8.4.0 and compare it
+with a page that applies looks on every tick. It checks LVGL object state, bindings, alarm
+recovery, and video switch/pause calls. Platform time, signal snapshots, and video I/O are
+controlled by the test; LCD DMA and video decoding do not run. The default pure-C suite
+needs no LVGL. Enable the integration test with:
+
+```bash
+cmake -S test/host/theme -B /tmp/obd-theme-page-tests -G Ninja -DTE_PAGE_LVGL=ON
+cmake --build /tmp/obd-theme-page-tests
+ctest --test-dir /tmp/obd-theme-page-tests --output-on-failure
+```
+
+`theme_acquire` also compiles real acquisition/cache against the frozen old acquisition, checking
+1,006 pixel/geometry cases, every RGB565 code, RAM pixel lifetime, budgets, tint, SD read and allocation
+failures. Both paths share geometry/conversion helpers; actual SD/LCD timing is not simulated.
+Release `test_acquire --benchmark` times whole artwork acquisition/release and preserves alternating
+raw samples, separate from pixel/peak checks; scope is in
+[PERFORMANCE.en.md](PERFORMANCE.en.md).
+
+`theme_sd_loader_library` compiles the real SD loader/library and covers packages over
+4 MiB, font segments, missing cards/bad packages/bounds/lock timeout, NVS save failure,
+selected-package replacement and old marker recovery. It links no Flash read/write implementation.
+`theme_media_migration` compiles real migration code to check legacy partition lookup,
+preservation of existing SD files/selections, failed selection retry and rescue lock release.
+
+Sources default to `managed_components/lvgl__lvgl`. Without installed managed components,
+point `TE_LVGL_DIR` at LVGL 8.4.0 sources. CI's `host-theme` pins that version's commit and
+enables this test.
+
+`spi_lock` extracts the real `schedule_core` / `bg_exit_core` functions from pinned ESP-IDF v5.5.3 sources and compiles the stock negative control and patched version. It checks 242 lock/background-transfer states plus patch idempotence and rejection of unknown context. Platform boundaries are stubbed; this does not model actual interrupt timing or LCD performance. By default it downloads the pinned release with SHA-256 verification; offline, pass `-DSPI_LOCK_SOURCE=/path/to/esp-idf/components/esp_hw_support/spi_bus_lock.c` (stock v5.5.3 required). CI runs it within `host-storage`.
+
+After `project()`, firmware builds include `cmake/idf_spi_bus_lock.cmake` to apply the SPI lock fix from upstream commit `26263a36a2b3fe0649ccb20a02517c6c4b18e01b` to a build-local copy and replace that source in `esp_hw_support`. The installed SDK is unchanged. Patch context is matched exactly; already-applied hunks are unchanged and unknown SDK context stops configuration for review. When upgrading the SDK, review both this patch and the `spi_lock` negative-control version.
+
+CI (`.github/workflows/ci.yml`) runs 9 jobs: `contracts`
+(`contracts/check_contracts.py` + `tools/gen_layout.py --check --no-idf`) and
+one job per eight existing host suites above (`host-rules`/`host-vehicle`/`host-espnow`/
+`host-media`/`host-engine`/`host-theme`/`host-signal-store`/`host-storage`); the `spi_lock` regression runs in `host-storage`. `gen_themes.py --check` is
+currently a manual local check only — it is not in CI.
 
 ## Release workflow
 
 `tools/release.sh` is the one-shot flow: activate the ESP-IDF environment
-(eim) → commit sources (**commit first** — `count` is the git commit count) →
-`idf.py build` → `tools/gen_release.py` copies `build/` artifacts into
-`firmware/release/` and rewrites `latest.json` (sha256/size per file) →
-commit and push.
+(eim) → commit sources (**commit first** — `count` is the git commit count;
+skipped when the tree is already clean, releasing HEAD as is) →
+`idf.py reconfigure build` (reconfigure so CMake re-reads the commit count) →
+`tools/gen_release.py` copies `build/` artifacts into `firmware/release/` and
+rewrites `latest.json` (sha256/size per file; refuses to write out when the
+firmware's embedded build tag does not match HEAD) → a separate `build:`
+commit for the artifacts (source and artifact commits stay separate, per
+AGENTS.md) → push.
 
 Minimal app-side release layout:
 

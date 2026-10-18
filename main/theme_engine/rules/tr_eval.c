@@ -2,6 +2,10 @@
 #include <math.h>
 #include <string.h>
 
+#if TR_MAX_RULES > 32
+#error "resolved rule mask requires TR_MAX_RULES <= 32"
+#endif
+
 // A JS operand: current is always a number (NaN when invalid) or undefined
 // (unknown key); a threshold may also be null or another JSON type.
 typedef struct {
@@ -152,10 +156,36 @@ void tr_reset(tr_program_t *prog)
     memset(prog->state.latch, 0xFF, sizeof(prog->state.latch));
     memset(prog->state.deb_armed, 0, sizeof(prog->state.deb_armed));
     for (int i = 0; i < TR_MAX_RULES; i++) prog->state.deb_start[i] = 0.0;
+    memset(prog->state.animation_start, 0, sizeof(prog->state.animation_start));
+    memset(prog->state.hold_until, 0, sizeof(prog->state.hold_until));
+    memset(prog->state.animation_armed, 0, sizeof(prog->state.animation_armed));
     if (prog->n_targets) memset(prog->ovr, 0, prog->n_targets * sizeof(tr_override_t));
+    prog->resolved_mask = 0;
+    prog->have_resolved = false;
     memset(&prog->result, 0, sizeof(prog->result));
     prog->result.n_targets = prog->n_targets;
     prog->result.ovr = prog->ovr;
+}
+
+static double anim_progress(const tr_animation_t *a, double elapsed)
+{
+    double duration = a->duration_ms > 0.0 ? a->duration_ms : 1000.0;
+    if (a->mode == 3) {
+        double phase = fmod(fmax(0.0, elapsed) * a->frequency_hz / 1000.0, 1.0);
+        return phase < 0.5 ? 1.0 : 0.0;
+    }
+    double t = fmax(0.0, fmin(1.0, elapsed / duration));
+    if (a->mode != 2 || a->n_frames == 0) return t;
+    if (t <= a->frame_at[0]) return a->frame_value[0];
+    for (uint8_t i = 1; i < a->n_frames; i++) {
+        if (t <= a->frame_at[i]) {
+            double span = a->frame_at[i] - a->frame_at[i - 1];
+            if (span <= 0.0) return a->frame_value[i];
+            double part = (t - a->frame_at[i - 1]) / span;
+            return a->frame_value[i - 1] + (a->frame_value[i] - a->frame_value[i - 1]) * part;
+        }
+    }
+    return a->frame_value[a->n_frames - 1];
 }
 
 bool tr_rule_active(tr_program_t *prog, uint8_t rule_idx, const tr_inputs_t *in)
@@ -171,19 +201,57 @@ const tr_result_t *tr_eval(tr_program_t *prog, const tr_inputs_t *in)
     tr_result_t *res = &prog->result;
 
     // page order; a miss clears only the debounce timer, never the latches
-    uint8_t n = 0;
+    uint32_t active_mask = 0;
+    bool animated_active = false;
     for (uint8_t i = 0; i < prog->n_rules; i++) {
         const tr_rule_t *r = &prog->rules[i];
         uint8_t s = r->slot;
-        if (!rule_active(prog, r, in)) {
+        bool matched = rule_active(prog, r, in);
+        if (matched && r->transient_hold_ms > 0.0 &&
+            (r->trigger == TR_TRIG_TIMER || r->trigger == TR_TRIG_CHANGE)) {
+            st->hold_until[s] = in->elapsed_ms + r->transient_hold_ms;
+        }
+        bool candidate = matched ||
+            (r->transient_hold_ms > 0.0 &&
+             (r->trigger == TR_TRIG_TIMER || r->trigger == TR_TRIG_CHANGE) &&
+             st->hold_until[s] > 0.0 &&
+             in->elapsed_ms < st->hold_until[s]);
+        if (!candidate) {
             st->deb_armed[s] = 0;
+            st->animation_armed[s] = 0;
             continue;
         }
         if (!st->deb_armed[s]) {
             st->deb_armed[s] = 1;
             st->deb_start[s] = in->elapsed_ms;
         }
-        if (in->elapsed_ms - st->deb_start[s] >= r->debounce_ms) res->active[n++] = i;
+        if (in->elapsed_ms - st->deb_start[s] >= r->debounce_ms) {
+            active_mask |= UINT32_C(1) << i;
+            bool rule_animated = false;
+            for (uint8_t a = 0; a < r->n_actions; a++) {
+                if (r->actions[a].animation.mode && (r->actions[a].props & TR_PROP_ANY_COLOR)) {
+                    rule_animated = true;
+                    break;
+                }
+            }
+            if (rule_animated) {
+                if (!st->animation_armed[s]) {
+                    st->animation_start[s] = in->elapsed_ms;
+                    st->animation_armed[s] = 1;
+                }
+                animated_active = true;
+            }
+        }
+    }
+
+    // The final active set uniquely determines the sort input and immutable
+    // actions. Keep evaluating state above even when the resolved output can
+    // be reused (shared IDs, timer windows and debounce depend on each tick).
+    if (!animated_active && prog->have_resolved && prog->resolved_mask == active_mask) return res;
+
+    uint8_t n = 0;
+    for (uint8_t i = 0; i < prog->n_rules; i++) {
+        if (active_mask & (UINT32_C(1) << i)) res->active[n++] = i;
     }
     res->n_active = n;
     sort_active(prog, res->active, n);
@@ -199,6 +267,14 @@ const tr_result_t *tr_eval(tr_program_t *prog, const tr_inputs_t *in)
                 o->props |= (uint8_t)(a->props & TR_PROP_ANY_COLOR);
                 o->color = a->color;
                 o->color_str = a->color_str;
+                if (a->animation.mode) {
+                    o->animated_color = 1;
+                    o->animation_progress = anim_progress(&a->animation,
+                        in->elapsed_ms - st->animation_start[r->slot]);
+                } else {
+                    o->animated_color = 0;
+                    o->animation_progress = 1.0;
+                }
             }
             if (a->props & TR_PROP_TEXT) {
                 o->props |= TR_PROP_TEXT;
@@ -216,6 +292,8 @@ const tr_result_t *tr_eval(tr_program_t *prog, const tr_inputs_t *in)
     }
     res->n_targets = prog->n_targets;
     res->ovr = prog->ovr;
+    prog->resolved_mask = active_mask;
+    prog->have_resolved = true;
     return res;
 }
 

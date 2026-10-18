@@ -1,14 +1,9 @@
 // Settings Page
-// Configure: default boot page, vehicle, UI theme and screen brightness.
-// Theme selection is saved and applied on reboot (esp_restart).
-// Swipe down (LV_DIR_BOTTOM) opens the multi-gauge page (see ui_event_settings_background).
+// Configure the active vehicle, UI theme and local display options.
 
 #include "../ui.h"
-#include <string.h>
 #include "bsp_obd_dsp/nvs_storage.h"
 #include "bsp_obd_dsp/lcd_driver/ST77916.h"
-#include "vehicle/vp_profile.h"
-#include "vehicle/vp_loader.h"
 #include "esp_system.h"
 
 // Page names for the boot-page roller. Order must match the default-page
@@ -19,30 +14,48 @@ static const char *page_names = "TEMP\nINFO\nCHART\nNEEDLE\nGEAR\nRPM\nSPEED";
 
 // Local references for settings widgets
 static lv_obj_t *s_roller_page = NULL;
-static lv_obj_t *s_roller_vehicle = NULL;
 static lv_obj_t *s_roller_theme = NULL;
+static lv_obj_t *s_btn_vehicle = NULL;
 static lv_obj_t *s_slider_bright = NULL;
 static lv_obj_t *s_label_bright_val = NULL;
 static lv_obj_t *s_btn_rc = NULL;
 static lv_obj_t *s_label_rc = NULL;
 static bool s_rc_enabled = false;
 
+static void on_vehicle_click(lv_event_t *e)
+{
+    (void)e;
+    _ui_screen_change(&ui_ScreenPageVehicle, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0,
+                      &ui_ScreenPageVehicle_screen_init);
+}
+
+static void on_theme_roller_change(lv_event_t *e)
+{
+    (void)e;
+    ui_theme_set_active((uint8_t)lv_roller_get_selected(s_roller_theme));
+    esp_restart();
+}
+
 // Callbacks
 static void on_page_roller_change(lv_event_t *e)
 {
-    nvs_user_cfg_t cfg = *nvs_cfg_get();
+    nvs_user_cfg_t base;
+    nvs_cfg_snapshot(&base);
+    nvs_user_cfg_t cfg = base;
     cfg.default_page = lv_roller_get_selected(s_roller_page);
-    nvs_cfg_set(&cfg);
+    nvs_cfg_update(&base, &cfg);
 }
 
 static void on_bright_slider_change(lv_event_t *e)
 {
     int32_t val = lv_slider_get_value(s_slider_bright);
     if(val < 10) val = 10;
-    lv_label_set_text_fmt(s_label_bright_val, "%ld%%", val);
-    nvs_user_cfg_t cfg = *nvs_cfg_get();
+    lv_label_set_text_fmt(s_label_bright_val, "%ld%%", (long)val);
+    nvs_user_cfg_t base;
+    nvs_cfg_snapshot(&base);
+    nvs_user_cfg_t cfg = base;
     cfg.brightness_day = (uint8_t)val;
-    nvs_cfg_set(&cfg);
+    nvs_cfg_update(&base, &cfg);
     Set_Backlight((uint8_t)val);
 }
 
@@ -54,34 +67,16 @@ static void on_rc_toggle(lv_event_t *e)
     lv_obj_set_style_text_color(s_label_rc,
         s_rc_enabled ? lv_color_hex(0x00CC66) : lv_color_hex(0x888888),
         LV_PART_MAIN);
-    nvs_user_cfg_t cfg = *nvs_cfg_get();
+    nvs_user_cfg_t base;
+    nvs_cfg_snapshot(&base);
+    nvs_user_cfg_t cfg = base;
     cfg.rc_enabled = s_rc_enabled ? 1 : 0;
-    nvs_cfg_set(&cfg);
-}
-
-static void on_vehicle_roller_change(lv_event_t *e)
-{
-    uint8_t selected = (uint8_t)lv_roller_get_selected(s_roller_vehicle);
-    nvs_user_cfg_t cfg = *nvs_cfg_get();
-    cfg.vehicle_profile_idx = selected;
-    nvs_cfg_set(&cfg);
-    // TODO: Apply immediately - vehicle_profile_set_active() needs to be reimplemented
-    // For now, profile change takes effect after reboot
-    // vehicle_profile_set_active(selected);
-}
-
-// Theme change: persist the selection, then reboot so every screen rebuilds
-// with the new theme colors (screens are created once at boot).
-static void on_theme_roller_change(lv_event_t *e)
-{
-    uint8_t selected = (uint8_t)lv_roller_get_selected(s_roller_theme);
-    ui_theme_set_active(selected);   // writes theme_cfg.theme to NVS
-    esp_restart();
+    nvs_cfg_update(&base, &cfg);
 }
 
 void ui_ScreenPageSettings_screen_init(void)
 {
-    const nvs_user_cfg_t *cfg = nvs_cfg_get();
+    nvs_user_cfg_t cfg = nvs_cfg_read();
 
     ui_ScreenPageSettings = lv_obj_create(NULL);
     lv_obj_clear_flag(ui_ScreenPageSettings, LV_OBJ_FLAG_SCROLLABLE);
@@ -103,6 +98,10 @@ void ui_ScreenPageSettings_screen_init(void)
     lv_obj_add_flag(ear, LV_OBJ_FLAG_ADV_HITTEST);
     lv_obj_clear_flag(ear, LV_OBJ_FLAG_SCROLLABLE);
 
+    // The ear mask crosses the ring at both upper sides. Keep the ring above
+    // that mask, but below the controls created afterward.
+    lv_obj_move_foreground(ring);
+
     // ====== Title ======
     lv_obj_t *title = lv_label_create(ui_ScreenPageSettings);
     lv_label_set_text(title, "SETTINGS");
@@ -122,43 +121,29 @@ void ui_ScreenPageSettings_screen_init(void)
     lv_obj_clear_flag(s_roller_page, LV_OBJ_FLAG_GESTURE_BUBBLE); // don't trigger page swipe while scrolling
     lv_roller_set_options(s_roller_page, page_names, LV_ROLLER_MODE_NORMAL);
     lv_roller_set_visible_row_count(s_roller_page, 1);
-    lv_roller_set_selected(s_roller_page, (cfg->default_page < BOOT_PAGE_COUNT) ? cfg->default_page : 0, LV_ANIM_OFF);
+    lv_roller_set_selected(s_roller_page, (cfg.default_page < BOOT_PAGE_COUNT) ? cfg.default_page : 0, LV_ANIM_OFF);
     lv_obj_set_width(s_roller_page, 140);
     lv_obj_set_height(s_roller_page, 30);   // explicit: font is applied by style_dark_roller below
     ui_helpers_style_dark_roller(s_roller_page, &ui_font_FontTypoderSize20);
     lv_obj_align(s_roller_page, LV_ALIGN_CENTER, 0, -84);
     lv_obj_add_event_cb(s_roller_page, on_page_roller_change, LV_EVENT_VALUE_CHANGED, NULL);
 
-    // ====== Row 2: Vehicle ======
-    lv_obj_t *label_vehicle = lv_label_create(ui_ScreenPageSettings);
-    lv_label_set_text(label_vehicle, "VEHICLE");
-    lv_obj_set_style_text_font(label_vehicle, &ui_font_FontTypoderSize16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(label_vehicle, ui_theme_color_lv(UI_COLOR_TEXT_SECONDARY), LV_PART_MAIN);
-    lv_obj_align(label_vehicle, LV_ALIGN_CENTER, 0, -57);
-
-    // Build vehicle options dynamically from the profile table (newline separated).
-    // TODO: Reimplemented to use vp_loader API when profile loading from SD is ready
-    // For now, show only "Generic OBD2"
-    uint8_t vehicle_count = 1;
-    const char *vehicle_names = "Generic OBD2";
-    // const vp_profile_t *vehicle_list = vehicle_profile_get_all(&vehicle_count);
-    // char vehicle_names[160] = {0};
-    // for (uint8_t i = 0; i < vehicle_count; i++) {
-    //     if (i > 0) strlcat(vehicle_names, "\n", sizeof(vehicle_names));
-    //     strlcat(vehicle_names, vehicle_list[i].name, sizeof(vehicle_names));
-    // }
-
-    s_roller_vehicle = lv_roller_create(ui_ScreenPageSettings);
-    lv_obj_set_style_clip_corner(s_roller_vehicle, true, 0);
-    lv_obj_clear_flag(s_roller_vehicle, LV_OBJ_FLAG_GESTURE_BUBBLE);
-    lv_roller_set_options(s_roller_vehicle, vehicle_names, LV_ROLLER_MODE_NORMAL);
-    lv_roller_set_visible_row_count(s_roller_vehicle, 1);
-    lv_roller_set_selected(s_roller_vehicle, 0, LV_ANIM_OFF);  // Always select index 0 (Generic OBD2)
-    lv_obj_set_width(s_roller_vehicle, 210);   // wide enough for long names (e.g. "BMW X1 F48")
-    lv_obj_set_height(s_roller_vehicle, 30);   // explicit: font is applied by style_dark_roller below
-    ui_helpers_style_dark_roller(s_roller_vehicle, &ui_font_FontTypoderSize20);
-    lv_obj_align(s_roller_vehicle, LV_ALIGN_CENTER, 0, -31);
-    lv_obj_add_event_cb(s_roller_vehicle, on_vehicle_roller_change, LV_EVENT_VALUE_CHANGED, NULL);
+    // ====== Row 2: Vehicle profile management ======
+    s_btn_vehicle = lv_btn_create(ui_ScreenPageSettings);
+    lv_obj_set_style_clip_corner(s_btn_vehicle, true, 0);
+    lv_obj_set_size(s_btn_vehicle, 180, 30);
+    lv_obj_align(s_btn_vehicle, LV_ALIGN_CENTER, 0, -44);
+    lv_obj_set_style_bg_color(s_btn_vehicle, lv_color_hex(0x333333), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(s_btn_vehicle, 255, LV_PART_MAIN);
+    lv_obj_set_style_radius(s_btn_vehicle, 6, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(s_btn_vehicle, 2, LV_PART_MAIN);
+    lv_obj_clear_flag(s_btn_vehicle, LV_OBJ_FLAG_GESTURE_BUBBLE);
+    lv_obj_t *label_vehicle_btn = lv_label_create(s_btn_vehicle);
+    lv_label_set_text(label_vehicle_btn, "VEHICLE");
+    lv_obj_set_style_text_font(label_vehicle_btn, &ui_font_FontTypoderSize20, LV_PART_MAIN);
+    lv_obj_set_style_text_color(label_vehicle_btn, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+    lv_obj_center(label_vehicle_btn);
+    lv_obj_add_event_cb(s_btn_vehicle, on_vehicle_click, LV_EVENT_CLICKED, NULL);
 
     // ====== Row 3: UI Theme ======
     lv_obj_t *label_theme = lv_label_create(ui_ScreenPageSettings);
@@ -167,19 +152,16 @@ void ui_ScreenPageSettings_screen_init(void)
     lv_obj_set_style_text_color(label_theme, ui_theme_color_lv(UI_COLOR_TEXT_SECONDARY), LV_PART_MAIN);
     lv_obj_align(label_theme, LV_ALIGN_CENTER, 0, -4);
 
-    // Theme options come from the generated registry, joined into an exactly
-    // sized buffer — a fixed local array here used to silently truncate the
-    // list once enough themes were registered.
     uint8_t theme_count = ui_theme_count();
-
     s_roller_theme = lv_roller_create(ui_ScreenPageSettings);
     lv_obj_set_style_clip_corner(s_roller_theme, true, 0);
     lv_obj_clear_flag(s_roller_theme, LV_OBJ_FLAG_GESTURE_BUBBLE);
     lv_roller_set_options(s_roller_theme, ui_theme_names_joined(), LV_ROLLER_MODE_NORMAL);
     lv_roller_set_visible_row_count(s_roller_theme, 1);
-    lv_roller_set_selected(s_roller_theme, (cfg->theme_cfg.theme < theme_count) ? cfg->theme_cfg.theme : 0, LV_ANIM_OFF);
+    lv_roller_set_selected(s_roller_theme,
+        (cfg.theme_cfg.theme < theme_count) ? cfg.theme_cfg.theme : 0, LV_ANIM_OFF);
     lv_obj_set_width(s_roller_theme, 160);
-    lv_obj_set_height(s_roller_theme, 30);   // explicit: font is applied by style_dark_roller below
+    lv_obj_set_height(s_roller_theme, 30);
     ui_helpers_style_dark_roller(s_roller_theme, &ui_font_FontTypoderSize20);
     lv_obj_align(s_roller_theme, LV_ALIGN_CENTER, 0, 22);
     lv_obj_add_event_cb(s_roller_theme, on_theme_roller_change, LV_EVENT_VALUE_CHANGED, NULL);
@@ -194,7 +176,7 @@ void ui_ScreenPageSettings_screen_init(void)
     s_slider_bright = lv_slider_create(ui_ScreenPageSettings);
     lv_obj_set_style_clip_corner(s_slider_bright, true, 0);
     lv_slider_set_range(s_slider_bright, 10, 100);
-    lv_slider_set_value(s_slider_bright, cfg->brightness_day, LV_ANIM_OFF);
+    lv_slider_set_value(s_slider_bright, cfg.brightness_day, LV_ANIM_OFF);
     lv_obj_set_width(s_slider_bright, 180);
     lv_obj_set_height(s_slider_bright, 10);
     lv_obj_align(s_slider_bright, LV_ALIGN_CENTER, 0, 70);
@@ -208,7 +190,7 @@ void ui_ScreenPageSettings_screen_init(void)
     lv_obj_add_event_cb(s_slider_bright, on_bright_slider_change, LV_EVENT_VALUE_CHANGED, NULL);
 
     s_label_bright_val = lv_label_create(ui_ScreenPageSettings);
-    lv_label_set_text_fmt(s_label_bright_val, "%d%%", cfg->brightness_day);
+    lv_label_set_text_fmt(s_label_bright_val, "%d%%", cfg.brightness_day);
     lv_obj_set_style_text_font(s_label_bright_val, &ui_font_FontTypoderSize24, LV_PART_MAIN);
     lv_obj_set_style_text_color(s_label_bright_val, ui_theme_color_lv(UI_COLOR_TEXT_PRIMARY), LV_PART_MAIN);
     lv_obj_align(s_label_bright_val, LV_ALIGN_CENTER, 0, 95);
@@ -218,9 +200,9 @@ void ui_ScreenPageSettings_screen_init(void)
     lv_label_set_text(label_rc, "RACECHRONO");
     lv_obj_set_style_text_font(label_rc, &ui_font_FontTypoderSize16, LV_PART_MAIN);
     lv_obj_set_style_text_color(label_rc, ui_theme_color_lv(UI_COLOR_TEXT_SECONDARY), LV_PART_MAIN);
-    lv_obj_align(label_rc, LV_ALIGN_CENTER, -40, 122);   // label + button share one row to save height
+    lv_obj_align(label_rc, LV_ALIGN_CENTER, -40, 122);
 
-    s_rc_enabled = cfg->rc_enabled;
+    s_rc_enabled = cfg.rc_enabled;
     s_btn_rc = lv_btn_create(ui_ScreenPageSettings);
     lv_obj_set_style_clip_corner(s_btn_rc, true, 0);
     lv_obj_set_size(s_btn_rc, 60, 26);
@@ -236,15 +218,6 @@ void ui_ScreenPageSettings_screen_init(void)
     lv_obj_center(s_label_rc);
     lv_obj_add_event_cb(s_btn_rc, on_rc_toggle, LV_EVENT_CLICKED, NULL);
 
-    // ====== Hint ======
-    lv_obj_t *hint = lv_label_create(ui_ScreenPageSettings);
-    lv_label_set_text(hint, "Swipe down: multi-gauge\nL/R: back");
-    lv_obj_set_style_text_font(hint, &lv_font_montserrat_12, LV_PART_MAIN);
-    lv_obj_set_style_text_color(hint, lv_color_hex(0x555555), LV_PART_MAIN);
-    lv_obj_set_style_text_align(hint, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-    lv_obj_align(hint, LV_ALIGN_CENTER, 0, 152);
-
     // Events - swipe to go back / down to multi-gauge
-    lv_obj_move_foreground(ring);   // ring on top
     lv_obj_add_event_cb(ui_ScreenPageSettings, ui_event_settings_background, LV_EVENT_GESTURE, NULL);
 }

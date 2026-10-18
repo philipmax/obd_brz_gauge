@@ -1,495 +1,564 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OBD Gauge - Device Control</title>
-    <style>
-        :root {
-            --primary: #2196F3;
-            --success: #4CAF50;
-            --danger: #f44336;
-            --warning: #FF9800;
-            --bg: #1e1e1e;
-            --surface: #2d2d2d;
-            --text: #ffffff;
-            --text-secondary: #b0b0b0;
-        }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            padding: 16px;
-            line-height: 1.6;
-        }
-        .container { max-width: 800px; margin: 0 auto; }
-        .card {
-            background: var(--surface);
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 16px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-        }
-        h1 { font-size: 24px; margin-bottom: 8px; }
-        h2 { font-size: 18px; margin-bottom: 12px; color: var(--primary); }
-        .status { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
-        .status-dot {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            background: var(--text-secondary);
-        }
-        .status-dot.connected { background: var(--success); animation: pulse 2s infinite; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-        .btn {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 4px;
-            font-size: 14px;
-            cursor: pointer;
-            transition: opacity 0.2s;
-            margin-right: 8px;
-            margin-bottom: 8px;
-        }
-        .btn:hover { opacity: 0.8; }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .btn-primary { background: var(--primary); color: white; }
-        .btn-success { background: var(--success); color: white; }
-        .btn-danger { background: var(--danger); color: white; }
-        .btn-warning { background: var(--warning); color: white; }
-        .btn-secondary { background: #555; color: white; }
-        .form-group { margin-bottom: 16px; }
-        label { display: block; margin-bottom: 4px; font-size: 14px; color: var(--text-secondary); }
-        input, select {
-            width: 100%;
-            padding: 8px;
-            background: var(--bg);
-            border: 1px solid #444;
-            border-radius: 4px;
-            color: var(--text);
-            font-size: 14px;
-        }
-        .progress {
-            height: 24px;
-            background: var(--bg);
-            border-radius: 4px;
-            overflow: hidden;
-            margin-bottom: 8px;
-        }
-        .progress-bar {
-            height: 100%;
-            background: var(--primary);
-            transition: width 0.3s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 12px;
-        }
-        .log {
-            background: var(--bg);
-            border-radius: 4px;
-            padding: 12px;
-            max-height: 200px;
-            overflow-y: auto;
-            font-family: 'Courier New', monospace;
-            font-size: 12px;
-        }
-        .log-entry { margin-bottom: 4px; }
-        .log-entry.error { color: var(--danger); }
-        .log-entry.success { color: var(--success); }
-        .log-entry.info { color: var(--primary); }
-        .tabs {
-            display: flex;
-            gap: 4px;
-            margin-bottom: 16px;
-            border-bottom: 1px solid #444;
-        }
-        .tab {
-            padding: 8px 16px;
-            background: none;
-            border: none;
-            color: var(--text-secondary);
-            cursor: pointer;
-            border-bottom: 2px solid transparent;
-        }
-        .tab.active {
-            color: var(--primary);
-            border-bottom-color: var(--primary);
-        }
-        .tab-content { display: none; }
-        .tab-content.active { display: block; }
-        .file-input-wrapper {
-            position: relative;
-            overflow: hidden;
-            display: inline-block;
-        }
-        .file-input-wrapper input[type=file] {
-            position: absolute;
-            left: -9999px;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        th, td {
-            padding: 8px;
-            text-align: left;
-            border-bottom: 1px solid #444;
-        }
-        th { color: var(--text-secondary); font-weight: 500; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OBD Gauge</title>
+<style>
+:root {
+    --primary: #2196F3;
+    --success: #4CAF50;
+    --danger: #f44336;
+    --warning: #FF9800;
+    --bg: #1e1e1e;
+    --surface: #2d2d2d;
+    --line: #444;
+    --text: #ffffff;
+    --muted: #b0b0b0;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 16px;
+    line-height: 1.5;
+    font-size: 14px;
+}
+.container { max-width: 820px; margin: 0 auto; }
+.card {
+    background: var(--surface);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+h1 { font-size: 22px; }
+h2 { font-size: 17px; margin-bottom: 10px; color: var(--primary); }
+.status { display: flex; align-items: center; gap: 8px; margin-top: 6px; color: var(--muted); }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
+.dot.ok { background: var(--success); }
+.dot.bad { background: var(--danger); }
+.btn {
+    padding: 7px 14px;
+    border: none;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+    margin: 0 6px 6px 0;
+    color: #fff;
+    background: #555;
+}
+.btn:hover { opacity: 0.85; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn.p { background: var(--primary); }
+.btn.s { background: var(--success); }
+.btn.d { background: var(--danger); }
+.btn.w { background: var(--warning); }
+.btn.sm { padding: 3px 9px; font-size: 12px; margin: 2px 4px 2px 0; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 8px; }
+.muted { color: var(--muted); }
+input[type=file] { color: var(--muted); max-width: 100%; }
+select {
+    padding: 6px;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    color: var(--text);
+}
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 6px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; word-break: break-word; }
+th { color: var(--muted); font-weight: 500; }
+td.k { color: var(--muted); width: 38%; }
+.tag { display: inline-block; padding: 0 6px; border-radius: 3px; font-size: 11px; background: #555; margin-right: 4px; }
+.tag.a { background: var(--success); }
+.tag.n { background: var(--warning); }
+.tag.f { background: var(--danger); }
+.progress { height: 18px; background: var(--bg); border-radius: 4px; overflow: hidden; margin: 6px 0; display: none; }
+.bar { height: 100%; width: 0; background: var(--primary); font-size: 11px; text-align: center; transition: width 0.2s; }
+pre {
+    background: var(--bg);
+    border-radius: 4px;
+    padding: 10px;
+    max-height: 320px;
+    overflow: auto;
+    font-family: Menlo, Consolas, 'Courier New', monospace;
+    font-size: 12px;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+.log div { margin-bottom: 2px; }
+.log .error { color: var(--danger); }
+.log .success { color: var(--success); }
+.log .info { color: var(--primary); }
+a.dir { color: var(--primary); cursor: pointer; text-decoration: none; }
+</style>
 </head>
 <body>
-    <div class="container">
-        <div class="card">
-            <h1>🚗 OBD Gauge Control Panel</h1>
-            <div class="status">
-                <div class="status-dot" id="statusDot"></div>
-                <span id="statusText">Connecting...</span>
-            </div>
-        </div>
+<div class="container">
+    <div class="card">
+        <h1>OBD Gauge</h1>
+        <div class="status"><div class="dot" id="dot"></div><span id="statusText">Connecting...</span></div>
+    </div>
 
-        <div class="tabs">
-            <button class="tab active" onclick="switchTab('ota')">OTA Update</button>
-            <button class="tab" onclick="switchTab('config')">Configuration</button>
-            <button class="tab" onclick="switchTab('vehicle')">Vehicle Profile</button>
-            <button class="tab" onclick="switchTab('system')">System Info</button>
-        </div>
-
-        <div id="otaTab" class="tab-content active">
-            <div class="card">
-                <h2>Firmware Update</h2>
-                <div class="form-group">
-                    <label>Select Firmware (.bin)</label>
-                    <div class="file-input-wrapper">
-                        <button class="btn btn-secondary">Choose File</button>
-                        <input type="file" id="firmwareFile" accept=".bin" onchange="handleFileSelect(this)">
-                    </div>
-                    <span id="fileName" style="margin-left: 8px;">No file selected</span>
-                </div>
-                <button class="btn btn-primary" onclick="uploadFirmware()" id="uploadBtn" disabled>Upload Firmware</button>
-                <button class="btn btn-danger" onclick="rebootDevice()">Reboot Device</button>
-                <div id="uploadProgress" style="display: none; margin-top: 16px;">
-                    <div class="progress">
-                        <div class="progress-bar" id="progressBar">0%</div>
-                    </div>
-                    <div id="uploadStatus"></div>
-                </div>
-            </div>
-
-            <div class="card">
-                <h2>Coredump Management</h2>
-                <button class="btn btn-warning" onclick="downloadCoredump()">Download Coredump</button>
-                <button class="btn btn-danger" onclick="eraseCoredump()">Erase Coredump</button>
-            </div>
-        </div>
-
-        <div id="configTab" class="tab-content">
-            <div class="card">
-                <h2>Device Configuration</h2>
-                <div class="form-group">
-                    <label>Theme Slot</label>
-                    <select id="themeSlot">
-                        <option value="0">Default</option>
-                        <option value="1">Theme 1</option>
-                        <option value="2">Theme 2</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Screen Brightness (%)</label>
-                    <input type="range" id="brightness" min="10" max="100" value="80">
-                    <span id="brightnessValue">80%</span>
-                </div>
-                <div class="form-group">
-                    <label>OBD Protocol</label>
-                    <select id="protocol">
-                        <option value="0">Auto</option>
-                        <option value="6">ISO 15765-4 CAN (11 bit, 500kb)</option>
-                        <option value="7">ISO 15765-4 CAN (29 bit, 500kb)</option>
-                        <option value="8">ISO 15765-4 CAN (11 bit, 250kb)</option>
-                        <option value="9">ISO 15765-4 CAN (29 bit, 250kb)</option>
-                    </select>
-                </div>
-                <button class="btn btn-success" onclick="saveConfig()">Save Configuration</button>
-                <button class="btn btn-secondary" onclick="loadConfig()">Refresh</button>
-            </div>
-        </div>
-
-        <div id="vehicleTab" class="tab-content">
-            <div class="card">
-                <h2>Vehicle Profile</h2>
-                <div class="form-group">
-                    <label>Select Profile</label>
-                    <select id="vehicleProfile">
-                        <option value="generic">OBD2 Generic</option>
-                    </select>
-                </div>
-                <button class="btn btn-primary" onclick="setVehicleProfile()">Apply Profile</button>
-                <div class="form-group" style="margin-top: 16px;">
-                    <label>Upload Custom Profile (.json)</label>
-                    <div class="file-input-wrapper">
-                        <button class="btn btn-secondary">Choose File</button>
-                        <input type="file" id="vehicleFile" accept=".json" onchange="handleVehicleSelect(this)">
-                    </div>
-                </div>
-                <button class="btn btn-success" onclick="uploadVehicleProfile()" id="uploadVehicleBtn" disabled>Upload Profile</button>
-            </div>
-        </div>
-
-        <div id="systemTab" class="tab-content">
-            <div class="card">
-                <h2>System Information</h2>
-                <table id="systemInfo">
-                    <tr><th>Property</th><th>Value</th></tr>
-                    <tr><td>Firmware Version</td><td id="fwVersion">Loading...</td></tr>
-                    <tr><td>Free Heap</td><td id="freeHeap">Loading...</td></tr>
-                    <tr><td>Uptime</td><td id="uptime">Loading...</td></tr>
-                    <tr><td>ELM327 Status</td><td id="elmStatus">Loading...</td></tr>
-                    <tr><td>Vehicle Profile</td><td id="activeProfile">Loading...</td></tr>
-                </table>
-                <button class="btn btn-secondary" onclick="refreshSystemInfo()" style="margin-top: 16px;">Refresh</button>
-            </div>
-        </div>
-
-        <div class="card">
-            <h2>Activity Log</h2>
-            <div class="log" id="activityLog"></div>
+    <div class="card">
+        <h2>Device</h2>
+        <table id="infoTable"></table>
+        <div class="row" style="margin-top:10px">
+            <button class="btn" id="infoBtn">Refresh</button>
+            <button class="btn" id="timeBtn">Sync time</button>
+            <button class="btn d" id="rebootBtn">Reboot</button>
         </div>
     </div>
 
-    <script>
-        const API_BASE = '/api/v1';
-        let firmwareData = null;
-        let vehicleData = null;
+    <div class="card">
+        <h2>Theme sidecar</h2>
+        <p class="muted" id="sidecarState"></p>
+        <div class="row">
+            <input type="file" id="sidecarFile" accept=".json,application/json">
+            <button class="btn s" id="sidecarBtn" disabled>Upload sidecar</button>
+            <button class="btn d" id="sidecarDelBtn">Remove sidecar</button>
+        </div>
+        <p class="muted">Accepts a sidecar JSON or a full .gaugeproj.json (files over 64 KB need the SD card).</p>
+        <div class="progress" id="sidecarProg"><div class="bar"></div></div>
+        <pre id="sidecarOut" style="display:none"></pre>
+    </div>
 
-        function log(message, type = 'info') {
-            const logEl = document.getElementById('activityLog');
-            const entry = document.createElement('div');
-            entry.className = `log-entry ${type}`;
-            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-            logEl.appendChild(entry);
-            logEl.scrollTop = logEl.scrollHeight;
-        }
+    <div class="card">
+        <h2>Files</h2>
+        <div class="row">
+            <select id="fsRoot">
+                <option value="/sdcard/OBD">SD card (/sdcard/OBD)</option>
+                <option value="/config">Config partition (/config)</option>
+            </select>
+            <button class="btn" id="fsUpBtn">Up</button>
+            <button class="btn" id="fsRefreshBtn">Refresh</button>
+        </div>
+        <p class="muted" id="fsPath"></p>
+        <table id="fsTable"></table>
+        <div class="row" style="margin-top:10px">
+            <input type="file" id="fsFile">
+            <button class="btn s" id="fsPutBtn" disabled>Upload here</button>
+        </div>
+        <div class="progress" id="fsProg"><div class="bar"></div></div>
+    </div>
 
-        function switchTab(tabName) {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-            event.target.classList.add('active');
-            document.getElementById(tabName + 'Tab').classList.add('active');
-        }
+    <div class="card">
+        <h2>Core dump</h2>
+        <p class="muted" id="cdState"></p>
+        <div class="row">
+            <button class="btn w" id="cdGetBtn">Download</button>
+            <button class="btn d" id="cdEraseBtn">Erase</button>
+        </div>
+    </div>
 
-        function updateStatus(connected) {
-            const dot = document.getElementById('statusDot');
-            const text = document.getElementById('statusText');
-            if (connected) {
-                dot.classList.add('connected');
-                text.textContent = 'Connected to device';
-            } else {
-                dot.classList.remove('connected');
-                text.textContent = 'Disconnected';
-            }
-        }
+    <div class="card">
+        <h2>Import log</h2>
+        <div class="row">
+            <button class="btn" id="logBtn">Load</button>
+            <select id="logBytes">
+                <option value="8192">last 8 KB</option>
+                <option value="32768">last 32 KB</option>
+            </select>
+        </div>
+        <pre id="logOut" style="display:none"></pre>
+    </div>
 
-        function handleFileSelect(input) {
-            const file = input.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    firmwareData = new Uint8Array(e.target.result);
-                    document.getElementById('fileName').textContent = file.name;
-                    document.getElementById('uploadBtn').disabled = false;
-                    log(`Selected: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`, 'info');
-                };
-                reader.readAsArrayBuffer(file);
-            }
-        }
+    <div class="card">
+        <h2>Activity</h2>
+        <div class="log" id="activity"></div>
+    </div>
+</div>
 
-        function handleVehicleSelect(input) {
-            const file = input.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    vehicleData = e.target.result;
-                    document.getElementById('uploadVehicleBtn').disabled = false;
-                    log(`Selected: ${file.name}`, 'info');
-                };
-                reader.readAsText(file);
-            }
-        }
+<script>
+'use strict';
+var API = '/api/v1';
+var CHUNK = 32768;          // SoftAP-stable maximum
+var RETRIES = 3;
+var token = '';
+var fsCwd = '/sdcard/OBD';
+var busy = false;
 
-        async function uploadFirmware() {
-            if (!firmwareData) return;
+function $(id) { return document.getElementById(id); }
 
-            const progressEl = document.getElementById('uploadProgress');
-            const progressBar = document.getElementById('progressBar');
-            const statusEl = document.getElementById('uploadStatus');
-            const uploadBtn = document.getElementById('uploadBtn');
-
-            progressEl.style.display = 'block';
-            uploadBtn.disabled = true;
-
-            const CHUNK_SIZE = 32768;
-            const total = firmwareData.length;
-            let offset = 0;
-
-            log('Starting firmware upload...', 'info');
-
-            try {
-                while (offset < total) {
-                    const chunk = firmwareData.slice(offset, offset + CHUNK_SIZE);
-                    const response = await fetch(`${API_BASE}/ota/chunk`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/octet-stream' },
-                        body: chunk
-                    });
-
-                    if (!response.ok) {
-                        throw new Error(`Upload failed: ${response.statusText}`);
-                    }
-
-                    offset += chunk.length;
-                    const percent = Math.round((offset / total) * 100);
-                    progressBar.style.width = percent + '%';
-                    progressBar.textContent = percent + '%';
-                    statusEl.textContent = `Uploaded ${(offset / 1024).toFixed(1)} / ${(total / 1024).toFixed(1)} KB`;
-                }
-
-                log('Upload complete, finalizing...', 'success');
-                const finalResp = await fetch(`${API_BASE}/ota/finalize`, { method: 'POST' });
-                if (finalResp.ok) {
-                    log('Firmware update successful! Device will reboot.', 'success');
-                    setTimeout(() => location.reload(), 5000);
-                } else {
-                    throw new Error('Finalization failed');
-                }
-            } catch (err) {
-                log(`Upload error: ${err.message}`, 'error');
-                uploadBtn.disabled = false;
-            }
-        }
-
-        async function rebootDevice() {
-            if (!confirm('Reboot the device?')) return;
-            try {
-                await fetch(`${API_BASE}/system/reboot`, { method: 'POST' });
-                log('Device rebooting...', 'info');
-                setTimeout(() => location.reload(), 3000);
-            } catch (err) {
-                log(`Reboot error: ${err.message}`, 'error');
-            }
-        }
-
-        async function downloadCoredump() {
-            try {
-                const resp = await fetch('/ota/coredump');
-                if (!resp.ok) throw new Error('No coredump available');
-                const blob = await resp.blob();
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'coredump.bin';
-                a.click();
-                log('Coredump downloaded', 'success');
-            } catch (err) {
-                log(`Coredump error: ${err.message}`, 'error');
-            }
-        }
-
-        async function eraseCoredump() {
-            if (!confirm('Erase coredump?')) return;
-            try {
-                await fetch('/ota/coredump/erase', { method: 'POST' });
-                log('Coredump erased', 'success');
-            } catch (err) {
-                log(`Erase error: ${err.message}`, 'error');
-            }
-        }
-
-        async function loadConfig() {
-            try {
-                const resp = await fetch(`${API_BASE}/config`);
-                const cfg = await resp.json();
-                document.getElementById('themeSlot').value = cfg.theme_slot || 0;
-                document.getElementById('brightness').value = cfg.brightness || 80;
-                document.getElementById('brightnessValue').textContent = (cfg.brightness || 80) + '%';
-                document.getElementById('protocol').value = cfg.protocol || 0;
-                log('Configuration loaded', 'success');
-            } catch (err) {
-                log(`Load error: ${err.message}`, 'error');
-            }
-        }
-
-        async function saveConfig() {
-            const cfg = {
-                theme_slot: parseInt(document.getElementById('themeSlot').value),
-                brightness: parseInt(document.getElementById('brightness').value),
-                protocol: parseInt(document.getElementById('protocol').value)
-            };
-            try {
-                await fetch(`${API_BASE}/config`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(cfg)
-                });
-                log('Configuration saved', 'success');
-            } catch (err) {
-                log(`Save error: ${err.message}`, 'error');
-            }
-        }
-
-        async function setVehicleProfile() {
-            const profile = document.getElementById('vehicleProfile').value;
-            try {
-                await fetch(`${API_BASE}/vehicle/active`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ profile })
-                });
-                log(`Vehicle profile set to: ${profile}`, 'success');
-            } catch (err) {
-                log(`Profile error: ${err.message}`, 'error');
-            }
-        }
-
-        async function uploadVehicleProfile() {
-            if (!vehicleData) return;
-            try {
-                await fetch(`${API_BASE}/vehicle/upload`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: vehicleData
-                });
-                log('Vehicle profile uploaded', 'success');
-            } catch (err) {
-                log(`Upload error: ${err.message}`, 'error');
-            }
-        }
-
-        async function refreshSystemInfo() {
-            try {
-                const resp = await fetch(`${API_BASE}/system/info`);
-                const info = await resp.json();
-                document.getElementById('fwVersion').textContent = info.version || 'Unknown';
-                document.getElementById('freeHeap').textContent = (info.free_heap / 1024).toFixed(1) + ' KB';
-                document.getElementById('uptime').textContent = Math.floor(info.uptime / 60) + ' min';
-                document.getElementById('elmStatus').textContent = info.elm_connected ? 'Connected' : 'Disconnected';
-                document.getElementById('activeProfile').textContent = info.vehicle_profile || 'generic';
-                log('System info refreshed', 'success');
-            } catch (err) {
-                log(`Refresh error: ${err.message}`, 'error');
-            }
-        }
-
-        document.getElementById('brightness').addEventListener('input', function() {
-            document.getElementById('brightnessValue').textContent = this.value + '%';
+function el(tag, props) {
+    var e = document.createElement(tag);
+    if (props) {
+        Object.keys(props).forEach(function (k) {
+            if (k === 'text') e.textContent = props[k];
+            else if (k === 'cls') e.className = props[k];
+            else if (k === 'onclick') e.onclick = props[k];
+            else e.setAttribute(k, props[k]);
         });
+    }
+    for (var i = 2; i < arguments.length; i++) {
+        var c = arguments[i];
+        if (c === null || c === undefined) continue;
+        e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+    }
+    return e;
+}
 
-        // Initialize
-        updateStatus(true);
-        log('Device web interface loaded', 'info');
-        loadConfig();
-        refreshSystemInfo();
-    </script>
+function log(msg, type) {
+    var box = $('activity');
+    box.appendChild(el('div', { cls: type || 'info', text: '[' + new Date().toLocaleTimeString() + '] ' + msg }));
+    while (box.childNodes.length > 60) box.removeChild(box.firstChild);
+    box.scrollTop = box.scrollHeight;
+}
+
+function setStatus(ok, text) {
+    $('dot').className = 'dot ' + (ok ? 'ok' : 'bad');
+    $('statusText').textContent = text;
+}
+
+function fmtBytes(n) {
+    if (n === undefined || n === null) return '-';
+    if (n >= 1073741824) return (n / 1073741824).toFixed(2) + ' GB';
+    if (n >= 1048576) return (n / 1048576).toFixed(2) + ' MB';
+    if (n >= 1024) return (n / 1024).toFixed(1) + ' KB';
+    return n + ' B';
+}
+
+function fmtUptime(s) {
+    var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+    return h + ' h ' + m + ' min';
+}
+
+function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+/* ---- HTTP ---- */
+
+function ApiError(status, body) {
+    this.status = status;
+    this.code = (body && body.error) || ('http_' + status);
+    this.detail = (body && body.detail) || '';
+    this.body = body;
+    this.message = this.code + (this.detail ? ': ' + this.detail : '');
+}
+
+async function request(method, url, opts) {
+    opts = opts || {};
+    var headers = Object.assign({ 'X-OTA-Token': token }, opts.headers || {});
+    var resp = await fetch(url, { method: method, headers: headers, body: opts.body, cache: 'no-store' });
+    if (opts.raw && resp.ok) return resp;
+    var text = await resp.text();
+    var body = null;
+    try { body = text ? JSON.parse(text) : null; } catch (e) { body = null; }
+    if (!resp.ok || (body && body.ok === false) || (body && body.error && body.ok === undefined)) {
+        throw new ApiError(resp.status, body);
+    }
+    return body !== null ? body : text;
+}
+
+function api(method, path, body) {
+    var opts = {};
+    if (body !== undefined) {
+        opts.body = typeof body === 'string' ? body : JSON.stringify(body);
+        opts.headers = { 'Content-Type': 'application/json' };
+    }
+    return request(method, API + path, opts);
+}
+
+async function connect() {
+    try {
+        var d = await fetch('/ota/discover', { cache: 'no-store' }).then(function (r) { return r.json(); });
+        if (!d.token) throw new Error(d.error || 'no token');
+        token = d.token;
+        setStatus(true, 'Connected to ' + d.ssid);
+        return true;
+    } catch (e) {
+        setStatus(false, 'Not connected: ' + e.message);
+        log('Discover failed: ' + e.message, 'error');
+        return false;
+    }
+}
+
+/* Chunked upload: X-OTA-Size / X-Offset / X-Last, 32 KB per request,
+ * each chunk retried on network or receive errors. */
+async function uploadChunked(url, data, progEl) {
+    var total = data.byteLength;
+    var bar = progEl ? progEl.firstChild : null;
+    if (progEl) { progEl.style.display = 'block'; bar.style.width = '0'; bar.textContent = ''; }
+    var offset = 0, result = null;
+    do {
+        var end = Math.min(offset + CHUNK, total);
+        var last = end >= total;
+        var attempt = 0;
+        for (;;) {
+            try {
+                result = await request('POST', url, {
+                    body: data.slice(offset, end),
+                    headers: {
+                        'Content-Type': 'application/octet-stream',
+                        'X-OTA-Size': String(total),
+                        'X-Offset': String(offset),
+                        'X-Last': last ? '1' : '0'
+                    }
+                });
+                break;
+            } catch (e) {
+                var retry = !(e instanceof ApiError) || e.code === 'receive_failed';
+                if (!retry || ++attempt >= RETRIES) throw e;
+                log('Chunk at ' + offset + ' failed (' + e.message + '), retrying', 'error');
+                await sleep(500 * attempt);
+            }
+        }
+        if (!last) {
+            if (!result || result.nextOffset !== end) throw new Error('unexpected nextOffset ' + (result && result.nextOffset));
+        }
+        offset = end;
+        if (bar) {
+            var pct = total ? Math.round(offset * 100 / total) : 100;
+            bar.style.width = pct + '%';
+            bar.textContent = pct + '%';
+        }
+    } while (offset < total);
+    return result;
+}
+
+function readFile(input) {
+    return new Promise(function (resolve, reject) {
+        var f = input.files[0];
+        if (!f) { reject(new Error('no file selected')); return; }
+        var r = new FileReader();
+        r.onload = function () { resolve({ name: f.name, data: new Uint8Array(r.result) }); };
+        r.onerror = function () { reject(r.error); };
+        r.readAsArrayBuffer(f);
+    });
+}
+
+async function guarded(label, fn) {
+    if (busy) { log('Another operation is running', 'error'); return; }
+    busy = true;
+    try {
+        await fn();
+    } catch (e) {
+        log(label + ' failed: ' + e.message, 'error');
+    } finally {
+        busy = false;
+    }
+}
+
+/* ---- Device info ---- */
+
+function infoRow(k, v) {
+    return el('tr', null, el('td', { cls: 'k', text: k }), el('td', { text: v === undefined || v === null ? '-' : String(v) }));
+}
+
+async function loadInfo() {
+    var i = await api('GET', '/info');
+    var t = $('infoTable');
+    t.textContent = '';
+    var fw = i.firmware || {}, b = i.board || {}, p = i.partitions || {}, sd = i.sd || {},
+        cfg = i.config || {}, v = i.vehicle || {}, th = i.theme || {}, cd = i.coredump || {}, h = i.heap || {};
+    t.appendChild(infoRow('Firmware', fw.version + ' (' + fw.build + ')'));
+    t.appendChild(infoRow('IDF / built', fw.idf + ' / ' + fw.date + ' ' + fw.time));
+    t.appendChild(infoRow('Board', b.name + ' ' + (b.variant || '') + ', ' + b.lcd + ' ' + b.width + 'x' + b.height));
+    t.appendChild(infoRow('App slot', p.running + ' (next: ' + p.next + ')'));
+    t.appendChild(infoRow('Theme', th.loaded ? (th.name + ' ' + th.version + ' [' + th.id + ']') : 'built-in default'));
+    t.appendChild(infoRow('Vehicle', v.active + ' (' + v.state + ')' + (v.safe_mode ? ' SAFE MODE' : '') +
+                                     (v.last_error ? ' - ' + v.last_error : '')));
+    t.appendChild(infoRow('SD card', sd.state === 'mounted' ? (fmtBytes(sd.free) + ' free of ' + fmtBytes(sd.total)) : sd.state));
+    t.appendChild(infoRow('Config', cfg.mounted ? (fmtBytes(cfg.used) + ' used of ' + fmtBytes(cfg.total)) : 'not mounted'));
+    t.appendChild(infoRow('Boot animation', p.resource_storage === 'sd'
+        ? (p.bootmedia_video ? 'SD file present' : 'No SD animation file')
+        : (fmtBytes(p.bootmedia_free) + ' free of ' + fmtBytes(p.bootmedia_size) +
+           (p.bootmedia_video ? ', video stored' : ''))));
+    t.appendChild(infoRow('Heap', 'internal ' + fmtBytes(h.internal_free) + ', PSRAM ' + fmtBytes(h.psram_free) +
+                                  ' (largest ' + fmtBytes(h.psram_largest) + ')'));
+    t.appendChild(infoRow('Uptime', fmtUptime(i.uptime_s || 0)));
+    $('sidecarState').textContent = th.loaded ? ('Current theme: ' + th.name + (th.sidecar ? ' (sidecar paired)' : ' (no sidecar)'))
+                                              : 'No theme installed.';
+    $('cdState').textContent = cd.present ? ('Stored core dump: ' + fmtBytes(cd.size)) : 'No core dump stored.';
+}
+
+async function syncTime() {
+    var r = await api('POST', '/time', { epoch: Math.floor(Date.now() / 1000) });
+    log('Device time set to ' + new Date(r.epoch * 1000).toLocaleString(), 'success');
+}
+
+function showOut(id, text) {
+    var o = $(id);
+    o.style.display = text ? 'block' : 'none';
+    o.textContent = text || '';
+}
+
+/* ---- Sidecar ---- */
+
+/* gaugeproj -> gauge-sidecar/1 (contracts/theme-editor-contract.md B2), so
+ * only a few KB go over the air. Returns null for anything else. */
+function reduceGaugeproj(p, size) {
+    if (!p || typeof p !== 'object' || p.format || !p.meta || !Array.isArray(p.pages)) return null;
+    var out = {
+        format: 'gauge-sidecar/1',
+        theme_id: p.meta.id,
+        project_version: p.meta.version || '',
+        source: { kind: 'gaugeproj', size: size }
+    };
+    var files = {};
+    (p.assets || []).forEach(function (a) { if (a && a.name && a.fileName) files[a.name] = a.fileName; });
+    if (Object.keys(files).length) out.asset_files = files;
+    out.pages = p.pages.map(function (pg) {
+        var ids = [], kinds = {}, overlay = {};
+        (pg.elements || []).forEach(function (e) {
+            if (!e || !e.id) return;
+            ids.push(e.id);
+            kinds[e.id] = e.kind;
+            var rotKind = e.kind === 'label' || e.kind === 'bar';
+            var dd = e.dataDisplay && /^(arc|bar|label|pointer)$/.test(e.kind) ? e.dataDisplay : null;
+            var dir = e.kind === 'bar' && e.direction ? e.direction : null;
+            if (!(rotKind && e.rotation) && !dir && !dd) return;
+            var o = { kind: e.kind };
+            if (rotKind) o.rotation = e.rotation || 0;
+            if (dir) o.direction = dir;
+            if (dd) o.dataDisplay = dd;
+            overlay[e.id] = o;
+        });
+        return { id: pg.id, element_ids: ids, elements: kinds, overlay: overlay, rules: pg.rules || [] };
+    });
+    return out;
+}
+
+function uploadSidecar() {
+    guarded('Sidecar upload', async function () {
+        var f = await readFile($('sidecarFile'));
+        var data = f.data, reduced = null;
+        try { reduced = reduceGaugeproj(JSON.parse(new TextDecoder().decode(f.data)), f.data.byteLength); } catch (e) { reduced = null; }
+        if (reduced) {
+            var small = new TextEncoder().encode(JSON.stringify(reduced));
+            if (small.byteLength <= 65536) data = small;
+            log('Reduced ' + f.name + ' from ' + fmtBytes(f.data.byteLength) + ' to ' + fmtBytes(small.byteLength));
+        }
+        log('Uploading ' + fmtBytes(data.byteLength));
+        var r = await uploadChunked(API + '/theme/sidecar', data, $('sidecarProg'));
+        log('Sidecar installed', 'success');
+        showOut('sidecarOut', r && r.report ? r.report : '');
+        await loadInfo();
+    });
+}
+
+function removeSidecar() {
+    guarded('Sidecar remove', async function () {
+        if (!confirm('Remove the sidecar of the current theme?')) return;
+        await api('DELETE', '/theme/sidecar');
+        log('Sidecar removed', 'success');
+        await loadInfo();
+    });
+}
+
+/* ---- Files ---- */
+
+function fsRootOf(path) {
+    return path.indexOf('/config') === 0 ? '/config' : '/sdcard/OBD';
+}
+
+async function loadFs(path) {
+    var r = await api('GET', '/fs/list?path=' + encodeURIComponent(path));
+    fsCwd = r.path;
+    $('fsRoot').value = fsRootOf(fsCwd);
+    $('fsPath').textContent = fsCwd + (r.truncated ? ' (first entries only)' : '');
+    var t = $('fsTable');
+    t.textContent = '';
+    t.appendChild(el('tr', null, el('th', { text: 'Name' }), el('th', { text: 'Size' })));
+    var entries = (r.entries || []).slice().sort(function (a, b) {
+        return (b.dir - a.dir) || a.name.localeCompare(b.name);
+    });
+    entries.forEach(function (e) {
+        var name = e.dir
+            ? el('a', { cls: 'dir', text: e.name + '/', onclick: function () { guarded('List', function () { return loadFs(fsCwd + '/' + e.name); }); } })
+            : document.createTextNode(e.name);
+        t.appendChild(el('tr', null, el('td', null, name), el('td', { text: e.dir ? '' : fmtBytes(e.size) })));
+    });
+    if (!entries.length) t.appendChild(el('tr', null, el('td', { cls: 'muted', text: '(empty)' }), el('td')));
+}
+
+function fsUp() {
+    var root = fsRootOf(fsCwd);
+    if (fsCwd === root) return;
+    var parent = fsCwd.substring(0, fsCwd.lastIndexOf('/'));
+    guarded('List', function () { return loadFs(parent.length < root.length ? root : parent); });
+}
+
+function fsPut() {
+    guarded('Upload', async function () {
+        var f = await readFile($('fsFile'));
+        var path = fsCwd + '/' + f.name;
+        log('Uploading ' + path + ' (' + fmtBytes(f.data.byteLength) + ')');
+        await uploadChunked(API + '/fs/put?path=' + encodeURIComponent(path), f.data, $('fsProg'));
+        log('Wrote ' + path, 'success');
+        await loadFs(fsCwd);
+    });
+}
+
+/* ---- Core dump, logs, system ---- */
+
+function downloadCoredump() {
+    guarded('Core dump', async function () {
+        var resp = await request('GET', '/ota/coredump', { raw: true });
+        if (resp.status === 204) { log('No core dump stored', 'info'); return; }
+        var blob = await resp.blob();
+        var a = el('a', { href: URL.createObjectURL(blob), download: 'coredump.bin' });
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+        log('Core dump downloaded (' + fmtBytes(blob.size) + ')', 'success');
+    });
+}
+
+function eraseCoredump() {
+    guarded('Core dump erase', async function () {
+        if (!confirm('Erase the stored core dump?')) return;
+        await request('POST', '/ota/coredump/erase');
+        log('Core dump erased', 'success');
+        await loadInfo();
+    });
+}
+
+function loadLogs() {
+    guarded('Log', async function () {
+        var text = await request('GET', API + '/logs?bytes=' + $('logBytes').value);
+        showOut('logOut', typeof text === 'string' ? (text || '(empty)') : JSON.stringify(text));
+        var o = $('logOut');
+        o.scrollTop = o.scrollHeight;
+    });
+}
+
+function reboot() {
+    guarded('Reboot', async function () {
+        if (!confirm('Reboot the gauge? The OTA session ends.')) return;
+        await api('POST', '/reboot');
+        setStatus(false, 'Rebooting');
+        log('Rebooting', 'info');
+    });
+}
+
+/* ---- Wiring ---- */
+
+function enableOnFile(inputId, btnId) {
+    $(inputId).onchange = function () { $(btnId).disabled = !this.files.length; };
+}
+
+$('infoBtn').onclick = function () { guarded('Info', loadInfo); };
+$('timeBtn').onclick = function () { guarded('Time sync', syncTime); };
+$('rebootBtn').onclick = reboot;
+$('sidecarBtn').onclick = uploadSidecar;
+$('sidecarDelBtn').onclick = removeSidecar;
+$('fsRoot').onchange = function () { var v = this.value; guarded('List', function () { return loadFs(v); }); };
+$('fsUpBtn').onclick = fsUp;
+$('fsRefreshBtn').onclick = function () { guarded('List', function () { return loadFs(fsCwd); }); };
+$('fsPutBtn').onclick = fsPut;
+$('cdGetBtn').onclick = downloadCoredump;
+$('cdEraseBtn').onclick = eraseCoredump;
+$('logBtn').onclick = loadLogs;
+enableOnFile('sidecarFile', 'sidecarBtn');
+enableOnFile('fsFile', 'fsPutBtn');
+
+(async function init() {
+    if (!(await connect())) return;
+    await guarded('Time sync', syncTime);
+    await guarded('Info', loadInfo);
+    await guarded('Files', function () { return loadFs(fsCwd); });
+})();
+</script>
 </body>
 </html>

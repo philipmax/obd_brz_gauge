@@ -23,7 +23,6 @@ static const char *TAG = "ota_mode";
 
 // UI elements exposed for timer updates
 lv_obj_t *ui_ScreenPageOTAMode = NULL;
-lv_obj_t *ui_LabelOTAModeStatus = NULL;
 lv_obj_t *ui_LabelOTAModeVersion = NULL;
 
 // Internal reference to WiFi SSID label for dynamic updates
@@ -82,15 +81,6 @@ void ui_ScreenPageOTAMode_screen_init(void)
     lv_obj_set_style_text_align(label_pass, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_align(label_pass, LV_ALIGN_CENTER, 0, 12);
 
-    // Status label (hidden)
-    ui_LabelOTAModeStatus = lv_label_create(ui_ScreenPageOTAMode);
-    lv_label_set_text(ui_LabelOTAModeStatus, "");
-    lv_obj_add_flag(ui_LabelOTAModeStatus, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_set_style_text_font(ui_LabelOTAModeStatus, &ui_font_FontTypoderSize20, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_color(ui_LabelOTAModeStatus, lv_color_hex(0xAAAAAA), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_align(ui_LabelOTAModeStatus, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_align(ui_LabelOTAModeStatus, LV_ALIGN_CENTER, 0, -40);
-
     // Hint: slide to exit
     lv_obj_t *label_hint = lv_label_create(ui_ScreenPageOTAMode);
     lv_label_set_text(label_hint, "Slide away to exit OTA");
@@ -112,19 +102,19 @@ void ui_ScreenPageOTAMode_screen_init(void)
     // broadcast every 100 ms while TCP is trying to fill the small RX pool.
     espnow_link_pause_for_ota();
 
-    // The RaceChrono advert also periodically takes the radio away from WiFi.
-    // OTA mode does not need BLE, and all exit paths reboot, so release it fully.
-    ota_wifi_server_release_bt();
+    // ota_wifi_server_start() releases BLE (ble_hub_shutdown), video buffers and
+    // theme_0 image caches. Theme page objects must be gone before the caches are
+    // freed; OTA is entered from the version page, so the theme page is not on screen.
+    if (ui_ScreenPageThemeGauge && ui_ScreenPageThemeGauge != lv_scr_act()) {
+        lv_obj_del(ui_ScreenPageThemeGauge);
+        ui_ScreenPageThemeGauge = NULL;
+    }
 
     // Start WiFi SoftAP + HTTP server immediately
     ESP_LOGI(TAG, "Starting WiFi OTA server from OTA mode screen");
     ota_wifi_info_t info = {0};
     if (!ota_wifi_server_start(&info)) {
         ESP_LOGE(TAG, "Failed to start WiFi OTA server");
-        if (ui_LabelOTAModeStatus) {
-            lv_label_set_text(ui_LabelOTAModeStatus, "WiFi start failed");
-            lv_obj_set_style_text_color(ui_LabelOTAModeStatus, lv_color_hex(0xFF0000), LV_PART_MAIN | LV_STATE_DEFAULT);
-        }
         if (s_label_wifi_ssid) {
             lv_label_set_text(s_label_wifi_ssid, "WiFi: Failed to start");
             lv_obj_set_style_text_color(s_label_wifi_ssid, lv_color_hex(0xFF0000), LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -171,5 +161,4 @@ static void ui_event_ota_mode_background(lv_event_t *e)
         }
     }
 
-    ui_ext_tick();
 }

@@ -3243,7 +3243,6 @@
       },
       "bar1": {
        "color": "ff3158",
-       "bgColor": "ff3158",
        "text": "ignored by bars"
       }
      }
@@ -3391,8 +3390,7 @@
        "color": "#123456"
       },
       "e2": {
-       "color": "#123456",
-       "bgColor": "#123456"
+       "color": "#123456"
       },
       "e3": {
        "tintColor": "#123456"
@@ -4369,7 +4367,6 @@
      "overrides": {
       "arc1": {
        "color": "#111111",
-       "bgColor": "#111111",
        "visible": true
       },
       "ptr1": {
@@ -4394,7 +4391,6 @@
      "overrides": {
       "arc1": {
        "color": "#111111",
-       "bgColor": "#111111",
        "visible": true
       },
       "ptr1": {

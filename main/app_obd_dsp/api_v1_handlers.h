@@ -1,11 +1,15 @@
 #pragma once
 /*
- * api_v1_handlers.h — /api/v1/* REST endpoint handlers
+ * api_v1_handlers.h — /api/v1/... device API (device web page)
  *
- * Implements the device control API for the web interface.
+ * Hosted by ota_wifi_server on the OTA SoftAP. Every request needs the
+ * session X-OTA-Token (checked through the auth callback). Only the vehicle
+ * install/select/reboot POST allowlist exposes CORS; other endpoints are
+ * same-origin only for browsers. Errors are
+ *   {"ok":false,"error":"<code>","detail":"..."}
+ * with a matching HTTP status. Endpoint list: docs/APP_PROTOCOL.md.
  */
 
-#include <stdint.h>
 #include <stdbool.h>
 #include "esp_err.h"
 #include "esp_http_server.h"
@@ -14,50 +18,16 @@
 extern "C" {
 #endif
 
-/**
- * Register all /api/v1/* endpoints with the HTTP server.
- */
-esp_err_t api_v1_register_handlers(httpd_handle_t server);
+/* Returns true when the request carries a valid session token. */
+typedef bool (*api_v1_auth_fn)(httpd_req_t *req);
 
-/**
- * Chunk sink for OTA updates.
- * POST /api/v1/ota/chunk - receives firmware chunks
- * POST /api/v1/ota/finalize - validates and activates update
- * POST /api/v1/ota/abort - cancels current update
- */
-esp_err_t api_v1_ota_chunk_handler(httpd_req_t *req);
-esp_err_t api_v1_ota_finalize_handler(httpd_req_t *req);
-esp_err_t api_v1_ota_abort_handler(httpd_req_t *req);
+/* Register the "/api/v1/" wildcard dispatcher (GET/POST/PUT/DELETE; 4 URI slots).
+ * The server must use httpd_uri_match_wildcard. */
+esp_err_t api_v1_register_handlers(httpd_handle_t server, api_v1_auth_fn auth);
 
-/**
- * Configuration endpoints.
- * GET /api/v1/config - get current config
- * POST /api/v1/config - update config
- */
-esp_err_t api_v1_config_get_handler(httpd_req_t *req);
-esp_err_t api_v1_config_post_handler(httpd_req_t *req);
-
-/**
- * Vehicle profile endpoints.
- * GET /api/v1/vehicle/list - list available profiles
- * GET /api/v1/vehicle/active - get active profile
- * POST /api/v1/vehicle/active - set active profile
- * POST /api/v1/vehicle/upload - upload custom profile
- */
-esp_err_t api_v1_vehicle_list_handler(httpd_req_t *req);
-esp_err_t api_v1_vehicle_active_get_handler(httpd_req_t *req);
-esp_err_t api_v1_vehicle_active_post_handler(httpd_req_t *req);
-esp_err_t api_v1_vehicle_upload_handler(httpd_req_t *req);
-
-/**
- * System information endpoints.
- * GET /api/v1/system/info - device info (version, heap, uptime)
- * POST /api/v1/system/reboot - reboot device
- * GET /api/v1/system/storage - storage info (partitions)
- */
-esp_err_t api_v1_system_info_handler(httpd_req_t *req);
-esp_err_t api_v1_system_reboot_handler(httpd_req_t *req);
-esp_err_t api_v1_system_storage_handler(httpd_req_t *req);
+/* Drop any half-finished /api/v1 upload (buffers, .part files). Called when an
+ * /ota upload starts and when the server stops. */
+void api_v1_reset(void);
 
 #ifdef __cplusplus
 }

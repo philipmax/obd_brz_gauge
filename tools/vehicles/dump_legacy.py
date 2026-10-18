@@ -4,11 +4,11 @@ dump_legacy.py — parse vehicle_profiles.c and vehicle_custom_config.h and
 emit an intermediate JSON array for legacy_to_v1.py.
 
 Usage:
-    python3 tools/vehicles/dump_legacy.py > /tmp/legacy.json
-    # or specify paths explicitly:
-    python3 tools/vehicles/dump_legacy.py \
-        --profiles main/app_obd_dsp/vehicle_profiles.c \
-        --overrides main/app_obd_dsp/vehicle_custom_config.h
+    python3 tools/vehicles/dump_legacy.py > /tmp/legacy.json   # from git 4b056c0
+    # or read files from disk:
+    python3 tools/vehicles/dump_legacy.py --rev '' \
+        --profiles /tmp/vehicle_profiles.c \
+        --overrides /tmp/vehicle_custom_config.h
 
 No C compiler, ESP-IDF, or FreeRTOS required.  The parser is intentionally
 simple: it looks for the known struct patterns rather than being a full C parser.
@@ -297,10 +297,13 @@ def _parse_oil_formula_defs(src: str) -> dict:
         scalars = [t.strip() for t in after_brace.split(",") if t.strip()]
 
         def get_scalar(i, default):
+            # literals like 1.0f, -40.0f and 191.25f/255.0f
             if i < len(scalars):
                 try:
-                    return float(scalars[i].rstrip("f"))
-                except ValueError:
+                    num, _, den = scalars[i].partition("/")
+                    v = float(num.strip().rstrip("fF"))
+                    return v / float(den.strip().rstrip("fF")) if den else v
+                except (ValueError, ZeroDivisionError):
                     pass
             return default
 
@@ -463,18 +466,23 @@ def _parse_override_block(
 # ------------------------------------------------------------------ #
 
 def merge(profiles: list, overrides: dict) -> list:
+    """Combine each profile with its override the way the legacy firmware did.
+
+    elm327_ble_client.c took only obd_timeout and poll_gap_ms from the
+    override (when non-zero); forced_protocol, functional addressing and
+    has_boost always came from the profile table. The override's own
+    functional_addr flag only decided whether a UDS 22 oil formula was
+    wrapped in ATSH7E0 / ATSH7DF, so it is kept as ov_functional_addr.
+    """
     out = []
     for p in profiles:
-        name = p["name"]
-        ov = overrides.get(name, {})
+        ov = overrides.get(p["name"], {})
         merged = dict(p)
-        # Override fields win when present
-        for key in ("forced_protocol", "obd_functional_addr", "obd_timeout",
-                    "has_boost", "poll_gap_ms"):
+        for key in ("obd_timeout", "poll_gap_ms"):
             if ov.get(key):
                 merged[key] = ov[key]
-        if ov.get("obd_functional_addr"):
-            merged["obd_functional_addr"] = ov["obd_functional_addr"]
+        merged["ov_functional_addr"] = bool(ov.get("obd_functional_addr"))
+        merged["has_override"] = bool(ov)
         merged["can_rules"] = ov.get("can_rules", [])
         merged["oil_primary"] = ov.get("oil_primary")
         merged["oil_secondary"] = ov.get("oil_secondary")
@@ -490,34 +498,40 @@ def merge(profiles: list, overrides: dict) -> list:
 #  CLI                                                                 #
 # ------------------------------------------------------------------ #
 
+LEGACY_REV = "4b056c0"   # last commit with the compile-time profile table
+PROFILES_PATH = "main/app_obd_dsp/vehicle_profiles.c"
+OVERRIDES_PATH = "main/app_obd_dsp/vehicle_custom_config.h"
+
+
+def read_source(repo_root: Path, path: str, rev: Optional[str]) -> str:
+    if rev:
+        import subprocess
+        return subprocess.run(["git", "-C", str(repo_root), "show", f"{rev}:{path}"],
+                              check=True, capture_output=True, text=True).stdout
+    return Path(path).read_text(encoding="utf-8")
+
+
+def load(repo_root: Path, rev: Optional[str] = LEGACY_REV,
+         profiles: str = PROFILES_PATH, overrides: str = OVERRIDES_PATH) -> list:
+    """Parsed + merged legacy table (importable by the other tools)."""
+    return merge(parse_profiles(read_source(repo_root, profiles, rev)),
+                 parse_overrides(read_source(repo_root, overrides, rev)))
+
+
 def main():
     repo_root = Path(__file__).resolve().parents[2]
     ap = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument(
-        "--profiles",
-        default=str(
-            repo_root /
-            "main/app_obd_dsp/vehicle_profiles.c"))
-    ap.add_argument(
-        "--overrides",
-        default=str(
-            repo_root /
-            "main/app_obd_dsp/vehicle_custom_config.h"))
-    ap.add_argument(
-        "--out",
-        default="-",
-        help="output file path, - for stdout")
+    ap.add_argument("--rev", default=LEGACY_REV,
+                    help="git revision to read the legacy sources from "
+                         f"(default {LEGACY_REV}); '' reads --profiles/--overrides from disk")
+    ap.add_argument("--profiles", default=PROFILES_PATH)
+    ap.add_argument("--overrides", default=OVERRIDES_PATH)
+    ap.add_argument("--out", default="-", help="output file path, - for stdout")
     args = ap.parse_args()
 
-    profiles_src = Path(args.profiles).read_text(encoding="utf-8")
-    overrides_src = Path(args.overrides).read_text(encoding="utf-8")
-
-    profiles = parse_profiles(profiles_src)
-    overrides = parse_overrides(overrides_src)
-    merged = merge(profiles, overrides)
-
+    merged = load(repo_root, args.rev or None, args.profiles, args.overrides)
     result = json.dumps(merged, indent=2, ensure_ascii=False) + "\n"
     if args.out == "-":
         sys.stdout.write(result)

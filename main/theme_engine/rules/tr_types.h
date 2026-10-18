@@ -26,13 +26,7 @@ extern "C" {
 #define TR_MAX_RULES        16
 #define TR_MAX_CONDS        4
 #define TR_MAX_ACTIONS      8
-#define TR_MAX_TARGETS      (TR_MAX_RULES * TR_MAX_ACTIONS)
-
-// Editor ids are at most 64 bytes (theme id ^[A-Za-z][A-Za-z0-9_-]{0,63}$).
-// Ids are stored in the program's string pool without truncation; this is
-// the buffer size an apply layer should reserve when it copies one.
-#define TR_ID_MAX           64
-
+#define TR_MAX_KEYFRAMES    6
 // Change triggers are delivered as a 64-bit mask: only source indices
 // below this can fire a `change` rule.
 #define TR_MASK_SOURCES     64
@@ -76,8 +70,8 @@ typedef enum {
 } tr_trigger_t;
 
 // Override property bits. A `color` action maps by target kind:
-// arc/bar → COLOR|BG_COLOR, image/pointer → TINT, others → COLOR.
-// All color bits of one override carry the same tr_override_t.color.
+// arc/bar → indicator COLOR, image/pointer → TINT, others → COLOR.
+// BG_COLOR is reserved for future explicit track-color actions.
 enum {
     TR_PROP_COLOR    = 1u << 0,   // arc/bar indicator, label text color
     TR_PROP_BG_COLOR = 1u << 1,   // arc/bar track
@@ -123,6 +117,15 @@ typedef struct {
 } tr_cond_t;
 
 typedef struct {
+    uint8_t mode;          // 0=none, 1=fade, 2=keyframes, 3=strobe
+    uint8_t n_frames;
+    double duration_ms;
+    double frequency_hz;
+    double frame_at[TR_MAX_KEYFRAMES];
+    double frame_value[TR_MAX_KEYFRAMES];
+} tr_animation_t;
+
+typedef struct {
     uint16_t target;       // index into tr_program_t.targets
     uint8_t  props;        // TR_PROP_* this action writes
     uint8_t  visible;      // set.visible !== false
@@ -130,6 +133,7 @@ typedef struct {
     const char *color_str; // editor string, e.g. "#ff3158"
     const char *text;
     const char *asset;
+    tr_animation_t animation;
 } tr_action_t;
 
 typedef struct {
@@ -145,6 +149,7 @@ typedef struct {
     double   hysteresis;   // when.hysteresis ?? 0
     double   debounce_ms;  // Math.max(0, debounceMs ?? 0)
     double   priority;     // priority ?? 0
+    double   transient_hold_ms;
     const tr_cond_t   *conds;
     const tr_action_t *actions;
 } tr_rule_t;
@@ -164,6 +169,8 @@ typedef struct {
     const char *color_str;
     const char *text;      // valid with TR_PROP_TEXT
     const char *asset;     // valid with TR_PROP_ASSET
+    double animation_progress; // 0..1 for the winning animated color action
+    uint8_t animated_color;
 } tr_override_t;
 
 typedef struct {
@@ -185,6 +192,9 @@ typedef struct {
     int8_t   latch[TR_MAX_RULES][TR_MAX_CONDS];  // -1 unset, else 0/1
     uint8_t  deb_armed[TR_MAX_RULES];
     double   deb_start[TR_MAX_RULES];
+    double   animation_start[TR_MAX_RULES];
+    double   hold_until[TR_MAX_RULES];
+    uint8_t  animation_armed[TR_MAX_RULES];
 } tr_state_t;
 
 typedef struct {
@@ -209,6 +219,10 @@ typedef struct tr_program {
     tr_state_t   state;
     tr_result_t  result;
     tr_alloc_t   alloc;
+    // Compiled rules/actions are immutable. Cache only the resolved output;
+    // latches, debounce and triggers still advance on every evaluation.
+    uint32_t resolved_mask;
+    bool     have_resolved;
 } tr_program_t;
 
 #ifdef __cplusplus

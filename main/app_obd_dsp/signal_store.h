@@ -1,122 +1,85 @@
 #pragma once
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
+#include <stddef.h>
+#include "signal_registry.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /* --------------------------------------------------------------------------
- * signal_store — unified OBD / system / vehicle signal table (P3)
+ * signal_store - the single runtime value table (contracts/signals.json).
  *
- * Layout (flat index, 64 slots total):
- *   0-11   obd.*  — 12 standard OBD signals matching editor contract
- *   12-31  sys.*  — system signals (reserved for future use)
- *   32-63  veh.*  — per-vehicle custom signals (dynamic, up to 32)
+ * Slots:
+ *   0 .. SIG_STD_COUNT-1          obd.* and sys.* (SIG_* from signal_registry.h)
+ *   SIG_VEH_BASE .. +SIG_VEH_MAX  veh.* registered by the active vehicle profile
  *
- * Each slot stores:
- *   value  int32_t  — raw signal value (scaled; see comments per signal)
- *   valid  bool     — false when the value is unknown / not yet received
- *   ts_ms  uint32_t — esp_timer ms timestamp of last valid write
- *   seq    uint16_t — monotone counter; incremented on every write
+ * Values are int32 internal fixed point (registry `scale`). A sample outside the
+ * signal's [min, max] is stored as invalid. A value reads as valid only when the
+ * valid bit is set, it is not stale (now - ts < stale_ms) and, for obd.* and
+ * veh.*, sys.obd_link == 2.
  *
- * Sentinel-to-invalid mapping (obd_data_cache wrappers call these):
- *   rpm         (any)         → always valid when written
- *   coolant/intake -40        → invalid (initial "not yet received" value)
- *   oil_temp    -100          → invalid
- *   load_pct    -1            → invalid
- *   tps         -1            → invalid
- *   bat_mv      -1            → invalid
- *   oil_pres    -1 or >200    → invalid (range guard in setter)
- *   boost       -32768        → invalid
- *   gear        127           → invalid
- *   afr_x100    -1            → invalid
+ * The table lives in PSRAM; every call is safe from any task.
  * -------------------------------------------------------------------------- */
 
-/* ---- slot index constants ---- */
-#define SIG_OBD_RPM           0
-#define SIG_OBD_SPEED         1
-#define SIG_OBD_COOLANT_TEMP  2
-#define SIG_OBD_OIL_TEMP      3
-#define SIG_OBD_INTAKE_TEMP   4
-#define SIG_OBD_LOAD          5
-#define SIG_OBD_TPS           6
-#define SIG_OBD_BAT_MV        7
-#define SIG_OBD_OIL_PRESSURE  8   /* ×10, 0.1 bar */
-#define SIG_OBD_BOOST         9   /* ×10, 0.1 bar, signed */
-#define SIG_OBD_GEAR          10  /* -1=R, 0=N, 1-8=fwd */
-#define SIG_OBD_AFR           11  /* ×100, e.g. 1470 = 14.70:1 */
-#define SIG_OBD_COUNT         12
+#define SIG_VEH_BASE     SIG_STD_COUNT
+#define SIG_VEH_MAX      32
+#define SIG_SLOT_COUNT   (SIG_VEH_BASE + SIG_VEH_MAX)
+#define SIG_VEH_ID_BASE  0x0100
+#define SIG_SLOT_NONE    (-1)
 
-#define SIG_SYS_BASE          12
-#define SIG_SYS_COUNT         20  /* reserved for sys.* */
+#define SIG_LINK_NONE    0   /* sys.obd_link values */
+#define SIG_LINK_NO_DATA 1
+#define SIG_LINK_DATA    2
 
-#define SIG_VEH_BASE          32
-#define SIG_VEH_COUNT         32  /* per-vehicle custom (veh.*) */
-
-#define SIGNAL_TOTAL          64
-
-/* ---- per-signal entry ---- */
 typedef struct {
-    int32_t  value;
-    uint32_t ts_ms;  /* timestamp of last valid write (esp_timer ms) */
-    uint16_t seq;    /* incremented on every write (valid or invalid) */
-    bool     valid;
+    int32_t  value;   /* last written value (kept when invalidated) */
+    uint32_t ts_ms;   /* esp_timer ms of the last valid write */
+    uint16_t seq;     /* bumped on each write and effective invalidation */
+    bool     valid;   /* raw valid bit (not stale-checked) */
 } signal_entry_t;
 
-/**
- * @brief Initialise the signal store (zero all entries, mark all invalid).
- *        Call once before any other signal_store_* function.
- */
+/* Allocate the table (PSRAM) and mark every slot invalid. Call once, early. */
 void signal_store_init(void);
 
-/**
- * @brief Write a value.  Sets valid=true and updates ts_ms / seq.
- * @param idx  Signal slot index (0..SIGNAL_TOTAL-1).
- * @param val  Value to write.
- */
-void signal_store_set(uint8_t idx, int32_t val);
+/* Write an internal value. Out of [min, max] stores invalid; returns validity. */
+bool signal_store_set(int slot, int32_t internal);
+/* Apply ordered writes under one timestamp and critical section; local slots are skipped. */
+void signal_store_set_many(const int *slots, const int32_t *values, size_t count);
+/* Invalidate only if currently valid; repeated invalidations are no-ops. */
+void signal_store_invalidate(int slot);
+/* Invalidate ordered slots atomically, skipping local or already-invalid entries. */
+void signal_store_invalidate_many(const int *slots, size_t count);
+/* Invalidate every obd.* and veh.* slot (link loss, profile switch). */
+void signal_store_invalidate_vehicle(void);
+/* Mark an obd.* slot as fed by an on-board sensor (ADS1115 oil pressure): it
+ * stays valid without an OBD link and survives invalidate_vehicle(). */
+void signal_store_set_local(int slot, bool local);
+bool signal_store_is_local(int slot);
 
-/**
- * @brief Mark a slot as invalid (value kept, valid=false, seq incremented).
- *        Use when the source reports "no data" or a sentinel.
- */
-void signal_store_invalidate(uint8_t idx);
+/* Fresh valid value in internal units; false (out untouched) otherwise. */
+bool signal_store_get(int slot, int32_t *out);
+/* Read up to 64 slots against one timestamp and under one lock. Returns bit i
+ * for each fresh valid slot; invalid values are written as zero. */
+uint64_t signal_store_get_many(const int *slots, size_t count, int32_t *values);
+/* Read/unit-convert requested slots with one timestamp/critical section.
+ * `values` is indexed by slot; requested stale/invalid slots receive NAN. */
+uint64_t signal_store_get_delivered_mask(uint64_t requested, double values[SIG_SLOT_COUNT]);
+/* Raw entry, no freshness checks. */
+void signal_store_entry(int slot, signal_entry_t *out);
+/* Lookup by key ("obd.rpm", "veh.knock") or numeric id; SIG_SLOT_NONE if absent. */
+int         signal_store_slot_by_key(const char *key);
+int         signal_store_slot_by_id(uint16_t num_id);
+bool        signal_store_copy_key(int slot, char *out, size_t out_size);
+uint16_t    signal_store_num_id(int slot);
 
-/**
- * @brief Read a single slot.
- * @param idx  Signal slot index.
- * @param out  Destination; written atomically.
- */
-void signal_store_get(uint8_t idx, signal_entry_t *out);
-
-/**
- * @brief Read only the value; returns 0 when the slot is invalid.
- */
-int32_t signal_store_value(uint8_t idx);
-
-/**
- * @brief Returns true when the slot holds a valid (not-yet-invalidated) value.
- */
-bool signal_store_is_valid(uint8_t idx);
-
-/**
- * @brief 64-bit bitmask: bit N is set when slot N is currently valid.
- *        Lets callers quickly test "any OBD signal valid?" without iterating.
- */
-uint64_t signal_store_valid_mask(void);
-
-/**
- * @brief Reset all slots to invalid (keeps seq counts).
- *        Called when ELM327 disconnects or the profile is changed.
- */
-void signal_store_reset_all(void);
-
-/**
- * @brief Allocate a veh.* slot and return its index, or -1 when full.
- *        Slots are allocated in order from SIG_VEH_BASE.
- */
-int signal_store_veh_alloc(void);
+/* veh.* registration (profile load). num_id = SIG_VEH_ID_BASE + index, assigned
+ * in call order. Re-registering an existing key returns its slot. Returns the
+ * slot or SIG_SLOT_NONE when full / key invalid. */
+int  signal_store_veh_register(const char *key, int32_t min, int32_t max, uint32_t stale_ms);
+void signal_store_veh_clear(void);
+int  signal_store_veh_count(void);
 
 #ifdef __cplusplus
 }

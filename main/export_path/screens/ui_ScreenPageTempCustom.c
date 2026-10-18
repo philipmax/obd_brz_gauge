@@ -45,9 +45,11 @@ static void on_temp_map_changed(lv_event_t *e)
     uint16_t pos = lv_roller_get_selected(s_temp_rollers[idx]);
     if (pos >= TEMP_SOURCE_COUNT) return;
 
-    nvs_user_cfg_t cfg = *nvs_cfg_get();
+    nvs_user_cfg_t base;
+    nvs_cfg_snapshot(&base);
+    nvs_user_cfg_t cfg = base;
     cfg.temp_display_map[idx] = k_temp_sources[pos];
-    nvs_cfg_set(&cfg);
+    nvs_cfg_update(&base, &cfg);
 }
 
 static void create_row(lv_obj_t *parent, int idx, const char *title, lv_coord_t y)
@@ -79,7 +81,7 @@ static void create_row(lv_obj_t *parent, int idx, const char *title, lv_coord_t 
 
 void ui_ScreenPageTempCustom_screen_init(void)
 {
-    const nvs_user_cfg_t *cfg = nvs_cfg_get();
+    nvs_user_cfg_t cfg = nvs_cfg_read();
 
     ui_ScreenPageTempCustom = lv_obj_create(NULL);
     lv_obj_clear_flag(ui_ScreenPageTempCustom, LV_OBJ_FLAG_SCROLLABLE);
@@ -94,7 +96,7 @@ void ui_ScreenPageTempCustom_screen_init(void)
     create_row(ui_ScreenPageTempCustom, 2, "ROW 3", 36);
 
     for (int i = 0; i < 3; ++i) {
-        lv_roller_set_selected(s_temp_rollers[i], temp_item_to_pos(cfg->temp_display_map[i], i), LV_ANIM_OFF);
+        lv_roller_set_selected(s_temp_rollers[i], temp_item_to_pos(cfg.temp_display_map[i], i), LV_ANIM_OFF);
     }
 
     lv_obj_t *hint = lv_label_create(ui_ScreenPageTempCustom);
