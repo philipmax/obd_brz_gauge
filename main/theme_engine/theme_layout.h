@@ -57,12 +57,15 @@ typedef struct {
     double   range_min, range_max;
     double   angle_min, angle_max, pivot_x, pivot_y;   // pointer
     double   line_width, radius, divisor, font_size;
+    double   opacity;         // image/video layer opacity, 0..100; defaults to 100
     uint32_t color, bg_color; // 0xRRGGBB, defaults applied
     const char *data_source;  // NULL: absent or beyond TL_MAX_BINDINGS
     const char *format;       // NULL when absent
     const char *text;         // NULL when absent
     const char *asset;        // NULL when absent / empty
     const char *font_asset;   // NULL when absent / empty
+    uint8_t video_value;      // OBV1 position follows data_source instead of time
+    double video_step;        // 0 = every frame; positive = input quantization
 } tl_elem_t;
 
 typedef struct {

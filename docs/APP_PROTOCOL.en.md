@@ -129,7 +129,7 @@ they continue to write the shared SD fallback file `/OBD/BOOT/bootmedia.raw`.
 
 All web operations on the gauge use ESP32-S3 native USB: ROM flashing for firmware, the media transactions below for themes/boot animations, and management RPC for vehicle installation, activation, theme deletion and reboot. No device address, token, hotspot or OTA mode is needed; exit gauge OTA mode before operating. Community browsing, login, downloads and publishing remain network operations. The App WiFi API remains compatible.
 
-Management RPC uses command `6` BEGIN_RPC: its 40-byte payload is JSON length `u32` (1–16448), reserved `u32=0`, and 32-byte JSON SHA-256; DATA, END and ABORT are reused. Requests are received in memory without holding the SD reception lock; business functions manage their own storage locks. END appends UTF-8 JSON after status `u8` and received length `u32`, with CRC covering the entire payload; ordinary media replies are five bytes, with optional error text for OBV2 validation failure. A successfully transported business failure has transport status `0` and JSON `{"ok":false,"error":"..."}`, optionally with `issues`. Retrying the same END replays cached JSON without executing the operation again. Older firmware rejects command `6` with status `1`, prompting an upgrade.
+Management RPC uses command `6` BEGIN_RPC: its 40-byte payload is JSON length `u32` (1–16448), reserved `u32=0`, and 32-byte JSON SHA-256; DATA, END and ABORT are reused. Requests are received in memory without holding the SD reception lock; business functions manage their own storage locks. END appends UTF-8 JSON after status `u8` and received length `u32`, with CRC covering the entire payload; ordinary media replies are five bytes, with optional error text for OBV2 validation failure. A successfully transported business failure has transport status `0` and JSON `{"ok":false,"error":"..."}`, optionally with `issues`. A `theme.erase` failure caused by boot theme preparation, display-lock or storage-lock contention includes `retryable:true`; missing SD and other deletion errors are not retryable. New firmware failures include `stage` (`prepare` or `delete`) and `code` (the `esp_err_to_name` error code); missing SD explicitly reports `SD card is not mounted`. The page starts a new RPC for explicitly retryable business failures every 500 ms with a two-minute cleanup waiting budget and a visible startup-loading message; legacy replies without `retryable` are also supported when the exact error is `theme delete failed` or `display busy`. Persistent generic legacy failures stop at the deadline and prompt a firmware upgrade for diagnostics; explicit `retryable:false` or other business errors stop immediately. Communication failures are not retried as new deletion operations. Transport retries of the same END replay cached JSON without executing the operation again. Older firmware rejects command `6` with status `1`, prompting an upgrade.
 
 | Request JSON | Success reply | Effect |
 |----------|----------|------|
@@ -139,7 +139,7 @@ Management RPC uses command `6` BEGIN_RPC: its 40-byte payload is JSON length `u
 | `{"op":"theme.erase"}` | `{"ok":true,"deleted":true}` | Release theme pages, delete current SD theme directory and selection; `false` means no package was found |
 | `{"op":"reboot"}` | `{"ok":true}` | Acknowledge before delayed restart |
 
-After deleting a theme, the web client separately requests reboot to restore the built-in default; other themes and the shared boot animation remain. Web operations require Chrome/Edge Web Serial over HTTPS or localhost. The application protocol requires ESP32-S3 native USB; CH340/CP210x are for firmware flashing only.
+After “Delete current theme” is clicked, the web client separately requests reboot to restore the built-in default. For local or community installation, the page validates the new bundle, uses `theme.erase` to detect and clear the current theme (continuing directly if none exists), then uploads and enables the replacement after success is confirmed, without an intermediate reboot. Other themes and the shared boot animation remain. Web operations require Chrome/Edge Web Serial over HTTPS or localhost. The application protocol requires ESP32-S3 native USB; CH340/CP210x are for firmware flashing only.
 
 The USB flasher keeps the existing “connect device → select animation → upload” workflow. After
 selection, the page downloads `[manifest][bin]`, resets the device from ROM download mode into the
@@ -179,7 +179,11 @@ ESP32 performs no transcoding. See [THEMES.en.md](THEMES.en.md) for format and p
 The USB receiver holds the storage job lock from BEGIN through verification and commit, so background
 import scans cannot delete its open `.part` file. Abort, receive timeout and failure close the temporary
 file and release the lock. After committing a theme stream, the receiver releases storage before entering
-the installer, preserving the LVGL → storage lock order. Uploads can start immediately after boot.
+the installer, preserving the LVGL → storage lock order. Media BEGIN commands (`1`, `5`, `7`) wait up to one second
+for the storage lock. If BEGIN returns status `9`, the web uploader retries every 500 ms with a 30-second waiting budget
+to tolerate boot-time theme reads and background SD jobs. A BUSY reply definitively rejects that BEGIN, so each busy retry
+uses a new sequence to bypass the firmware's cached BUSY reply; transport retries after response timeouts or CRC errors
+retain the original sequence. Once the budget expires, report storage busy without sending resource data; ensure OTA mode is off.
 
 The little-endian theme stream is `OBDT`, version `u8=1`, reserved `u8=0`, file count `u16`, followed by each file's
 name length `u16`, file length `u32`, ASCII filename, and contents. At most 128 files and 256 MiB are accepted.

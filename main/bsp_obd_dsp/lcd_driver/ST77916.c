@@ -635,8 +635,9 @@ void ST77916_Reset(){
 #endif
 }
 void LCD_Init() {        
-  ST77916_Init();
+  /* Keep the panel physically dark before its display-on command is sent. */
   Backlight_Init();
+  ST77916_Init();
   Touch_Init();
 }
 
@@ -773,14 +774,22 @@ void ST77916_Init() {
 
 uint8_t LCD_Backlight = 70;
 static ledc_channel_config_t ledc_channel;
-void Backlight_Init(void)
+void LCD_BacklightOffEarly(void)
 {
-    ESP_LOGD(TAG_LCD, "Turn off LCD backlight");
+    /* Preload the inactive output latch before enabling the GPIO driver.
+     * No PWM, panel, storage or I2C initialization is required here. */
+    ESP_ERROR_CHECK(gpio_set_level(EXAMPLE_LCD_PIN_NUM_BK_LIGHT, EXAMPLE_LCD_BK_LIGHT_OFF_LEVEL));
     gpio_config_t bk_gpio_config = {
         .mode = GPIO_MODE_OUTPUT,
         .pin_bit_mask = 1ULL << EXAMPLE_LCD_PIN_NUM_BK_LIGHT
     };
     ESP_ERROR_CHECK(gpio_config(&bk_gpio_config));
+}
+
+void Backlight_Init(void)
+{
+    ESP_LOGD(TAG_LCD, "Turn off LCD backlight");
+    LCD_BacklightOffEarly();
 
     ledc_timer_config_t ledc_timer = {
         .duty_resolution = LEDC_TIMER_13_BIT,

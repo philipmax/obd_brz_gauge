@@ -38,6 +38,7 @@
 #include "app_obd_dsp/lvgl_runtime.h"
 #include "media/video_player.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -100,6 +101,9 @@ typedef struct {
     lv_obj_t    *view;
     char         path[VIDEO_PLAYER_PATH_MAX];
     int64_t      t_start;
+    bool         value_driven;
+    double       position;      /* guarded by lock; latest requested position */
+    uint32_t     position_revision; /* changes even when A -> B -> A outruns reader */
 
     portMUX_TYPE       lock;
     int                refs;
@@ -342,6 +346,7 @@ static uint8_t *reader_open(vp_session_t *s, FILE *f)
         return NULL;
     }
     uint32_t cap = timed ? obv_timed_ring_size(&info, index) : ring_size_for(&info);
+    if (s->value_driven) cap = 3u * (info.max_frame_size + VP_REC_HDR + 4u);
     uint32_t floor = 2u * (info.max_frame_size + VP_REC_HDR + 4u);
     uint8_t *ring = NULL;
     while (!ring && cap >= floor) {
@@ -365,6 +370,20 @@ static uint8_t *reader_open(vp_session_t *s, FILE *f)
     return index;
 }
 
+/* The index is immutable after hdr_ready; both workers sample the same target.
+ * A committed ring record remains immutable until ring_release by decoder. */
+static uint32_t requested_frame_snapshot(vp_session_t *s, uint32_t *revision)
+{
+    taskENTER_CRITICAL(&s->lock);
+    double p = s->position;
+    if (revision) *revision = s->position_revision;
+    taskEXIT_CRITICAL(&s->lock);
+    return (uint32_t)floor(p * (s->info.frame_count - 1u) + 0.5);
+}
+
+static uint32_t requested_frame(vp_session_t *s)
+{ return requested_frame_snapshot(s, NULL); }
+
 static void reader_task(void *arg)
 {
     vp_session_t *s = arg;
@@ -376,7 +395,15 @@ static void reader_task(void *arg)
     bool ok = index != NULL;
     long fpos = -1;
     uint32_t i = 0;
+    uint32_t sent_revision = UINT32_MAX, revision = 0;
     while (ok && !s->quit) {
+        if (s->value_driven) {
+            i = requested_frame_snapshot(s, &revision);
+            if (s->paused || revision == sent_revision) {
+                wait_ev(s, EV_WAKE_READER, portMAX_DELAY);
+                continue;
+            }
+        }
         if (i >= s->info.frame_count) {
             if (!s->loop) break;
             i = 0;
@@ -401,6 +428,7 @@ static void reader_task(void *arg)
         }
         fpos = target + (long)size;
         ring_commit(s, at, need, waste);
+        sent_revision = revision;
         i++;
     }
 
@@ -729,6 +757,42 @@ static void pace_sample(vp_session_t *s, vp_pace_t *p, uint32_t proc_us, int64_t
     }
 }
 
+/* Random access has no watermark or clock. Drop obsolete queued requests before
+ * decoding, but present completed work even during a continuously moving sweep.
+ * This bounds latency without starving presentation when inputs exceed decode FPS. */
+static void dec_position(vp_session_t *s, vp_out_t *o)
+{
+    while (!s->quit) {
+        if (s->paused) { wait_ev(s, EV_WAKE_DECODER, portMAX_DELAY); continue; }
+        uint32_t size, rec;
+        const uint8_t *jpg;
+        if (!ring_peek(s, &size, &jpg, &rec)) {
+            if (s->reader_err) { s->state = VIDEO_STATE_ERROR; return; }
+            wait_ev(s, EV_WAKE_DECODER, portMAX_DELAY);
+            continue;
+        }
+        uint32_t frame;
+        memcpy(&frame, jpg - VP_REC_HDR, sizeof(frame));
+        if (frame != requested_frame(s)) { ring_release(s, rec); continue; }
+        if (!comp_wait_slot(s)) continue;
+        /* UI handoff may have waited while another value arrived. */
+        if (frame != requested_frame(s)) { ring_release(s, rec); continue; }
+        int b = -1;
+        esp_err_t err = comp_decode(s, o, jpg, size, &b);
+        ring_release(s, rec);
+        if (err != ESP_OK) {
+            /* There is no next clock tick to retry an unchanged numeric target.
+             * End the session so the element can fall back to its poster. */
+            s->state = VIDEO_STATE_ERROR;
+            return;
+        }
+        if (s->quit) break;
+        comp_publish(s, b);
+        s->started = true;
+        if (!s->paused) s->state = VIDEO_STATE_PLAYING;
+    }
+}
+
 static void dec_run(vp_session_t *s, vp_out_t *o)
 {
     const uint32_t fps = s->info.fps;
@@ -947,6 +1011,7 @@ static void decoder_task(void *arg)
                 ESP_LOGW(TAG, "LVGL flush still pending");
             }
             if (in->version == OBV2_VERSION) dec_timed(s, &o);
+            else if (s->value_driven) dec_position(s, &o);
             else dec_run(s, &o);
         } else {
             s->state = VIDEO_STATE_ERROR;
@@ -956,7 +1021,7 @@ static void decoder_task(void *arg)
     }
 
     /* Error/end also releases a producer waiting for ring space. */
-    if (s->info.version == OBV2_VERSION) {
+    if (s->info.version == OBV2_VERSION || s->value_driven) {
         s->quit = true;
         xEventGroupSetBits(s->ev, EV_WAKE_READER | EV_WAKE_DECODER);
     }
@@ -1000,13 +1065,13 @@ static void session_halt(vp_session_t *s)
     s->quit = true;
     xEventGroupSetBits(s->ev, EV_WAKE_READER | EV_WAKE_DECODER);
     if (s->mode == VIDEO_MODE_COMPOSITE && s->view) video_view_clear(s->view);
+    EventBits_t bits = xEventGroupWaitBits(s->ev, EV_DECODER_DONE, pdFALSE, pdFALSE,
+                                           pdMS_TO_TICKS(VP_STOP_WAIT_MS));
+    if (!(bits & EV_DECODER_DONE)) {
+        ESP_LOGW(TAG, "decoder is still releasing the JPEG engine; waiting before reuse");
+        xEventGroupWaitBits(s->ev, EV_DECODER_DONE, pdFALSE, pdFALSE, portMAX_DELAY);
+    }
     if (s->refr_paused) {
-        EventBits_t bits = xEventGroupWaitBits(s->ev, EV_DECODER_DONE, pdFALSE, pdFALSE,
-                                               pdMS_TO_TICKS(VP_STOP_WAIT_MS));
-        if (!(bits & EV_DECODER_DONE)) {
-            ESP_LOGW(TAG, "decoder is still releasing the panel; keeping LVGL paused");
-            xEventGroupWaitBits(s->ev, EV_DECODER_DONE, pdFALSE, pdFALSE, portMAX_DELAY);
-        }
         lv_timer_set_cb(s->refr_timer, s->refr_cb);
         lv_timer_resume(s->refr_timer);
         s->refr_paused = false;
@@ -1031,6 +1096,8 @@ esp_err_t video_player_start(const video_config_t *config)
     if (!config || !config->path || !config->path[0]) return ESP_ERR_INVALID_ARG;
     if (config->source != VIDEO_SRC_SD) return ESP_ERR_NOT_SUPPORTED;   /* flash = legacy, boot_video */
     if (config->mode == VIDEO_MODE_COMPOSITE && !config->video_view) return ESP_ERR_INVALID_ARG;
+    if (config->value_driven && (config->mode != VIDEO_MODE_COMPOSITE || !isfinite(config->position)))
+        return ESP_ERR_INVALID_ARG;
     video_player_stop();
 
     vp_session_t *s = heap_caps_calloc(1, sizeof(*s), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
@@ -1043,6 +1110,8 @@ esp_err_t video_player_start(const video_config_t *config)
     portMUX_INITIALIZE(&s->lock);
     s->mode = config->mode;
     s->loop = config->loop;
+    s->value_driven = config->value_driven;
+    s->position = fmax(0.0, fmin(1.0, config->position));
     s->target_fps = config->target_fps;
     s->view = config->mode == VIDEO_MODE_COMPOSITE ? config->video_view : NULL;
     s->front = -1;
@@ -1118,7 +1187,7 @@ esp_err_t video_player_pause(void)
     s->state = VIDEO_STATE_PAUSED;
     /* LVGL control context: freeze presentation too. An already-published
      * frame (including a racing publication) stays pending until resume. */
-    xEventGroupSetBits(s->ev, EV_WAKE_DECODER);
+    xEventGroupSetBits(s->ev, EV_WAKE_READER | EV_WAKE_DECODER);
     return ESP_OK;
 }
 
@@ -1129,7 +1198,24 @@ esp_err_t video_player_resume(void)
     s->state = s->started ? VIDEO_STATE_PLAYING : VIDEO_STATE_LOADING;
     s->paused = false;
     if (s->mode == VIDEO_MODE_COMPOSITE) lvgl_runtime_wake();
-    xEventGroupSetBits(s->ev, EV_WAKE_DECODER);
+    xEventGroupSetBits(s->ev, EV_WAKE_READER | EV_WAKE_DECODER);
+    return ESP_OK;
+}
+
+esp_err_t video_player_set_position(double position)
+{
+    vp_session_t *s = s_cur;
+    if (!s || !s->value_driven || !isfinite(position)) return ESP_ERR_INVALID_STATE;
+    taskENTER_CRITICAL(&s->lock);
+    double next = fmax(0.0, fmin(1.0, position));
+    if (s->position != next && (!s->hdr_ready ||
+        floor(s->position * (s->info.frame_count - 1u) + 0.5) !=
+        floor(next * (s->info.frame_count - 1u) + 0.5))) {
+        s->position_revision++;
+    }
+    s->position = next;
+    taskEXIT_CRITICAL(&s->lock);
+    xEventGroupSetBits(s->ev, EV_WAKE_READER | EV_WAKE_DECODER);
     return ESP_OK;
 }
 

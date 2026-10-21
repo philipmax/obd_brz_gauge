@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "cJSON.h"
+#include "esp_log.h"
 #include "vehicle/vp_manager.h"
 #include "export_path/ui_ext.h"
 #include "app_obd_dsp/theme_library.h"
@@ -72,13 +73,32 @@ char *device_serial_rpc(const char *json, bool *restart)
         bool deleted = false;
         if (!lvgl_mux || xSemaphoreTake(lvgl_mux, pdMS_TO_TICKS(1000)) != pdTRUE) {
             cJSON_AddStringToObject(response, "error", "display busy");
+            cJSON_AddBoolToObject(response, "retryable", true);
+            cJSON_AddStringToObject(response, "stage", "prepare");
+            cJSON_AddStringToObject(response, "code", esp_err_to_name(ESP_ERR_TIMEOUT));
         } else {
             esp_err_t err = ui_ext_theme_prepare_install();
+            bool preparing = err == ESP_ERR_INVALID_STATE;
+            bool prepared = err == ESP_OK;
             if (err == ESP_OK) err = theme_library_delete_current(&deleted);
             xSemaphoreGive(lvgl_mux);
             ok = err == ESP_OK;
             cJSON_AddBoolToObject(response, "deleted", deleted);
-            if (!ok) cJSON_AddStringToObject(response, "error", "theme delete failed");
+            if (!ok) {
+                const char *stage = prepared ? "delete" : "prepare";
+                const char *message = preparing ? "theme preparation busy"
+                    : !prepared ? "theme preparation failed"
+                    : err == ESP_ERR_INVALID_STATE ? "SD card is not mounted"
+                    : "theme delete failed";
+                cJSON_AddStringToObject(response, "error", message);
+                cJSON_AddStringToObject(response, "stage", stage);
+                cJSON_AddStringToObject(response, "code", esp_err_to_name(err));
+                ESP_LOGW("usb_rpc", "theme.erase %s failed: %s", stage, esp_err_to_name(err));
+                /* Preparation can be refused while boot preloading still reads
+                 * the selected package. No files have been deleted in this case. */
+                cJSON_AddBoolToObject(response, "retryable",
+                                     err == ESP_ERR_TIMEOUT || preparing);
+            }
         }
     } else if (!strcmp(name, "hello")) {
         ok = true;

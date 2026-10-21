@@ -59,6 +59,7 @@ typedef struct {
     uint32_t c1, c2;          // arc indicator / bar fg / label text; arc track / bar bg
     uint8_t  has_tint;
     uint8_t  hidden;
+    uint8_t  opacity;
     uint32_t tint;
     uint8_t  tint_opa;
     const char *text;         // static labels
@@ -113,6 +114,7 @@ struct te_live_page {
     int64_t       build_ms;
     size_t        cost;       // converted image bytes this page pins
     bool          was_suppressed;
+    bool          was_sweep;       // transition-only sweep diagnostics
     double        values[SIG_SLOT_COUNT];
     double        prev[SIG_SLOT_COUNT];      // last valid value (NaN = none)
     int64_t       chg_until[SIG_SLOT_COUNT]; // change window end (ms)
@@ -197,7 +199,9 @@ static int te_resolve(const char *key, void *ctx)
 static int te_class(const tl_elem_t *el, bool target)
 {
     if (el->kind == TR_KIND_POINTER) return TE_CLS_POINTER;
-    if (el->kind == TR_KIND_IMAGE) return target ? TE_CLS_TARGET : TE_CLS_DECOR;
+    // Keep video posters available as fallbacks while a layer is hidden,
+    // unavailable, or waiting for its first decoded frame.
+    if (el->kind == TR_KIND_IMAGE) return (target || el->video) ? TE_CLS_TARGET : TE_CLS_DECOR;
     return TE_CLS_NONE;
 }
 
@@ -715,7 +719,8 @@ static void te_apply_vis(te_item_t *it)
     bool hid = it->applied.hidden != 0;
     if (it->obj) {
         bool h = hid;
-        if (!it->video && it->n_vars && (it->kind == TR_KIND_IMAGE || it->kind == TR_KIND_POINTER)) {
+        if (!hid && !it->video && it->n_vars &&
+            (it->kind == TR_KIND_IMAGE || it->kind == TR_KIND_POINTER)) {
             const tic_entry_t *e = it->vars[it->cur].e;
             if (!e || e->empty) h = true;
         }
@@ -779,11 +784,20 @@ static void te_img_select(te_item_t *it, const te_look_t *d)
     }
 }
 
+static lv_opa_t te_opa(uint8_t percent)
+{
+    return percent >= 100 ? LV_OPA_COVER : (lv_opa_t)((percent * LV_OPA_COVER + 50) / 100);
+}
+
 static void te_video_look(te_item_t *it, const te_look_t *d, const te_look_t *a)
 {
     if (it->obj && (d->has_tint != a->has_tint || d->tint != a->tint || d->tint_opa != a->tint_opa)) {
         lv_obj_set_style_img_recolor(it->obj, lv_color_hex(d->tint), 0);
         lv_obj_set_style_img_recolor_opa(it->obj, d->has_tint ? d->tint_opa : LV_OPA_TRANSP, 0);
+    }
+    if (d->opacity != a->opacity) {
+        if (it->obj) lv_obj_set_style_img_opa(it->obj, te_opa(d->opacity), 0);
+        if (it->vid) video_elem_set_opa(it->vid, te_opa(d->opacity));
     }
     if (!it->vid) return;
     if (!te_streq(d->asset, a->asset)) {
@@ -796,7 +810,6 @@ static void te_video_look(te_item_t *it, const te_look_t *d, const te_look_t *a)
         }
         video_elem_set_key(it->vid, key);
     }
-    if (d->hidden != a->hidden) video_elem_set_paused(it->vid, d->hidden != 0);
 }
 
 // Apply the desired look of a rule target, touching only what changed.
@@ -825,6 +838,8 @@ static void te_apply_look(te_item_t *it, const te_look_t *d)
                                (d->has_tint && (d->tint != a->tint || d->tint_opa != a->tint_opa)))) {
             te_img_select(it, d);
         }
+        if (!it->video && it->obj && d->opacity != a->opacity)
+            lv_obj_set_style_img_opa(it->obj, te_opa(d->opacity), 0);
         break;
     default:
         break;
@@ -832,6 +847,9 @@ static void te_apply_look(te_item_t *it, const te_look_t *d)
     bool vis = d->hidden != a->hidden || cur != it->cur;
     *a = *d;
     if (vis) te_apply_vis(it);
+    // Eligibility must see the updated container visibility before choosing
+    // the next video (especially when restoring a previously hidden layer).
+    if (vis && it->vid) video_elem_set_paused(it->vid, d->hidden != 0);
 }
 
 // ---------------- bindings ----------------
@@ -840,6 +858,21 @@ static void te_update_binding(te_item_t *it, const double *values, bool sweep_on
 {
     const tl_elem_t *el = it->el;
     double raw = it->slot >= 0 ? values[it->slot] : NAN;
+
+    if (el->video_value && it->vid) {
+        /* Missing data holds the previous frame; creation starts at frame zero. */
+        if (!sweep_on && !isfinite(raw)) return;
+        double v = sweep_on ? el->range_min + sweep * (el->range_max - el->range_min) : raw;
+        v = fmax(el->range_min, fmin(el->range_max, v));
+        if (el->video_step > 0 && v < el->range_max) {
+            v = el->range_min + floor((v - el->range_min) / el->video_step + 0.5) * el->video_step;
+        }
+        double pos = fmax(0.0, fmin(1.0, (v - el->range_min) / (el->range_max - el->range_min)));
+        if (!it->have_last || pos != it->last_raw) video_elem_set_position(it->vid, pos);
+        it->last_raw = pos;
+        it->have_last = 1;
+        return;
+    }
 
     if (it->kind == TR_KIND_LABEL) {
         if (!it->bound) return;
@@ -937,6 +970,10 @@ static void te_apply_targets(te_live_page_t *p, const tr_result_t *res, bool sup
             if (o->props & TR_PROP_TEXT) d.text = o->text ? o->text : "";
             if (o->props & TR_PROP_VISIBLE) d.hidden = o->visible ? 0 : 1;
             if (o->props & TR_PROP_ASSET) d.asset = o->asset;
+            if (o->props & TR_PROP_OPACITY) {
+                d.opacity = (uint8_t)(it->base.opacity +
+                    ((double)o->opacity - it->base.opacity) * o->opacity_progress + 0.5);
+            }
         }
         te_apply_look(it, &d);
     }
@@ -944,12 +981,15 @@ static void te_apply_targets(te_live_page_t *p, const tr_result_t *res, bool sup
 
 static bool te_rules_animating(const tr_result_t *res, const tr_program_t *prog)
 {
-    if (!res || !prog) return false;
+    if (!prog) return false;
+    if (prog->resolved_exit_mask) return true;
+    if (!res) return false;
     for (uint8_t i = 0; i < res->n_active; i++) {
         const tr_rule_t *rule = &prog->rules[res->active[i]];
         for (uint8_t a = 0; a < rule->n_actions; a++) {
             if (rule->actions[a].animation.mode &&
-                (rule->actions[a].props & TR_PROP_ANY_COLOR)) return true;
+                ((rule->actions[a].props & TR_PROP_ANY_COLOR) ||
+                 ((rule->actions[a].props & TR_PROP_OPACITY) && rule->actions[a].animation.mode != 3))) return true;
         }
     }
     return false;
@@ -1005,13 +1045,13 @@ static void te_page_update(te_ctx_t *c, te_live_page_t *p)
         // The first pass also initializes unbound arcs, bars and pointers.
         for (uint16_t i = 0; i < p->n_items; i++) {
             te_item_t *it = &p->items[i];
-            if (!it->obj || it->kind == TR_KIND_IMAGE) continue;
+            if ((!it->obj && !it->vid) || (it->kind == TR_KIND_IMAGE && !it->el->video_value)) continue;
             te_update_binding(it, p->values, sweep_on, sweep);
         }
     } else {
         for (uint16_t i = 0; i < p->n_binding_items; i++) {
             te_item_t *it = &p->items[p->binding_items[i]];
-            if (it->obj) te_update_binding(it, p->values, sweep_on, sweep);
+            if (it->obj || it->vid) te_update_binding(it, p->values, sweep_on, sweep);
         }
     }
     p->bindings_seeded = true;
@@ -1028,10 +1068,17 @@ static void te_page_update(te_ctx_t *c, te_live_page_t *p)
         tr_inputs_t in = {rule_values, SIG_SLOT_COUNT, 0, changed, (double)(now - p->build_ms)};
         const bool had_resolved = p->prog->have_resolved;
         const uint32_t mask = p->prog->resolved_mask;
+        const uint32_t exit_mask = p->prog->resolved_exit_mask;
         const tr_result_t *res = tr_eval(p->prog, &in);
+        if (sweep_on && (!p->was_sweep || mask != p->prog->resolved_mask || sup != p->was_suppressed)) {
+            ESP_LOGI(TE_TAG, "sweep rules: rpm=%u active=0x%08lx targets=%u suppressed=%u",
+                     (unsigned)c->sweep_rpm, (unsigned long)p->prog->resolved_mask,
+                     (unsigned)p->prog->n_targets, (unsigned)sup);
+        }
         // Evaluation still advances conditions, latches and debounce each tick.
         // Bindings do not change rule appearance; stable output needs no target pass.
-        if (!had_resolved || mask != p->prog->resolved_mask || sup != p->was_suppressed ||
+        if (!had_resolved || mask != p->prog->resolved_mask || exit_mask != p->prog->resolved_exit_mask ||
+            sup != p->was_suppressed ||
             te_rules_animating(res, p->prog))
             te_apply_targets(p, res, sup);
     }
@@ -1040,6 +1087,9 @@ static void te_page_update(te_ctx_t *c, te_live_page_t *p)
         lv_obj_set_style_bg_color(p->scr, lv_color_hex(p->layout->bg_color), 0);
         lv_obj_set_style_bg_opa(p->scr, LV_OPA_COVER, 0);
     }
+    if (p->was_sweep && !sweep_on)
+        ESP_LOGI(TE_TAG, "sweep ended: rule inputs restored to live signals");
+    p->was_sweep = sweep_on;
     p->was_suppressed = sup;
 }
 
@@ -1166,6 +1216,7 @@ static void te_items_init(te_ctx_t *c, te_live_page_t *p, const te_prep_t *prep)
         const tl_elem_t *el = &l->el[i];
         te_item_t *it = &p->items[i];
         it->el = el;
+        it->base.opacity = (uint8_t)(el->opacity + 0.5);
         it->kind = el->kind;
         it->video = el->video;
         it->target = prep->is_target[i];
@@ -1187,7 +1238,7 @@ static void te_items_init(te_ctx_t *c, te_live_page_t *p, const te_prep_t *prep)
             }
         }
 
-        if (el->data_source && el->kind != TR_KIND_IMAGE) {
+        if (el->data_source && (el->kind != TR_KIND_IMAGE || el->video_value)) {
             it->bound = 1;
             it->slot = (int16_t)te_resolve(el->data_source, NULL);
             if (it->slot >= 0) p->used_mask |= 1ull << it->slot;
@@ -1429,6 +1480,7 @@ static void te_create_image(lv_obj_t *scr, te_item_t *it)
     lv_obj_t *o = lv_img_create(scr);
     it->obj = o;
     te_plain(o);
+    lv_obj_set_style_img_opa(o, te_opa(it->base.opacity), 0);
     te_img_show(it, 0);
     te_apply_vis(it);
 }
@@ -1445,7 +1497,9 @@ static void te_create_video(lv_obj_t *scr, te_item_t *it, const char *theme_key)
     te_plain(box);
     lv_obj_set_pos(box, (lv_coord_t)tl_px(el->x), (lv_coord_t)tl_px(el->y));
     lv_obj_set_size(box, (lv_coord_t)w, (lv_coord_t)h);
-    lv_obj_t *vid = video_elem_create(box, theme_key, key, 0, 0, (lv_coord_t)w, (lv_coord_t)h);
+    lv_obj_t *vid = el->video_value
+        ? video_elem_create_value(box, theme_key, key, 0, 0, (lv_coord_t)w, (lv_coord_t)h)
+        : video_elem_create(box, theme_key, key, 0, 0, (lv_coord_t)w, (lv_coord_t)h);
     if (!vid) {
         lv_obj_del(box);   // no .obv on the card: the poster stays
         return;
@@ -1453,6 +1507,7 @@ static void te_create_video(lv_obj_t *scr, te_item_t *it, const char *theme_key)
     it->vbox = box;
     it->vid = vid;
     it->vid_base_key = key;
+    video_elem_set_opa(vid, te_opa(it->base.opacity));
 }
 
 static te_live_page_t *te_prepare(te_ctx_t *c, int idx, te_prep_t *prep)
@@ -1502,7 +1557,7 @@ static te_live_page_t *te_prepare(te_ctx_t *c, int idx, te_prep_t *prep)
     uint16_t binding_count = 0;
     for (uint16_t i = 0; i < p->n_items; i++) {
         const te_item_t *it = &p->items[i];
-        if (it->bound && it->kind != TR_KIND_IMAGE) binding_count++;
+        if (it->bound) binding_count++;
     }
     if (binding_count) {
         p->binding_items = te_calloc(binding_count, sizeof(*p->binding_items));
@@ -1511,7 +1566,7 @@ static te_live_page_t *te_prepare(te_ctx_t *c, int idx, te_prep_t *prep)
             uint16_t n = 0;
             for (uint16_t i = 0; i < p->n_items; i++) {
                 const te_item_t *it = &p->items[i];
-                if (it->bound && it->kind != TR_KIND_IMAGE) p->binding_items[n++] = i;
+                if (it->bound) p->binding_items[n++] = i;
             }
         }
     }
@@ -1575,8 +1630,9 @@ static lv_obj_t *te_publish(te_ctx_t *c, te_live_page_t *p)
     if (lv_scr_act() == scr) c->active = p;
 
     tic_trim(&c->cache, c->cache.pinned + (has_video ? 0 : budget / 2));
-    ESP_LOGI(TE_TAG, "page %s: %u elements, %u rules, images %uK of %uK budget (cache %uK, PSRAM free %uK)",
+    ESP_LOGI(TE_TAG, "page %s: %u elements, %u rules, %u targets, images %uK of %uK budget (cache %uK, PSRAM free %uK)",
              page_id, (unsigned)l->n, p->prog ? (unsigned)p->prog->n_rules : 0u,
+             p->prog ? (unsigned)p->prog->n_targets : 0u,
              (unsigned)(p->cost / 1024), (unsigned)(budget / 1024),
              (unsigned)(c->cache.used / 1024),
              (unsigned)(heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024));

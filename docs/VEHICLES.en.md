@@ -14,6 +14,10 @@ Default behavior = firmware-builtin obd2.generic (standard OBD2, nothing to inst
 Other vehicles are installed and activated through the web UI or App; changes take effect after reboot
 ```
 
+The web editor at `/vehicles/editor` starts with standard OBD2, local JSON or a community profile, lists collection data and PIDs, and supports editing or adding items.
+New standard profiles include 9 built-in standard items at editable one-second intervals; imported profiles retain their original frequencies.
+Adding standard data preserves custom or disabled items and complete manufacturer requests and fallback fields for BMW, Jeep and other vehicles. See [PID_GUIDE.md](PID_GUIDE.en.md) for fields and formulas.
+
 ## Vehicle profile catalog
 
 The catalog repo currently holds **17 profiles**

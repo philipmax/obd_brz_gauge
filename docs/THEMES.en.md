@@ -21,7 +21,7 @@ color defaults for its own elements; built-in pages keep their compiled palette.
 No selection, missing card/file, corrupt manifest or parse failure falls back to the built-in
 default theme while preserving the saved selection.
 
-Web theme installation and “Delete current theme” both use ESP32-S3 native USB, requiring no device address, token or WiFi OTA. Deletion releases theme pages and resources, removes the current `/OBD/THEMES/<key>/` directory (including `theme.bin`, rules, images, fonts and video) and saved selection, then the web client separately requests reboot to restore the built-in theme. Other themes and the shared boot animation remain. Update to USB-management firmware first; missing SD, busy storage and deletion failures report errors.
+Web theme installation and “Delete current theme” both use ESP32-S3 native USB, requiring no device address, token or WiFi OTA. Deletion releases theme pages and resources, removes the current `/OBD/THEMES/<key>/` directory (including `theme.bin`, rules, images, fonts and video) and saved selection, then the web client separately requests reboot when “Delete current theme” is clicked. Installing a new theme instead automatically clears the current theme, skips deletion when none exists, and reboots only after uploading and enabling the replacement. Other themes and the shared boot animation remain. Update to USB-management firmware first; missing SD and deletion failures report errors, while temporary contention can be retried automatically.
 
 ---
 
@@ -414,16 +414,49 @@ that prefix stripped. Lookup order is
 `/OBD/THEMES/<theme_key>/<key>.obv`, then `/OBD/VIDEO/<key>.obv` (for sharing
 across themes); if neither exists, the poster stays. A `visible` rule can pause the video, and an
 `asset` rule switches to another file named by the sidecar's `asset_files`
-(no folder or extension). Theme videos loop, and only one video decodes at a
-time.
+(no folder or extension). Theme videos loop by default or select frames from a bound numeric signal. Only one video decodes at a time: the topmost visible video layer with nonzero opacity owns the player, while the others show their posters.
 Theme directory keys and video keys support up to 64 characters; the player path buffer accommodates
 the complete SD path for a theme video.
 
-Looping theme videos use the custom **OBV1** container
+Theme videos use the custom **OBV1** container
 (`main/media/obv1_format.h`, produced by `tools/make_video.py`):
 `[64 B header][8 B × frame_count frame index][JPEG frame data]`, width/height
 8..360 and multiples of 8, fps 1..60, up to 36000 frames, each frame ≤48 KB,
 checked by CRC-32. Web boot-animation uploads use OBV2 below. Commands:
+
+The theme editor's toolbar Import Video button opens a configuration dialog. It uses the same local decoding workflow as boot animations (browser decoders and an on-demand FFmpeg WebAssembly decoder) for supported common video formats, converts to 360×360, 24 fps OBV1, and creates the poster from the first frame. Source video is not uploaded; encrypted, damaged or unsupported inputs report an error. Existing firmware-supported `.obv` files remain importable and still require a separately selected poster image.
+
+The editor no longer has a separate resource-library entry. Images and videos imported from the toolbar appear directly on the canvas and in the layer list, and are included in the theme ZIP. Images and videos with the same filename can be imported repeatedly: after decoding, the editor allocates a unique internal identifier against the current project (adding `_2`, `_3`, etc. for duplicate video names), preserving existing media and event references. Reimporting after deleting a layer also requires no manual file renaming. Click the theme name at the top to edit metadata; select a text element and use the font-property control to import or manage custom fonts.
+
+The editor follows Design → Data → Events → Preview, with contextual instructions for each step. Insertion tools have visible text labels. With nothing selected, the inspector offers RPM, speed and coolant starter components with bindings already configured; adding them preserves existing content and is undone in one step. Design properties show component names and appearance first, with precise coordinates and internal IDs under Position and Advanced Settings. The data inspector can bind static text directly to vehicle signals; numeric transformations and text mappings are collapsed by default. Expand the bottom simulator in Preview and drag values to check behavior. The canvas fits the available space automatically, with manual zoom and a reset-to-fit control. Display options, dimensions and zoom occupy separate toolbar rows, while alignment and arrangement are collapsed by default to prevent overlap in narrower windows.
+
+Editor drafts save the project and video files together in browser IndexedDB; after “Saved” appears, reloading restores them, and save failures are shown explicitly. Save downloads a `<id>.gaugeproj.zip` editable backup containing images, fonts and videos; Open restores this archive or a legacy `.gaugeproj.json`. Project ZIPs are for editing, while exported theme ZIPs are for device installation. Missing videos in old drafts or JSON files each get a Relink Video button: select the source video or a theme OBV1 `.obv` to retain layer positions and event settings. Theme exports require and package only videos referenced by layers or events; unreferenced records retained after deleting layers no longer block export.
+
+The import dialog shows conversion progress, the current stage, percentage and frame counts when available, covering decoding, frame encoding and theme-video generation. Stages without measurable totals, such as loading the decoder, show an indeterminate bar. Success reveals the timeline preview; failures show their cause, and duplicate additions are disabled while processing. Relinking a video still shows progress above the canvas.
+
+#### Value-driven animation
+
+In the import dialog, choose Loop or Follow Value. For the latter, select a signal, start value, end value and numeric step; the end must exceed the start, and the step cannot be negative. Aligned video and numeric timelines show thumbnails and the corresponding value. Scrub or play to check the mapping, then choose Add to Canvas. Select an existing video layer to edit its binding and inspect the timeline in its properties.
+
+The start value selects the first frame, the end value the last, and intermediate values select the nearest proportional frame. Decreasing values move backward, and out-of-range values clamp to the endpoints. Invalid data holds the last position, initially the first frame. Both editor simulation and the firmware BLE connection sweep drive bindings; visibility, opacity and asset-switch events still apply to the layer. The device reads and decodes target frames asynchronously and may skip obsolete targets during rapid changes; displaying every intermediate frame is not guaranteed.
+
+Step `0` uses all existing frames. A positive step first rounds the value to the nearest increment from the start, then selects a frame; the endpoint always remains reachable. For example, bind a six-second video to `0–6000` RPM with step `100`: `3000` RPM selects a frame near the midpoint and `6000` RPM selects the last frame. A step does not create frames: six seconds at the imported 24 fps has approximately 144 frames, and available images still depend on the source and conversion.
+
+Layout JSON adds these optional fields to a video image element (geometry and poster fields omitted below):
+
+```json
+{
+  "type": "image",
+  "id": "vid_rpm",
+  "video_playback": "value",
+  "data_source": "obd.rpm",
+  "range_min": 0,
+  "range_max": 6000,
+  "video_step": 100
+}
+```
+
+Without `video_playback: "value"`, existing loop behavior is preserved; bindings apply only to `vid_` / `video_` image elements. `data_source` uses a standard signal name, while `range_min`, `range_max` and `video_step` use raw signal units. The web controls use display units; for example, raw voltage `120` is shown as `12.0 V`. Invalid ranges do not enable value-driven playback. Both theme playback modes use indexed OBV1; OBV2 remains exclusive to fullscreen boot animations.
 
 ```bash
 python3 tools/make_video.py boot INPUT -o boot.obv            # boot video, defaults 360px/4:2:2/Q75/24fps
@@ -435,7 +468,7 @@ python3 tools/make_video.py legacy INPUT -o bootmedia/slot_a [--raw bootmedia.ra
 
 Needs Pillow (`pip install Pillow`); video inputs also need ffmpeg.
 
-Local web boot animation uses **OBV2**; looping theme videos continue to use OBV1. OBV2 keeps the `OBV1` magic and 64 B header,
+Local web boot animation uses **OBV2**; theme videos continue to use OBV1. OBV2 keeps the `OBV1` magic and 64 B header,
 with `version=2`, `fps=0`, and `timescale=1000000`; each 16 B index entry is `offset,size,timestamp_us,duration_us`.
 Timestamps start at 0 and are contiguous, frame intervals are ≥16666 µs, and `duration_ms` rounds the total duration up.
 Limits are 36000 frames, ≤48 KiB per frame, ≤256 MiB per file, and ≤1.25 MiB for a sliding one-second compressed window plus wrap headroom.
@@ -455,9 +488,13 @@ The ZIP contains `/OBD/THEMES/<key>/theme.bin`, the theme's `*.obv` videos, and
 Export is blocked when referenced video files need relinking. Boot animation is independent and stays under shared `/OBD/BOOT/`.
 
 Recommended workflow: insert an SD card, connect the ESP32-S3 native USB port to the web flasher, and choose **From community** or
-**Upload local files** in the **Theme** section. The page checks paths, CRCs, theme IDs, data ranges, and video dependencies, unpacks it, and uploads files in order.
+**Upload local files** in the **Theme** section. The page checks paths, CRCs, theme IDs, data ranges, and video dependencies, unpacks it, detects and deletes the current theme directory and selection over USB, then uploads files in order. When no current theme exists, upload proceeds directly. Installation stops if deletion is not confirmed.
 Firmware verifies SHA-256, stages files, and generates `sidecar.json`; after all steps succeed it saves the theme selection and restarts.
 No manual extraction or separate activation is needed. First install firmware with USB theme-bundle support; older firmware prompts an upgrade.
+Devices with an existing theme can upload a replacement directly. Switching from flashing mode to the application first restarts the gauge; cleanup then waits for boot theme preparation or lock contention,
+retrying every 500 ms with a two-minute waiting budget and a visible waiting message. Manual deletion is unnecessary. Firmware replies with `retryable:true` may be retried;
+legacy replies without that field are also supported when the exact error is `theme delete failed` or `display busy`. Legacy errors cannot distinguish startup contention from actual deletion failure; persistent failure stops at the deadline and prompts a firmware upgrade for detailed diagnostics.
+New firmware includes failure stage `stage` and error code `code`; explicit `retryable:false`, other business failures or communication errors stop installation immediately. Upload BEGIN retains its separate 30-second storage-contention wait.
 
 New complete ZIPs, old `*-sd.zip` files, and STORE / DEFLATE compression are supported. Legacy BIN, companion gaugeproj / sidecar JSON,
 and `.obv` files can also be selected together. A BIN alone retains its images, fonts, and layouts but cannot restore missing rules or videos;
@@ -469,6 +506,7 @@ a backup, and a recovery journal. Failed installation rolls back; if power fails
 old files and selection. Before upload, at least `2 × upload stream size + 1 MiB` of free space is required. Both the web ZIP and upload stream
 are limited to 256 MiB, with at most 128 installed files. Host tests cover directory replacement, validation failure, selection rollback, and
 interruption recovery; they do not establish actual SD-card power-loss reliability.
+Web replacement deletes the current theme before upload, so the installation transaction cannot restore that deleted package. If upload fails or is interrupted after cleanup, the next restart uses the built-in default theme; upload again to install a replacement.
 
 Alternatively extract the ZIP at the SD root, preserving existing files. Rules are imported automatically at boot, but copying does not activate the theme.
 Web theme installation uses ESP32-S3 native USB; the App WiFi OTA path remains compatible.
@@ -486,6 +524,12 @@ media upload returns "SD card required".
 
 ### Runtime behavior
 
+Image and video properties in the editor expose 0–100% opacity. The event panel summarizes each rule as “When / Action / Restore”; opacity events directly expose the base value, target value and transition duration in seconds, with the base value shared with layer properties. Browser previews can play multiple videos concurrently, retain the poster until the first frame decodes, and keep the previous frame while attempting subsequent frames after a decode failure.
+
+The browser event and preview workspaces advance debounce and transitions on an independent wall clock. Even while the preview timeline is paused, manually changing simulated RPM or other data triggers events once their conditions and debounce are satisfied; releasing the condition restores the layer’s base properties. Pausing the timeline still pauses time for timer triggers.
+
+The preview rule status distinguishes disabled, waiting and active rules and displays data conditions, current simulated values and action targets. Disabled rules have an explicit enable button in the preview. Event-list status dots only indicate state; clicking them does not toggle enablement. Use the enable control in the event details. To fade a video out when RPM reaches 3500, enable the rule, set its condition to `obd.rpm >= 3500`, set the video’s base opacity to `100` and the action target opacity to `0`, and select a fade transition.
+
 - At boot `theme_engine_init()` reads the SD package selected in NVS: missing card/file,
   corrupt manifest or parse failure falls back to the built-in default.
 - While a theme page is on screen, the LVGL task normally calls `theme_tick()`
@@ -497,6 +541,7 @@ media upload returns "SD card required".
   `obd.*` signals as changing inputs, so threshold conditions and `change` rules for every signal can respond to the sweep.
   Rule input immediately returns to real `signal_store` data when the sweep ends; simulated values are never written to or used
   to overwrite real OBD data. Vehicle-specific `veh.*` signals have no shared range and continue using their live data during sweep
+- Sweep rules still follow their actual condition interval and animation duration: during an approximately one-second ramp from 0 to 8000 rpm, `obd.rpm <= 3000` holds for only about 0.4 seconds at the start, which cannot complete a one-second fade. Use `obd.rpm >= 3500` to fade out above 3500 rpm. Uploading a theme ZIP updates theme resources, not firmware. Page-creation logs include rule and target counts; sweep start and active-rule changes log `sweep rules` with simulated RPM, active mask, target count and alarm suppression, and sweep end logs the return to live inputs.
 - Rule conditions/hysteresis/debounce/timing state still advance on each call. An unchanged
   active set reuses the sorted action coverage; changes rebuild it and remove overrides of
   rules that exit. Rebuilding a page or theme clears the cache.
@@ -509,6 +554,15 @@ media upload returns "SD card required".
   or image tint on each theme tick. `change` and `timer` rules remain active through the longest
   animation duration. Frames are not pre-generated; `text`, `visible` and `asset` still change
   immediately, and image-resource changes are not crossfaded.
+- Image and video layers accept a layout `opacity` from 0 to 100 (default 100). Rule-action
+  `set.opacity` selects a target opacity; `animation.mode: "fade"` and `durationMs` interpolate to it
+  over the specified duration. When the condition clears, opacity fades back to the layer's base
+  value over the same duration. Theme videos share one JPEG decoder: firmware plays only the topmost
+  visible, non-transparent, unpaused video. Hiding the upper layer or setting its opacity to 0 hands
+  playback to the lower video, and also hides the upper video's poster so it cannot mask that layer;
+  every video poster is kept in required image-cache priority so lower video layers retain a static
+  fallback even when decorative images exceed the cache budget. Two videos cannot be decoded
+  simultaneously or live-crossfaded.
 - Label fonts: try the manifest's `font_asset` first, fall back to built-in
   Montserrat 12/14/16/26/32/48 on failure (exact match first, else the
   nearest smaller size, else 12 as a last resort); sizes above 48 use the 48

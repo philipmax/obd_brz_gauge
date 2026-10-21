@@ -79,6 +79,7 @@ enum {
     TR_PROP_TEXT     = 1u << 3,   // static labels only (apply layer decides)
     TR_PROP_VISIBLE  = 1u << 4,
     TR_PROP_ASSET    = 1u << 5,
+    TR_PROP_OPACITY  = 1u << 6,
 };
 #define TR_PROP_ANY_COLOR (TR_PROP_COLOR | TR_PROP_BG_COLOR | TR_PROP_TINT)
 
@@ -133,6 +134,7 @@ typedef struct {
     const char *color_str; // editor string, e.g. "#ff3158"
     const char *text;
     const char *asset;
+    double opacity;          // 0..100
     tr_animation_t animation;
 } tr_action_t;
 
@@ -169,8 +171,11 @@ typedef struct {
     const char *color_str;
     const char *text;      // valid with TR_PROP_TEXT
     const char *asset;     // valid with TR_PROP_ASSET
+    double opacity;        // valid with TR_PROP_OPACITY, 0..100
+    double opacity_progress; // 0=base opacity, 1=action opacity
     double animation_progress; // 0..1 for the winning animated color action
     uint8_t animated_color;
+    uint8_t animated_opacity;
 } tr_override_t;
 
 typedef struct {
@@ -195,6 +200,9 @@ typedef struct {
     double   animation_start[TR_MAX_RULES];
     double   hold_until[TR_MAX_RULES];
     uint8_t  animation_armed[TR_MAX_RULES];
+    uint8_t  active_armed[TR_MAX_RULES];
+    uint8_t  opacity_exit_armed[TR_MAX_RULES];
+    double   opacity_exit_start[TR_MAX_RULES];
 } tr_state_t;
 
 typedef struct {
@@ -222,6 +230,7 @@ typedef struct tr_program {
     // Compiled rules/actions are immutable. Cache only the resolved output;
     // latches, debounce and triggers still advance on every evaluation.
     uint32_t resolved_mask;
+    uint32_t resolved_exit_mask;
     bool     have_resolved;
 } tr_program_t;
 

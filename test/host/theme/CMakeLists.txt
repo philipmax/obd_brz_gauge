@@ -1,6 +1,6 @@
 # Host tests for the pure-C parts of the theme engine (main/theme_engine):
 # pixel conversion, streaming JSON splitter, editor overlay number path,
-# the sidecar reducer / pairing and the theme.bin layout parser. Optional real-LVGL page test;
+# the sidecar reducer / pairing, video owner handoff and theme.bin layout parser. Optional real-LVGL tests;
 # the default suite needs neither an ESP-IDF build nor LVGL.
 #
 #   cmake -S test/host/theme -B /tmp/theme_host && cmake --build /tmp/theme_host
@@ -136,6 +136,11 @@ if(TE_PAGE_LVGL)
     target_link_libraries(test_page PRIVATE theme_page_support)
     target_compile_options(test_page PRIVATE ${TE_WARN} -ffp-contract=off)
     add_test(NAME theme_page COMMAND test_page)
+    add_executable(test_video_elem test_video_elem.c th_util.c "${REPO_ROOT}/main/media/video_elem.c")
+    target_include_directories(test_video_elem BEFORE PRIVATE video_elem_stubs page_stubs "${REPO_ROOT}/main" "${CJSON_DIR}")
+    target_link_libraries(test_video_elem PRIVATE te_lvgl te_cjson)
+    target_compile_options(test_video_elem PRIVATE ${TE_WARN})
+    add_test(NAME theme_video_elem COMMAND test_video_elem)
     add_executable(test_sd_theme test_sd_theme.c th_util.c)
     target_link_libraries(test_sd_theme PRIVATE theme_page_support)
     target_compile_options(test_sd_theme PRIVATE ${TE_WARN} -ffp-contract=off)

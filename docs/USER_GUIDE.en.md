@@ -11,8 +11,9 @@ The firmware also fixes a missed LCD SPI lock wakeup in ESP-IDF 5.5.3 that could
 
 ## First boot
 
-1. On power-up the Sky Gauge logo appears, then the boot animation set in
-   settings plays (RACE by default, can be disabled)
+1. On power-up the backlight stays off until the first Sky Gauge logo frame has
+   reached the LCD and a 50 ms panel-scan settling delay has elapsed; the
+   configured boot animation then plays (RACE by default, can be disabled)
 2. Install vehicle profiles and themes through the web UI or App; activate a
    profile on the gauge's VEHICLE page and select a theme under Settings → THEME
    - **BOOT PAGE** — pick the screen the gauge lands on after boot

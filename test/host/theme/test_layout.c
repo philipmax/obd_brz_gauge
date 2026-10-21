@@ -63,7 +63,7 @@ static void test_elements(void)
         "{\"type\":\"label\",\"id\":\"lbl_2\",\"x\":5,\"y\":6,\"align\":\"right\",\"text\":\"\\u00b0C\","
         "\"data_source\":\"\"},"
         "{\"type\":\"image\",\"id\":\"vid_intro\",\"x\":0,\"y\":0,\"width\":360,\"height\":360,"
-        "\"rotation\":12.34,\"asset\":\"poster\",\"data_source\":\"obd.rpm\"},"
+        "\"rotation\":12.34,\"asset\":\"poster\",\"data_source\":\"obd.rpm\",\"opacity\":35},"
         "{\"type\":\"pointer\",\"id\":\"ptr_1\",\"x\":170,\"y\":40,\"width\":20,\"height\":150,"
         "\"asset\":\"needle\",\"data_source\":\"obd.rpm\",\"range_min\":0,\"range_max\":8000,"
         "\"angle_min\":-120,\"angle_max\":120,\"rotation\":90,\"pivot_x\":50,\"pivot_y\":90},"
@@ -99,11 +99,11 @@ static void test_elements(void)
 
     e = &l->el[4];
     TH_CHECK(e->kind == TR_KIND_IMAGE && e->video && strcmp(e->asset, "poster") == 0);
-    TH_CHECK(e->rotation == 12.34 && e->data_source == NULL);   // images never bind
+    TH_CHECK(e->rotation == 12.34 && e->data_source == NULL && e->opacity == 35);   // images never bind
 
     e = &l->el[5];
     TH_CHECK(e->kind == TR_KIND_POINTER && !e->video && e->angle_min == -120 && e->angle_max == 120);
-    TH_CHECK(e->pivot_y == 90 && e->rotation == 90 && strcmp(e->asset, "needle") == 0);
+    TH_CHECK(e->pivot_y == 90 && e->rotation == 90 && strcmp(e->asset, "needle") == 0 && e->opacity == 100);
 
     e = &l->el[6];
     TH_CHECK(e->kind == TR_KIND_IMAGE && e->id[0] == '\0' && e->asset == NULL);
@@ -168,10 +168,28 @@ static void test_limits(void)
     TH_CHECK(g_live == 0);
 }
 
+static void test_value_video_layout(void)
+{
+    tl_layout_t *l = parse("{\"elements\":["
+        "{\"type\":\"image\",\"id\":\"vid_rpm\",\"video_playback\":\"value\",\"data_source\":\"obd.rpm\",\"range_min\":0,\"range_max\":6000,\"video_step\":100},"
+        "{\"type\":\"image\",\"id\":\"vid_loop\",\"data_source\":\"obd.rpm\"},"
+        "{\"type\":\"image\",\"id\":\"static\",\"video_playback\":\"value\",\"data_source\":\"obd.rpm\"},"
+        "{\"type\":\"image\",\"id\":\"vid_bad\",\"video_playback\":\"value\",\"data_source\":\"obd.rpm\",\"range_min\":100,\"range_max\":10}]}");
+    TH_CHECK(l && l->n == 4);
+    if (l) {
+        TH_CHECK(l->el[0].video_value && l->el[0].video_step == 100);
+        TH_CHECK(l->el[0].range_min == 0 && l->el[0].range_max == 6000);
+        TH_CHECK(l->el[0].data_source && !strcmp(l->el[0].data_source, "obd.rpm"));
+        for (unsigned i = 1; i < 4; i++) TH_CHECK(!l->el[i].video_value && !l->el[i].data_source);
+    }
+    tl_free(l, &A);
+    TH_CHECK(g_live == 0);
+}
+
 int main(void)
 {
     test_round();
     test_elements();
-    test_limits();
+    test_limits(); test_value_video_layout();
     return th_report("layout");
 }

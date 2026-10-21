@@ -24,8 +24,15 @@ extern "C" {
  * vid_/video_ prefix. */
 lv_obj_t *video_elem_create(lv_obj_t *parent, const char *theme_key, const char *key,
                             lv_coord_t x, lv_coord_t y, lv_coord_t w, lv_coord_t h);
+/* Start directly in numeric mode at the first frame, without a timed session. */
+lv_obj_t *video_elem_create_value(lv_obj_t *parent, const char *theme_key, const char *key,
+                                  lv_coord_t x, lv_coord_t y, lv_coord_t w, lv_coord_t h);
+/* Enable numeric control and remember position across ownership / asset changes. */
+void      video_elem_set_position(lv_obj_t *obj, double position);
 /* Rule `visible`: hidden == paused. */
 void      video_elem_set_paused(lv_obj_t *obj, bool paused);
+/* Set the rendered video opacity. LVGL opacity is 0..255. */
+void      video_elem_set_opa(lv_obj_t *obj, lv_opa_t opa);
 /* Rule `asset`: switch to another key (fileName from gaugeproj). */
 bool      video_elem_set_key(lv_obj_t *obj, const char *key);
 /* Stop all players and free ring/frame buffers (entering OTA). */

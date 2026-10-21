@@ -308,6 +308,83 @@ static void test_action_animation(void)
     tr_program_free(p);
 }
 
+static void test_opacity_animation_and_exit(void)
+{
+    tr_compile_cfg_t cfg = cfg_default();
+    cfg.elements = k_elems;
+    cfg.n_elements = 4;
+    tr_program_t *p = compile_str(
+        "{\"rules\":[{\"id\":\"opacity\","
+        "\"when\":{\"conditions\":[{\"source\":\"obd.rpm\",\"op\":\">=\",\"value\":4000}]},"
+        "\"apply\":[{\"target\":\"img1\",\"set\":{\"opacity\":0},"
+        "\"animation\":{\"mode\":\"fade\",\"durationMs\":1000}}]}]}",
+        &cfg, NULL);
+
+    double values[TU_N_SOURCES] = { 4000 };
+    tr_inputs_t in = inputs(values, 0.0);
+    const tr_result_t *res = tr_eval(p, &in);
+    const tr_override_t *o = tr_result_override(p, 0);
+    CHECK(res->n_active == 1 && o && o->animated_opacity);
+    CHECK(o && o->opacity == 0.0 && o->opacity_progress == 0.0);
+
+    in.elapsed_ms = 500.0;
+    tr_eval(p, &in);
+    o = tr_result_override(p, 0);
+    CHECK(o && fabs(o->opacity_progress - 0.5) < 1e-9);
+
+    in.elapsed_ms = 1000.0;
+    tr_eval(p, &in);
+    o = tr_result_override(p, 0);
+    CHECK(o && o->opacity_progress == 1.0 && !o->animated_opacity);
+
+    values[0] = 0;
+    in.elapsed_ms = 1200.0;
+    res = tr_eval(p, &in);
+    o = tr_result_override(p, 0);
+    CHECK(res->n_active == 0 && p->resolved_exit_mask != 0);
+    CHECK(o && o->animated_opacity && o->opacity_progress == 1.0);
+
+    in.elapsed_ms = 1700.0;
+    tr_eval(p, &in);
+    o = tr_result_override(p, 0);
+    CHECK(o && fabs(o->opacity_progress - 0.5) < 1e-9);
+
+    in.elapsed_ms = 2200.0;
+    res = tr_eval(p, &in);
+    CHECK(res->n_active == 0 && p->resolved_exit_mask == 0);
+    CHECK(tr_result_override(p, 0) == NULL);
+    tr_program_free(p);
+
+    p = compile_str(
+        "{\"rules\":[{\"id\":\"opacity-mid-exit\","
+        "\"when\":{\"conditions\":[{\"source\":\"obd.rpm\",\"op\":\">=\",\"value\":4000}]},"
+        "\"apply\":[{\"target\":\"img1\",\"set\":{\"opacity\":0},"
+        "\"animation\":{\"mode\":\"fade\",\"durationMs\":1000}}]}]}",
+        &cfg, NULL);
+    values[0] = 5000;
+    in = inputs(values, 0.0);
+    tr_eval(p, &in);
+    in.elapsed_ms = 500.0;
+    tr_eval(p, &in);
+    o = tr_result_override(p, 0);
+    CHECK(o && fabs(o->opacity_progress - 0.5) < 1e-9);
+
+    values[0] = 0;
+    in.elapsed_ms = 600.0;
+    tr_eval(p, &in);
+    o = tr_result_override(p, 0);
+    CHECK(o && fabs(o->opacity_progress - 0.6) < 1e-9);
+    in.elapsed_ms = 1100.0;
+    tr_eval(p, &in);
+    o = tr_result_override(p, 0);
+    CHECK(o && fabs(o->opacity_progress - 0.3) < 1e-9);
+    in.elapsed_ms = 1600.0;
+    res = tr_eval(p, &in);
+    CHECK(res->n_active == 0 && p->resolved_exit_mask == 0);
+    CHECK(tr_result_override(p, 0) == NULL);
+    tr_program_free(p);
+}
+
 static void test_change_mask_and_ids(void)
 {
     char json[512];
@@ -473,6 +550,7 @@ int main(void)
     test_nan_inputs();
     test_actions_and_element_table();
     test_action_animation();
+    test_opacity_animation_and_exit();
     test_change_mask_and_ids();
     test_change_unmasked();
     test_alloc_and_errors();

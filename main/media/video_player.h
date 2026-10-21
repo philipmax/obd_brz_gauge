@@ -51,6 +51,8 @@ typedef struct {
     uint8_t target_fps;         /* 24 or 30 */
     bool loop;
     lv_obj_t *video_view;       /* For composite mode only */
+    bool value_driven;         /* OBV1 composite: decode requested position, no clock */
+    double position;           /* Initial normalized position, 0..1 */
 } video_config_t;
 
 /**
@@ -73,6 +75,8 @@ esp_err_t video_player_stop(void);
  */
 esp_err_t video_player_pause(void);
 esp_err_t video_player_resume(void);
+/* Value-driven composite only; LVGL task / lvgl_mux. Finite 0..1, clamped. */
+esp_err_t video_player_set_position(double position);
 
 /**
  * LVGL runtime handoff, called with lvgl_mux held before lv_timer_handler().

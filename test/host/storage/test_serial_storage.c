@@ -15,6 +15,8 @@ static int serial_test_fsync(int fd);
 #undef fsync
 
 static bool locked, busy, ota, fail_open, fail_verify, fail_commit, fail_install, fail_obv;
+static bool release_busy_on_wait;
+static TickType_t last_lock_wait;
 static unsigned installs, removes, validations, commits;
 static bool fail_flush, fail_sync, file_synced;
 static unsigned flushes, syncs;
@@ -54,7 +56,14 @@ static TickType_t ticks;
 static int input_mode;
 static uint8_t output[32768];
 static size_t output_len;
-bool storage_job_lock(TickType_t wait) { (void)wait; if (busy || locked) return false; locked = true; return true; }
+bool storage_job_lock(TickType_t wait)
+{
+    last_lock_wait = wait;
+    if (wait && release_busy_on_wait) busy = false;
+    if (busy || locked) return false;
+    locked = true;
+    return true;
+}
 void storage_job_unlock(void) { assert(locked); locked = false; }
 bool ota_wifi_server_is_active(void) { return ota; }
 bool sd_card_is_mounted(void) { return true; }
@@ -158,6 +167,7 @@ static void reset(void)
 {
     abort_session(); assert(!locked); assert(!s_storage_locked);
     busy = ota = fail_open = fail_verify = fail_commit = fail_install = fail_obv = false;
+    release_busy_on_wait = false; last_lock_wait = 0;
     installs = removes = validations = commits = 0; ticks = 0; input_mode = 0; output_len = 0;
     committed = false; fail_remove_path = NULL;
     fail_flush = fail_sync = file_synced = false; flushes = syncs = 0;
@@ -174,7 +184,13 @@ int main(void)
         reset(); assert(begin(theme) == 0);
         assert(process_frame(CMD_ABORT, NULL, 0) == 0); assert(!locked); assert(removes == (unsigned)theme);
         reset(); fail_open = true; assert(begin(theme) == 3); assert(!locked);
+        /* Theme reads / boot jobs may finish while BEGIN waits for storage. */
+        reset(); busy = release_busy_on_wait = true;
+        assert(begin(theme) == 0); assert(locked);
+        assert(last_lock_wait == pdMS_TO_TICKS(1000));
+        assert(process_frame(CMD_ABORT, NULL, 0) == 0); assert(!locked);
         reset(); busy = true; assert(begin(theme) == 9); assert(!locked);
+        assert(last_lock_wait == pdMS_TO_TICKS(1000));
         reset(); ota = true; assert(begin(theme) == 9); assert(!locked);
         for (int commit = 0; commit < 2; commit++) {
             reset(); assert(begin(theme) == 0); data();

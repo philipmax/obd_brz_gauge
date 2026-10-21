@@ -9,6 +9,11 @@ field rules live in [contracts/vehicle-rpn.md](../contracts/vehicle-rpn.md)
 /`vp_rpn.c`); here we just walk through real catalog examples you can copy and
 adapt. For the install/activate flow, see [VEHICLES.md](VEHICLES.en.md).
 
+The web editor at `/vehicles/editor` opens in basic mode: choose standard OBD2, local JSON or a community profile, then select and edit collection data.
+New profiles list the 9 built-in standard items and PIDs at one-second intervals. Change intervals, PIDs, request headers, reply addresses and formulas, or add other PIDs.
+Editing formulas or response byte counts also generates and validates the firmware’s executable `rpn`. Imports retain their scheduling policies; editing inherited items writes complete definitions, and “Import standard OBD2 data” only fills gaps without overwriting custom or disabled items.
+Edit raw manufacturer frames, CAN bits, LUTs and fallback sources in advanced mode; basic operations preserve all their fields. This standard list matches the firmware’s built-in data rather than every SAE PID.
+
 ## 1. The overall model
 
 A vehicle profile (`vehicles/catalog/*.vehicle.json`) has a `signals` array.

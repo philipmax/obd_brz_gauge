@@ -366,6 +366,7 @@ static bool build_action(builder_t *b, const cJSON *act)
     const cJSON *text = jget(set, "text");
     const cJSON *visible = jget(set, "visible");
     const cJSON *asset = jget(set, "asset");
+    const cJSON *opacity = jget(set, "opacity");
     const cJSON *animation = jget(act, "animation");
 
     if (b->dry) {
@@ -409,6 +410,14 @@ static bool build_action(builder_t *b, const cJSON *act)
         if (cJSON_IsString(asset) && asset->valuestring) {
             a->props |= TR_PROP_ASSET;
             a->asset = pool_dup(b, asset->valuestring);
+        } else {
+            b->diag.bad_values++;
+        }
+    }
+    if (opacity) {
+        if (cJSON_IsNumber(opacity) && isfinite(opacity->valuedouble)) {
+            a->props |= TR_PROP_OPACITY;
+            a->opacity = js_max(0.0, js_min(100.0, opacity->valuedouble));
         } else {
             b->diag.bad_values++;
         }

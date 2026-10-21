@@ -181,6 +181,8 @@ static void lvgl_unlock(void)
 
 void app_main(void)
 {
+    /* Hide uninitialized panel RAM even while storage/config bring-up blocks. */
+    LCD_BacklightOffEarly();
     perf_stats_start();
     static lv_disp_draw_buf_t disp_buf;
     static lv_disp_drv_t disp_drv;
@@ -226,13 +228,13 @@ void app_main(void)
 
     /* 4. LCD + backlight + touch combined init
      *    LCD_Init() internally calls, in order:
+     *      Backlight_Init() → LEDC PWM off (V1: GPIO 5; V2/V3: GPIO 15)
      *      ST77916_Init() → reset (V1: TCA9554 EXIO2; V2/V3: direct GPIO 47) → QSPI SPI bus & ST77916 panel driver
-     *      Backlight_Init() → LEDC PWM backlight (V1: GPIO 5; V2/V3: GPIO 15)
      *      Touch_Init() → reuses I2C bus CST816 touch driver (V1: SCL=10 SDA=11; V2/V3: SCL=8 SDA=7)
      *    After completion panel_handle / tp are both globally valid variables
      */
     LCD_SetFlushCallback(notify_lvgl_flush_ready, &disp_drv);
-    LCD_Backlight = 0;  // set to 0 before LCD_Init to prevent Backlight_Init from lighting an uninitialized panel
+    LCD_Backlight = 0;  // initialize PWM dark before the panel receives its display-on command
     LCD_Init();
 
     /* 5. LVGL init */
@@ -308,6 +310,9 @@ void app_main(void)
         // SD/theme work. A few scheduler ticks never guaranteed a first paint.
         lv_refr_now(dispp);
         while (disp_buf.flushing) vTaskDelay(1);
+        // DMA completion only updates GRAM; allow the panel to scan the Logo
+        // while still dark, rather than exposing the previous/default frame.
+        vTaskDelay(pdMS_TO_TICKS(50));
 #if EXAMPLE_PIN_NUM_BK_LIGHT >= 0
         uint8_t bright = user_cfg.brightness_day;
         if (bright < 10) bright = 100;

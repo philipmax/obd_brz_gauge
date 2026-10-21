@@ -159,8 +159,12 @@ void tr_reset(tr_program_t *prog)
     memset(prog->state.animation_start, 0, sizeof(prog->state.animation_start));
     memset(prog->state.hold_until, 0, sizeof(prog->state.hold_until));
     memset(prog->state.animation_armed, 0, sizeof(prog->state.animation_armed));
+    memset(prog->state.active_armed, 0, sizeof(prog->state.active_armed));
+    memset(prog->state.opacity_exit_armed, 0, sizeof(prog->state.opacity_exit_armed));
+    memset(prog->state.opacity_exit_start, 0, sizeof(prog->state.opacity_exit_start));
     if (prog->n_targets) memset(prog->ovr, 0, prog->n_targets * sizeof(tr_override_t));
     prog->resolved_mask = 0;
+    prog->resolved_exit_mask = 0;
     prog->have_resolved = false;
     memset(&prog->result, 0, sizeof(prog->result));
     prog->result.n_targets = prog->n_targets;
@@ -188,6 +192,16 @@ static double anim_progress(const tr_animation_t *a, double elapsed)
     return a->frame_value[a->n_frames - 1];
 }
 
+static bool rule_has_animated_opacity(const tr_rule_t *rule)
+{
+    for (uint8_t i = 0; i < rule->n_actions; i++) {
+        const tr_action_t *action = &rule->actions[i];
+        if ((action->props & TR_PROP_OPACITY) && action->animation.mode && action->animation.mode != 3)
+            return true;
+    }
+    return false;
+}
+
 bool tr_rule_active(tr_program_t *prog, uint8_t rule_idx, const tr_inputs_t *in)
 {
     if (!prog || !in || rule_idx >= prog->n_rules) return false;
@@ -202,6 +216,7 @@ const tr_result_t *tr_eval(tr_program_t *prog, const tr_inputs_t *in)
 
     // page order; a miss clears only the debounce timer, never the latches
     uint32_t active_mask = 0;
+    uint32_t opacity_exit_mask = 0;
     bool animated_active = false;
     for (uint8_t i = 0; i < prog->n_rules; i++) {
         const tr_rule_t *r = &prog->rules[i];
@@ -219,6 +234,28 @@ const tr_result_t *tr_eval(tr_program_t *prog, const tr_inputs_t *in)
         if (!candidate) {
             st->deb_armed[s] = 0;
             st->animation_armed[s] = 0;
+            if (st->active_armed[s]) {
+                st->active_armed[s] = 0;
+                if (rule_has_animated_opacity(r)) {
+                    st->opacity_exit_armed[s] = 1;
+                    st->opacity_exit_start[s] = in->elapsed_ms;
+                }
+            }
+            if (st->opacity_exit_armed[s]) {
+                double duration = 0.0;
+                for (uint8_t a = 0; a < r->n_actions; a++) {
+                    const tr_action_t *action = &r->actions[a];
+                    if ((action->props & TR_PROP_OPACITY) && action->animation.mode && action->animation.mode != 3 &&
+                        action->animation.duration_ms > duration)
+                        duration = action->animation.duration_ms;
+                }
+                if (in->elapsed_ms - st->opacity_exit_start[s] < duration) {
+                    opacity_exit_mask |= UINT32_C(1) << i;
+                    animated_active = true;
+                } else {
+                    st->opacity_exit_armed[s] = 0;
+                }
+            }
             continue;
         }
         if (!st->deb_armed[s]) {
@@ -227,9 +264,13 @@ const tr_result_t *tr_eval(tr_program_t *prog, const tr_inputs_t *in)
         }
         if (in->elapsed_ms - st->deb_start[s] >= r->debounce_ms) {
             active_mask |= UINT32_C(1) << i;
+            st->active_armed[s] = 1;
+            st->opacity_exit_armed[s] = 0;
             bool rule_animated = false;
             for (uint8_t a = 0; a < r->n_actions; a++) {
-                if (r->actions[a].animation.mode && (r->actions[a].props & TR_PROP_ANY_COLOR)) {
+                if (r->actions[a].animation.mode &&
+                    ((r->actions[a].props & TR_PROP_ANY_COLOR) ||
+                     ((r->actions[a].props & TR_PROP_OPACITY) && r->actions[a].animation.mode != 3))) {
                     rule_animated = true;
                     break;
                 }
@@ -247,7 +288,8 @@ const tr_result_t *tr_eval(tr_program_t *prog, const tr_inputs_t *in)
     // The final active set uniquely determines the sort input and immutable
     // actions. Keep evaluating state above even when the resolved output can
     // be reused (shared IDs, timer windows and debounce depend on each tick).
-    if (!animated_active && prog->have_resolved && prog->resolved_mask == active_mask) return res;
+    if (!animated_active && prog->have_resolved && prog->resolved_mask == active_mask &&
+        prog->resolved_exit_mask == opacity_exit_mask) return res;
 
     uint8_t n = 0;
     for (uint8_t i = 0; i < prog->n_rules; i++) {
@@ -256,14 +298,24 @@ const tr_result_t *tr_eval(tr_program_t *prog, const tr_inputs_t *in)
     res->n_active = n;
     sort_active(prog, res->active, n);
 
+    uint8_t apply_order[TR_MAX_RULES];
+    uint8_t n_apply = 0;
+    for (uint8_t i = 0; i < prog->n_rules; i++) {
+        if ((active_mask | opacity_exit_mask) & (UINT32_C(1) << i)) apply_order[n_apply++] = i;
+    }
+    sort_active(prog, apply_order, n_apply);
+
     if (prog->n_targets) memset(prog->ovr, 0, prog->n_targets * sizeof(tr_override_t));
-    for (uint8_t k = 0; k < n; k++) {
-        const tr_rule_t *r = &prog->rules[res->active[k]];
+    for (uint8_t k = 0; k < n_apply; k++) {
+        uint8_t ri = apply_order[k];
+        const tr_rule_t *r = &prog->rules[ri];
+        bool exiting = (opacity_exit_mask & (UINT32_C(1) << ri)) != 0;
         for (uint8_t j = 0; j < r->n_actions; j++) {
             const tr_action_t *a = &r->actions[j];
+            if (exiting && !(a->props & TR_PROP_OPACITY)) continue;
             tr_override_t *o = &prog->ovr[a->target];
             o->touched = 1;
-            if (a->props & TR_PROP_ANY_COLOR) {
+            if (!exiting && (a->props & TR_PROP_ANY_COLOR)) {
                 o->props |= (uint8_t)(a->props & TR_PROP_ANY_COLOR);
                 o->color = a->color;
                 o->color_str = a->color_str;
@@ -276,23 +328,44 @@ const tr_result_t *tr_eval(tr_program_t *prog, const tr_inputs_t *in)
                     o->animation_progress = 1.0;
                 }
             }
-            if (a->props & TR_PROP_TEXT) {
+            if (!exiting && (a->props & TR_PROP_TEXT)) {
                 o->props |= TR_PROP_TEXT;
                 o->text = a->text;
             }
-            if (a->props & TR_PROP_VISIBLE) {
+            if (!exiting && (a->props & TR_PROP_VISIBLE)) {
                 o->props |= TR_PROP_VISIBLE;
                 o->visible = a->visible;
             }
-            if (a->props & TR_PROP_ASSET) {
+            if (!exiting && (a->props & TR_PROP_ASSET)) {
                 o->props |= TR_PROP_ASSET;
                 o->asset = a->asset;
+            }
+            if (a->props & TR_PROP_OPACITY) {
+                double progress = 1.0;
+                if (a->animation.mode && a->animation.mode != 3) {
+                    if (exiting) {
+                        double initial = anim_progress(&a->animation,
+                            st->opacity_exit_start[r->slot] - st->animation_start[r->slot]);
+                        double exit = anim_progress(&a->animation,
+                            in->elapsed_ms - st->opacity_exit_start[r->slot]);
+                        progress = initial * (1.0 - exit);
+                    } else {
+                        progress = anim_progress(&a->animation,
+                            in->elapsed_ms - st->animation_start[r->slot]);
+                    }
+                }
+                o->props |= TR_PROP_OPACITY;
+                o->opacity = a->opacity;
+                o->opacity_progress = progress;
+                o->animated_opacity = (a->animation.mode && a->animation.mode != 3 &&
+                                       (exiting || progress < 1.0));
             }
         }
     }
     res->n_targets = prog->n_targets;
     res->ovr = prog->ovr;
     prog->resolved_mask = active_mask;
+    prog->resolved_exit_mask = opacity_exit_mask;
     prog->have_resolved = true;
     return res;
 }

@@ -3,6 +3,7 @@
  * Include the source to exercise private update/binding/appearance functions
  * without exposing a test API in firmware. */
 #include <time.h>
+#include "media/video_elem_order.h"
 #include "th_util.h"
 #include "../../../main/theme_engine/theme_page.c"
 
@@ -68,7 +69,7 @@ tl_defaults_t te_layout_defaults(void) { return (tl_defaults_t){0}; }
 void te_release_locked(void) { tic_clear(&g_te->cache); }
 void storage_theme_key(const char *s, char *out, size_t n) { snprintf(out, n, "%s", s); }
 
-typedef struct { const char *key; bool paused; unsigned switches, pauses; } video_state_t;
+typedef struct { const char *key; bool paused; unsigned switches, pauses; lv_opa_t opacity; double position; unsigned positions; } video_state_t;
 static void video_delete(lv_event_t *e) { free(lv_obj_get_user_data(lv_event_get_target(e))); }
 lv_obj_t *video_elem_create(lv_obj_t *parent, const char *theme, const char *key,
                             lv_coord_t x, lv_coord_t y, lv_coord_t w, lv_coord_t h)
@@ -82,10 +83,21 @@ lv_obj_t *video_elem_create(lv_obj_t *parent, const char *theme, const char *key
     lv_obj_set_pos(obj, x, y); lv_obj_set_size(obj, w, h);
     return obj;
 }
+lv_obj_t *video_elem_create_value(lv_obj_t *parent, const char *theme, const char *key,
+                                  lv_coord_t x, lv_coord_t y, lv_coord_t w, lv_coord_t h)
+{ return video_elem_create(parent, theme, key, x, y, w, h); }
+void video_elem_set_position(lv_obj_t *obj, double p)
+{ video_state_t *v = lv_obj_get_user_data(obj); v->position = p; v->positions++; }
 void video_elem_set_paused(lv_obj_t *obj, bool paused)
 {
     video_state_t *v = lv_obj_get_user_data(obj);
     v->paused = paused; v->pauses++;
+}
+void video_elem_set_opa(lv_obj_t *obj, lv_opa_t opacity)
+{
+    video_state_t *v = lv_obj_get_user_data(obj);
+    v->opacity = opacity;
+    lv_obj_set_style_img_opa(obj, opacity, LV_PART_MAIN);
 }
 bool video_elem_set_key(lv_obj_t *obj, const char *key)
 {
@@ -123,7 +135,8 @@ static const char rules[] =
 "{\"target\":\"value\",\"set\":{\"text\":\"ignored\",\"color\":\"#ff0000\"}},"
 "{\"target\":\"text\",\"set\":{\"text\":\"HOT\",\"color\":\"#ff0000\"}},"
 "{\"target\":\"pointer\",\"set\":{\"asset\":\"hot\",\"color\":\"#ff0000\"}},"
-"{\"target\":\"image\",\"set\":{\"asset\":\"hot\",\"color\":\"#ff0000\"}},"
+"{\"target\":\"image\",\"set\":{\"asset\":\"hot\",\"color\":\"#ff0000\",\"opacity\":100},"
+"\"animation\":{\"mode\":\"fade\",\"durationMs\":1000}},"
 "{\"target\":\"vid_base\",\"set\":{\"asset\":\"hot\",\"visible\":false}}]},"
 "{\"id\":\"blink\",\"priority\":2,\"trigger\":{\"type\":\"timer\",\"intervalMs\":500},\"apply\":["
 "{\"target\":\"text\",\"set\":{\"visible\":false}}]},"
@@ -159,11 +172,13 @@ static void init_fixture(fixture_t *f, bool suppressed)
         el->id = ids[i]; el->kind = kinds[i]; el->width = 100; el->height = 12;
         el->start_angle = 0; el->end_angle = 270; el->angle_min = 0; el->angle_max = 270;
         el->color = 0xeeeeee; el->bg_color = 0x222222; el->line_width = 2;
+        el->opacity = i == 5 ? 40 : i == 6 ? 35 : 100;
         el->text = "BASE"; el->asset = "base"; el->format = "%.0f"; el->divisor = 1;
         it->el = el; it->kind = kinds[i]; it->lo = 0; it->hi = 100;
         it->slot = i < 3 || i == 4 ? 0 : -1; it->bound = it->slot >= 0;
         it->last_px = INT32_MIN;
-        it->base = (te_look_t){.c1=el->color, .c2=el->bg_color, .text=el->text, .asset=el->asset};
+        it->base = (te_look_t){.c1=el->color, .c2=el->bg_color, .text=el->text, .asset=el->asset,
+                               .opacity=(uint8_t)el->opacity};
         it->applied = it->base;
         if (i >= 4) {
             it->vars = f->variants[i]; it->n_vars = 3;
@@ -182,6 +197,8 @@ static void init_fixture(fixture_t *f, bool suppressed)
         }
         if (i == 6) { it->video = 1; te_create_video(p->scr, it, "test"); }
     }
+    TH_CHECK(lv_obj_get_style_img_opa(f->items[5].obj, LV_PART_MAIN) == te_opa(40));
+    TH_CHECK(((video_state_t *)lv_obj_get_user_data(f->items[6].vid))->opacity == te_opa(35));
     tr_compile_cfg_t cfg = {.resolve_source=resolve, .elements=elements, .n_elements=ITEMS};
     TH_CHECK(tr_compile_json(rules, strlen(rules), &cfg, &p->prog, NULL) == TR_OK);
     if (!p->prog) abort();
@@ -207,6 +224,7 @@ static void compare(fixture_t *a, fixture_t *b)
         te_item_t *x = &a->items[i], *y = &b->items[i];
         TH_CHECK(x->applied.c1 == y->applied.c1 && x->applied.c2 == y->applied.c2);
         TH_CHECK(x->applied.hidden == y->applied.hidden && x->applied.has_tint == y->applied.has_tint);
+        TH_CHECK(x->applied.opacity == y->applied.opacity);
         TH_CHECK(x->applied.tint == y->applied.tint);
         TH_CHECK(te_streq(x->applied.asset, y->applied.asset) && te_streq(x->applied.text, y->applied.text));
         TH_CHECK(x->last_px == y->last_px && x->cur == y->cur);
@@ -231,9 +249,11 @@ static void compare(fixture_t *a, fixture_t *b)
             TH_CHECK(lv_img_get_angle(x->obj) == lv_img_get_angle(y->obj));
             TH_CHECK(color_same(lv_obj_get_style_img_recolor(x->obj, 0), lv_obj_get_style_img_recolor(y->obj, 0)));
             TH_CHECK(lv_obj_get_style_img_recolor_opa(x->obj, 0) == lv_obj_get_style_img_recolor_opa(y->obj, 0));
+            TH_CHECK(lv_obj_get_style_img_opa(x->obj, 0) == lv_obj_get_style_img_opa(y->obj, 0));
             if (x->vid) {
                 video_state_t *vx = lv_obj_get_user_data(x->vid), *vy = lv_obj_get_user_data(y->vid);
                 TH_CHECK(vx->paused == vy->paused && te_streq(vx->key, vy->key));
+                TH_CHECK(vx->opacity == vy->opacity);
                 TH_CHECK(vx->switches == vy->switches && vx->pauses == vy->pauses);
                 TH_CHECK(lv_obj_has_flag(x->vbox, LV_OBJ_FLAG_HIDDEN) == lv_obj_has_flag(y->vbox, LV_OBJ_FLAG_HIDDEN));
             }
@@ -263,7 +283,12 @@ static void test_transitions(void)
     TH_CHECK(a.items[4].cur == 1);
     TH_CHECK(a.items[4].applied.has_tint && a.items[4].rt_on);
     TH_CHECK(lv_obj_get_style_img_recolor_opa(a.items[4].obj, 0) == TR_RECOLOR_OPA);
+    TH_CHECK(lv_obj_get_style_img_opa(a.items[5].obj, 0) == te_opa(40));
+    clock_ms = 64; update_pair(&a, &b);
+    TH_CHECK(lv_obj_get_style_img_opa(a.items[5].obj, 0) == te_opa(41));
     TH_CHECK(((video_state_t *)lv_obj_get_user_data(a.items[6].vid))->paused);
+    TH_CHECK(lv_obj_has_flag(a.items[6].obj, LV_OBJ_FLAG_HIDDEN));
+    TH_CHECK(lv_obj_has_flag(a.items[6].vbox, LV_OBJ_FLAG_HIDDEN));
     a.ctx.suppressed = b.ctx.suppressed = true;
     clock_ms = 64; update_pair(&a, &b);
     TH_CHECK(!strcmp(lv_label_get_text(a.items[3].obj), "BASE"));
@@ -281,8 +306,14 @@ static void test_transitions(void)
     samples[1] = 30; clock_ms = 128; update_pair(&a, &b);
     TH_CHECK(!lv_obj_has_flag(a.items[5].obj, LV_OBJ_FLAG_HIDDEN));
     samples[0] = 0; clock_ms = 144; update_pair(&a, &b);
+    TH_CHECK(!lv_obj_has_flag(a.items[6].obj, LV_OBJ_FLAG_HIDDEN));
+    TH_CHECK(!lv_obj_has_flag(a.items[6].vbox, LV_OBJ_FLAG_HIDDEN));
     TH_CHECK(a.items[4].cur == 0);
     TH_CHECK(!strcmp(lv_label_get_text(a.items[3].obj), "BASE"));
+    clock_ms = 644; update_pair(&a, &b);
+    TH_CHECK(a.items[5].applied.opacity < 100 && a.items[5].applied.opacity > 40);
+    clock_ms = 1144; update_pair(&a, &b);
+    TH_CHECK(a.items[5].applied.opacity == 40);
     // Change-window expiry and timer phase changes need evaluation even when
     // there are no new signal samples.
     clock_ms = 425; update_pair(&a, &b);
@@ -295,6 +326,32 @@ static void test_transitions(void)
     a.ctx.suppressed = b.ctx.suppressed = true;
     clock_ms = 516; update_pair(&a, &b);
     destroy_fixture(&a); destroy_fixture(&b);
+}
+
+static void test_video_layer_order(void)
+{
+    tl_elem_t video = {.kind = TR_KIND_IMAGE, .video = 1};
+    tl_elem_t decoration = {.kind = TR_KIND_IMAGE};
+    TH_CHECK(te_class(&video, false) == TE_CLS_TARGET);
+    TH_CHECK(te_class(&decoration, false) == TE_CLS_DECOR);
+    TH_CHECK(te_class(&decoration, true) == TE_CLS_TARGET);
+
+    lv_obj_t *screen = lv_obj_create(NULL);
+    lv_obj_t *lower_wrapper = lv_obj_create(screen);
+    lv_obj_t *lower_video = lv_obj_create(lower_wrapper);
+    lv_obj_t *upper_wrapper = lv_obj_create(screen);
+    lv_obj_t *upper_video = lv_obj_create(upper_wrapper);
+    TH_CHECK(lv_obj_get_index(lower_video) == lv_obj_get_index(upper_video));
+    uint32_t lower_order = video_elem_layer_order(lower_video);
+    uint32_t upper_order = video_elem_layer_order(upper_video);
+    TH_CHECK(lower_order < upper_order);
+    video_elem_layer_choice_t choice = {0};
+    TH_CHECK(video_elem_layer_consider(&choice, true, lower_order));
+    TH_CHECK(!video_elem_layer_consider(&choice, false, upper_order));
+    TH_CHECK(choice.order == lower_order);
+    TH_CHECK(video_elem_layer_consider(&choice, true, upper_order));
+    TH_CHECK(choice.order == upper_order);
+    lv_obj_del(screen);
 }
 static uint32_t rng = UINT32_C(0x51fe9123);
 static uint32_t next_random(void) { rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5; return rng; }
@@ -374,6 +431,89 @@ static void test_sweep_color_preserves_track(void)
             TH_CHECK(f.items[i].applied.c2 == f.items[i].base.c2);
         }
         TH_CHECK(lv_obj_has_flag(f.items[1].fg, LV_OBJ_FLAG_HIDDEN));
+        destroy_fixture(&f);
+    }
+}
+
+// Replay the real 40 ms / 25-step ramp and 23-step hold/flash sequence.
+// The physical OBD sample stays zero: rules must consume the sweep RPM.
+static void test_sweep_video_opacity(void)
+{
+    for (unsigned fade = 0; fade < 2; fade++) {
+        fixture_t f;
+        clock_ms = 0; samples[0] = samples[1] = 0;
+        init_fixture(&f, false);
+        tr_program_free(f.page.prog);
+        const tr_element_t element = {"vid_base", TR_KIND_IMAGE};
+        const tr_compile_cfg_t cfg = {.resolve_source=resolve, .elements=&element, .n_elements=1};
+        char json[512];
+        int n = snprintf(json, sizeof(json),
+            "{\"rules\":[{\"id\":\"video_sweep\",\"enabled\":true,"
+            "\"when\":{\"source\":\"obd.rpm\",\"op\":\">=\",\"value\":3500},"
+            "\"apply\":[{\"target\":\"vid_base\",\"set\":{\"opacity\":0}%s}]}]}",
+            fade ? ",\"animation\":{\"mode\":\"fade\",\"durationMs\":1000}" : "");
+        TH_CHECK(n > 0 && (size_t)n < sizeof(json));
+        TH_CHECK(tr_compile_json(json, (size_t)n, &cfg, &f.page.prog, NULL) == TR_OK);
+        if (!f.page.prog) abort();
+        f.targets[0] = 6;
+        // Exercise a video without a poster as well as one with a poster.
+        if (fade) { lv_obj_del(f.items[6].obj); f.items[6].obj = NULL; }
+        video_state_t *v = lv_obj_get_user_data(f.items[6].vid);
+        for (unsigned tick = 0; tick < 48; tick++) {
+            clock_ms = tick * 40;
+            float ratio = tick < 25 ? (float)tick / 25.0f : 1.0f;
+            theme_set_sweep(ratio, (uint16_t)(8000.0f * ratio));
+            te_page_update(&f.ctx, &f.page);
+            if (tick < 11) TH_CHECK(v->opacity == te_opa(35));
+            if (tick >= 36) TH_CHECK(v->opacity == LV_OPA_TRANSP);
+            TH_CHECK(samples[0] == 0);
+        }
+        theme_set_sweep(-1.0f, 0);
+        te_page_update(&f.ctx, &f.page);
+        clock_ms += 1040;
+        te_page_update(&f.ctx, &f.page);
+        TH_CHECK(v->opacity == te_opa(35));
+        destroy_fixture(&f);
+    }
+}
+
+static void test_value_video_binding(void)
+{
+    for (unsigned indexed = 0; indexed < 2; indexed++) {
+        fixture_t f;
+        clock_ms = 0; samples[0] = samples[1] = 0;
+        init_fixture(&f, false);
+        te_item_t *it = &f.items[6];
+        tl_elem_t *el = &f.elements[6];
+        el->video_value = 1; el->range_min = 0; el->range_max = 6000; el->video_step = 100;
+        it->slot = 0; it->bound = 1;
+        video_state_t *v = lv_obj_get_user_data(it->vid);
+        uint16_t binding_item = 6;
+        f.page.bindings_seeded = indexed;
+        f.page.binding_items = indexed ? &binding_item : NULL;
+        f.page.n_binding_items = indexed ? 1 : 0;
+        /* A usable SD video must bind even when the poster image is missing. */
+        if (indexed) { lv_obj_del(it->obj); it->obj = NULL; }
+        te_page_update(&f.ctx, &f.page);
+        TH_CHECK(v->position == 0 && v->positions == 1);
+        samples[0] = 3049; te_page_update(&f.ctx, &f.page);
+        TH_CHECK(v->position == 0.5);
+        unsigned before = v->positions;
+        samples[0] = NAN; te_page_update(&f.ctx, &f.page);
+        TH_CHECK(v->position == 0.5 && v->positions == before);
+        samples[0] = 7000; te_page_update(&f.ctx, &f.page);
+        TH_CHECK(v->position == 1);
+        samples[0] = 1500; te_page_update(&f.ctx, &f.page);
+        TH_CHECK(v->position == 0.25);
+        samples[0] = -100; te_page_update(&f.ctx, &f.page);
+        TH_CHECK(v->position == 0);
+        f.ctx.sweep_on = true; f.ctx.sweep = 0.75f;
+        te_page_update(&f.ctx, &f.page);
+        TH_CHECK(v->position == 0.75);
+        f.ctx.sweep = 1; te_page_update(&f.ctx, &f.page);
+        TH_CHECK(v->position == 1);
+        f.ctx.sweep = 0.25f; te_page_update(&f.ctx, &f.page);
+        TH_CHECK(v->position == 0.25);
         destroy_fixture(&f);
     }
 }
@@ -472,8 +612,9 @@ int main(void)
     lv_disp_drv_init(&drv); drv.hor_res = drv.ver_res = 360;
     drv.draw_buf = &draw; drv.flush_cb = flush;
     lv_disp_t *disp = lv_disp_drv_register(&drv);
-    test_sweep_rule_inputs(); test_sweep_color_preserves_track(); test_transitions(); test_replay();
-    test_staged_boot_page();
+    test_sweep_rule_inputs(); test_sweep_color_preserves_track(); test_transitions();
+    test_video_layer_order(); test_sweep_video_opacity(); test_replay();
+    test_staged_boot_page(); test_value_video_binding();
     lv_disp_remove(disp);
     return th_report("theme_page");
 }

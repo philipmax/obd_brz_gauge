@@ -29,7 +29,7 @@ static int64_t decoded_at[16], now_us;
 static unsigned fullscreen_frames;
 static uint16_t fullscreen_marker[16];
 static int64_t fullscreen_at[16];
-static bool allow_timed, auto_ui, delay_frame_dma;
+static bool allow_timed, auto_ui, delay_frame_dma, fail_decode;
 static int64_t dma_done_at;
 static unsigned dma_wait_checks;
 static unsigned actions;
@@ -55,6 +55,7 @@ static vp_session_t *test_session;
 static void (*during_decode)(void);
 static void (*after_publication)(vp_session_t *);
 static void service_ui(vp_session_t *s);
+static void run_task(unsigned i);
 static lv_obj_t view, screen;
 static _Alignas(16) uint8_t draw1[360 * 40 * 2], draw2[360 * 40 * 2];
 static unsigned refresh_draws;
@@ -218,6 +219,11 @@ EventBits_t xEventGroupWaitBits(EventGroupHandle_t ev, EventBits_t bits, BaseTyp
             return ev->bits;
         }
         if (on_block) on_block(test_session, bits);
+        else if (bits == EV_DECODER_DONE && task_count > 0 && !tasks[0].deleted) {
+            /* FreeRTOS schedules the decoder while LVGL waits for session
+             * shutdown. The host harness runs each worker explicitly. */
+            run_task(0);
+        }
         else if (auto_ui && bits == EV_WAKE_DECODER && test_session->pending >= 0) {
             CHECK(!test_session->paused);
             service_ui(test_session);
@@ -289,6 +295,7 @@ esp_err_t media_jpeg_decode_frame(media_jpeg_t *j, uint8_t *out, size_t cap)
     CHECK(decoded < COUNT_OF(decoded_marker));
     decoded_marker[decoded] = j->marker; decoded_at[decoded++] = now_us;
     if (during_decode) { void (*cb)(void) = during_decode; during_decode = NULL; cb(); }
+    if (fail_decode) return ESP_FAIL;
     for (unsigned i = 0; i < 512 / sizeof(uint16_t); i++) ((uint16_t *)out)[i] = j->marker;
     return ESP_OK;
 }
@@ -369,10 +376,38 @@ static void test_full_reader_gap(void) { full_reader(true); }
 static void stop_waiter(vp_session_t *s, EventBits_t bits)
 {
     CHECK(s == test_session && (bits == EV_WAKE_READER || bits == EV_WAKE_DECODER));
-    now_us += 1000000; CHECK(video_player_stop() == ESP_OK);
+    now_us += 1000000;
+    if (current_task >= 0) {
+        /* Model the UI requesting stop while the decoder is blocked. It must
+         * return from its wait and finish before the UI can join it. */
+        s->quit = true;
+        xEventGroupSetBits(s->ev, EV_WAKE_READER | EV_WAKE_DECODER);
+        on_block = NULL;
+        actions++;
+        return;
+    }
+    on_block = NULL; /* Let the stop wait schedule the decoder worker. */
+    CHECK(video_player_stop() == ESP_OK);
     CHECK(s->quit && (s->ev->bits & EV_WAKE_READER) && (s->ev->bits & EV_WAKE_DECODER));
-    CHECK(s->refs == 2); /* worker references keep the event group alive */
-    actions++; on_block = NULL;
+    CHECK(s->refs == 1); /* the decoder exited; the reader still owns a reference */
+    actions++;
+}
+static void decoder_done_on_stop(vp_session_t *s, EventBits_t bits)
+{
+    CHECK(s == test_session && bits == EV_DECODER_DONE && s->quit);
+    CHECK(s->mode == VIDEO_MODE_COMPOSITE && !s_cur);
+    actions++;
+    xEventGroupSetBits(s->ev, EV_DECODER_DONE);
+    on_block = NULL;
+}
+static void test_composite_stop_waits_for_decoder(void)
+{
+    vp_session_t *s = prepared(VIDEO_MODE_COMPOSITE, 64);
+    on_block = decoder_done_on_stop;
+    CHECK(video_player_stop() == ESP_OK);
+    CHECK(actions == 1 && (s->ev->bits & EV_DECODER_DONE));
+    CHECK(!s_cur && s->refs == 2);
+    finish();
 }
 static void test_full_reader_stop(void)
 {
@@ -710,10 +745,8 @@ static void test_task_create_failure(void)
     video_config_t cfg = { .mode = VIDEO_MODE_COMPOSITE, .source = VIDEO_SRC_SD,
                           .path = "/__obd_host_no_file__/video.obv", .video_view = &view };
     CHECK(video_player_start(&cfg) == ESP_ERR_NO_MEM);
-    CHECK(!s_cur && task_count == 1);
-    test_session = tasks[0].arg;
-    CHECK(test_session->quit && (test_session->ev->bits & EV_WAKE_DECODER));
-    run_task(0); CHECK(!live_allocations && !decoded && task_delete_count == 1);
+    CHECK(!s_cur && task_count == 1 && tasks[0].deleted);
+    CHECK(!live_allocations && !decoded && task_delete_count == 1);
 }
 static void test_path_limit(void)
 {
@@ -997,7 +1030,8 @@ static void test_runtime_replaced_session(void)
     retired_buffer = decoded_pending(retired); session_ref(retired);
     CHECK(video_player_stop() == ESP_OK);
     CHECK(video_player_session_id() == 0);
-    run_task(0); run_task(1); CHECK(retired->refs == 1);
+    CHECK(tasks[0].deleted && !tasks[1].deleted);
+    run_task(1); CHECK(retired->refs == 1);
     memset(tasks, 0, sizeof(tasks)); task_count = task_delete_count = create_attempts = 0;
     test_session = NULL;
     vp_session_t *s = prepared(VIDEO_MODE_COMPOSITE, 64);
@@ -1019,12 +1053,106 @@ static void test_runtime_fullscreen_guard(void)
     finish(); CHECK(!refresh.paused && invalidations == 1);
 }
 
+/* Real SD indexed reads: forward, backward, A -> B -> A, pause/resume. */
+static void value_reader_action(vp_session_t *s, EventBits_t bits)
+{
+    CHECK(bits == EV_WAKE_READER && !s->eof && !s->reader_err);
+    if (actions == 5) {
+        CHECK(s->paused && !s->used);
+        CHECK(video_player_set_position(.5) == ESP_OK);
+        CHECK(video_player_resume() == ESP_OK);
+        actions++;
+        return;
+    }
+    const unsigned expected[] = {0, 2, 1, 0, 0, 99, 1};
+    uint32_t size, rec, index; const uint8_t *jpg;
+    CHECK(actions < COUNT_OF(expected) && ring_peek(s, &size, &jpg, &rec));
+    memcpy(&index, jpg - VP_REC_HDR, sizeof(index));
+    CHECK(index == expected[actions] && size == 4 && jpg[0] == index + 1);
+    ring_release(s, rec);
+    switch (actions++) {
+    case 0: CHECK(video_player_set_position(2) == ESP_OK); break;
+    case 1: CHECK(video_player_set_position(.5) == ESP_OK); break;
+    case 2: CHECK(video_player_set_position(-1) == ESP_OK); break;
+    case 3:
+        CHECK(video_player_set_position(1) == ESP_OK);
+        CHECK(video_player_set_position(0) == ESP_OK); /* same frame, new revision */
+        break;
+    case 4: CHECK(video_player_pause() == ESP_OK); break;
+    case 6:
+        s->quit = true;
+        xEventGroupSetBits(s->ev, EV_WAKE_READER | EV_WAKE_DECODER);
+        break;
+    default: CHECK(false);
+    }
+}
+static void test_value_reader_seek(void)
+{
+    make_file();
+    video_config_t cfg = { .mode = VIDEO_MODE_COMPOSITE, .source = VIDEO_SRC_SD,
+        .path = file_path, .video_view = &view, .value_driven = true };
+    CHECK(video_player_start(&cfg) == ESP_OK);
+    vp_session_t *s = test_session = s_cur;
+    on_block = value_reader_action;
+    run_task(1);
+    CHECK(actions == 7 && !s->reader_err && !s->eof && !timed_waits);
+    CHECK(video_player_set_position(NAN) == ESP_ERR_INVALID_STATE);
+    finish();
+}
+static void value_decode_moving(void)
+{
+    CHECK(video_player_set_position(1) == ESP_OK);
+    frame(test_session, 2); /* new request arrives during an expensive decode */
+}
+static void value_decoder_action(vp_session_t *s, EventBits_t bits)
+{
+    CHECK(bits == EV_WAKE_DECODER);
+    if (s->pending >= 0) { service_ui(s); return; }
+    switch (actions++) {
+    case 0:
+        CHECK(presented == 2 && shown_marker[0] == 0 && shown_marker[1] == 2);
+        CHECK(video_player_set_position(.5) == ESP_OK); frame(s, 1); break;
+    case 1:
+        CHECK(presented == 3 && shown_marker[2] == 1);
+        CHECK(video_player_pause() == ESP_OK); break;
+    case 2:
+        CHECK(s->paused && presented == 3);
+        CHECK(video_player_set_position(0) == ESP_OK);
+        CHECK(video_player_resume() == ESP_OK); frame(s, 0); break;
+    case 3:
+        CHECK(presented == 4 && shown_marker[3] == 0);
+        s->quit = true; xEventGroupSetBits(s->ev, EV_WAKE_DECODER); break;
+    default: CHECK(false);
+    }
+}
+static void test_value_decoder_latest(void)
+{
+    vp_session_t *s = prepared(VIDEO_MODE_COMPOSITE, 64);
+    s->value_driven = true;
+    frame(s, 2); /* obsolete request must not decode */
+    frame(s, 0);
+    during_decode = value_decode_moving; on_block = value_decoder_action;
+    run_task(0);
+    CHECK(decoded == 4 && presented == 4 && actions == 4 && !timed_waits);
+    CHECK(decoded_marker[0] == 0 && decoded_marker[1] == 2 && decoded_marker[2] == 1 && decoded_marker[3] == 0);
+    finish();
+}
+static void test_value_decoder_error(void)
+{
+    vp_session_t *s = prepared(VIDEO_MODE_COMPOSITE, 64);
+    s->value_driven = true; fail_decode = true; frame(s, 0);
+    run_task(0);
+    CHECK(s->state == VIDEO_STATE_ERROR && decoded == 1 && !presented && !timed_waits);
+    finish();
+}
+
 typedef struct { const char *name; void (*fn)(void); } test_t;
 int main(void)
 {
     const test_t tests[] = {
 #define TEST(f) { #f, f }
         TEST(test_full_reader_release), TEST(test_full_reader_gap), TEST(test_full_reader_stop),
+        TEST(test_composite_stop_waits_for_decoder),
         TEST(test_paused_resume), TEST(test_paused_gap), TEST(test_paused_stop),
         TEST(test_header_real_reader), TEST(test_header_reader_error), TEST(test_header_stop),
         TEST(test_header_publication), TEST(test_header_gap),
@@ -1035,7 +1163,7 @@ int main(void)
         TEST(test_deadline_pause), TEST(test_deadline_stop),
         TEST(test_fullscreen_finish), TEST(test_first_frame_waits_for_dma), TEST(test_fullscreen_stop), TEST(test_task_create_failure),
         TEST(test_timed_fullscreen_finish), TEST(test_timed_truncated_prebuffer),
-        TEST(test_path_limit),
+        TEST(test_path_limit), TEST(test_value_reader_seek), TEST(test_value_decoder_latest), TEST(test_value_decoder_error),
         TEST(test_ui_event_pause_loading), TEST(test_ui_event_pause_pending), TEST(test_ui_event_pause_late_publish),
         TEST(test_ui_event_pause_decode), TEST(test_ui_event_pause_publish), TEST(test_ui_event_pause_stop),
         TEST(test_ui_event_fullscreen_control), TEST(test_fullscreen_invalidation_guard), TEST(test_ui_event_invalid_control),

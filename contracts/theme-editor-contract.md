@@ -96,10 +96,12 @@ layout 是 `{"page_id","background_color","elements":[…]}`（`themePacker.ts:2
 - 定位：`align` = `left` 时左边 = x，`center` 时水平中心 = x，`right` 时右边 = x；顶边 = y。文本每次变化（数据刷新、规则改 text）后重新对齐。
 - 字体：`font_asset` 能加载就用；否则内建 Montserrat，`12/14/16/26/32/48` 精确匹配；`64/80/96` 回退到 48，再加 `transform_zoom = size * 256 / 48`（推断 LVGL 8.4 可用，需验证），或从 SD 读字体（可选）。现行内建字体只到 48（`theme_loader.c:1052-1057`）。
 
-**image** `{type,id,x,y,width,height,rotation,asset}`
+**image** `{type,id,x,y,width,height,rotation,asset,video_playback?,data_source?,range_min?,range_max?,video_step?}`
 
 - 编辑器：`width/height` 是 Fabric 的**裁剪框**，按原始尺寸绘制，显示 `min(w, natW) × min(h, natH)`；`originX/Y = left/top`，即绕**左上角**旋转。【证据】`fabric 7.4.0 dist/index.mjs:19654-19655`；`FabricCanvas.tsx:1266-1285`
 - 固件：不缩放；对象尺寸 `(min(R(w), natW), min(R(h), natH))`（也避免 LVGL 在对象大于图片时平铺，`lv_img.c:152-153, 657-670`）；`lv_img_set_pivot(0, 0)`；`angle = R(rotation * 10)`（0.1° 单位，double 算完再取整，不先取整到度，`theme_loader.c:1125-1130`）；位置 `(R(x), R(y))`。
+
+- 视频图片（`vid_` / `video_` 前缀）可声明 `video_playback: "value"`，绑定 `data_source` 与递增的 `range_min/range_max`；`video_step` 为非负原始单位步长，缺省 `0`。先 clamp，正步长按起点对齐取最近步进值（终点不变），归一化为 `p`，选择 `floor(p * (frame_count - 1) + 0.5)` 帧。无效数据保留上一位置，首次为首帧；未声明模式则循环。编辑器和固件扫表均支持此绑定，详细说明见 `docs/THEMES.md`。
 
 **pointer** `{type,id,x,y,width,height,asset,data_source,range_min,range_max,angle_min,angle_max,rotation,pivot_x,pivot_y}`（现行 rebuild 固件跳过，`theme_loader.c:1229-1239`，**新增**）
 
@@ -170,7 +172,7 @@ GaugeElement 公共字段 {id, name?, x, y, locked?, dataDisplay?, kind: "arc"|"
   arc     {width, height, startAngle, endAngle, rotation, dataSource, rangeMin, rangeMax, color, bgColor, lineWidth, cornerRadius?}
   bar     {width, height, rotation, direction?, dataSource, rangeMin, rangeMax, color, bgColor, segments?, cornerRadius?}
   label   {align, color, fontSize, fontName?, dataSource?, format?, divisor?, text?, rotation}
-  image   {width, height, rotation, assetName}
+  image   {width, height, rotation, assetName, videoBinding?: {dataSource, rangeMin, rangeMax, step?}}
   pointer {width, height, rotation, assetName, dataSource, rangeMin, rangeMax, angleMin, angleMax, pivotX, pivotY}
 ```
 

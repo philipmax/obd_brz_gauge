@@ -171,6 +171,7 @@ static void tl_add_element(tl_ctx_t *c, const cJSON *o)
     e.radius = tl_num(o, "radius", 0);
     e.divisor = tl_num(o, "divisor", 0);
     e.font_size = tl_num(o, "font_size", 16);
+    e.opacity = fmax(0.0, fmin(100.0, tl_num(o, "opacity", 100)));
 
     if (kind == TR_KIND_LABEL) {
         e.color = tl_color(o, "color", c->def->text_primary);
@@ -185,8 +186,14 @@ static void tl_add_element(tl_ctx_t *c, const cJSON *o)
     else if (al && strcmp(al, "right") == 0) e.align = TL_ALIGN_RIGHT;
     else e.align = TL_ALIGN_LEFT;
 
+    e.video = (kind == TR_KIND_IMAGE && tl_is_video_id(e.id, NULL)) ? 1 : 0;
+    const char *playback = tl_str(o, "video_playback");
+    e.video_value = e.video && playback && strcmp(playback, "value") == 0 &&
+                    isfinite(e.range_min) && isfinite(e.range_max) && e.range_max > e.range_min;
+    e.video_step = tl_num(o, "video_step", 0);
+    if (!isfinite(e.video_step) || e.video_step < 0) e.video_step = 0;
     const char *ds = tl_str(o, "data_source");
-    if (ds && ds[0] && kind != TR_KIND_IMAGE) {
+    if (ds && ds[0] && (kind != TR_KIND_IMAGE || e.video_value)) {
         if (c->bindings < TL_MAX_BINDINGS) {
             e.data_source = tl_dup(c->alloc, ds, &nomem);
             c->bindings++;
@@ -202,7 +209,6 @@ static void tl_add_element(tl_ctx_t *c, const cJSON *o)
     if (s && s[0]) e.asset = tl_dup(c->alloc, s, &nomem);
     s = tl_str(o, "font_asset");
     if (s && s[0]) e.font_asset = tl_dup(c->alloc, s, &nomem);
-    e.video = (kind == TR_KIND_IMAGE && tl_is_video_id(e.id, NULL)) ? 1 : 0;
 
     if (nomem) {
         tl_elem_strings_free(c->alloc, &e);

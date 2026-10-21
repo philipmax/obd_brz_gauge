@@ -188,7 +188,8 @@ static uint8_t process_frame(uint8_t command, const uint8_t *payload, uint32_t l
             (theme || obv ? manifest != 0 : (total <= manifest || manifest == 0 || manifest > 4096)) ||
             !sd_card_is_mounted() ||
             sd_card_get_free_bytes() < (uint64_t)total * (theme ? 2 : 1) + SD_RESERVE_BYTES) return 2;
-        if (!storage_job_lock(0)) return 9;
+        /* Allow short theme reads / boot storage jobs to finish before reporting BUSY. */
+        if (!storage_job_lock(pdMS_TO_TICKS(1000))) return 9;
         s_storage_locked = true;
         s_theme_upload = theme;
         s_obv_upload = obv;
