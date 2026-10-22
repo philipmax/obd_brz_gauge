@@ -432,27 +432,21 @@ currently a manual local check only — it is not in CI.
 
 ## Release workflow
 
-`tools/release.sh` is the one-shot flow: activate the ESP-IDF environment
-(eim) → commit sources (**commit first** — `count` is the git commit count;
-skipped when the tree is already clean, releasing HEAD as is) →
-`idf.py reconfigure build` (reconfigure so CMake re-reads the commit count) →
-`tools/gen_release.py` copies `build/` artifacts into `firmware/release/` and
-rewrites `latest.json` (sha256/size per file; refuses to write out when the
-firmware's embedded build tag does not match HEAD) → a separate `build:`
-commit for the artifacts (source and artifact commits stay separate, per
-AGENTS.md) → push.
+Run `./tools/release.sh "fix: describe change"` on the development branch (for example `rebuild`), then merge source, artifacts and manifest into `main` and push `main` to publish. The script activates EIM and performs source commit → `idf.py reconfigure build` → manifest generation → separate `build:` artifact commit → `git push --no-verify`. Both commits use `--no-verify`. Automatic source staging excludes `build/`, `firmware/release/` and both CHANGELOG files; review the remaining staged scope before running. Local and server branches need not match: optional local `FIRMWARE_BRANCH` restricts the build branch, while the server defaults to watching `main`.
 
-Minimal app-side release layout:
+Fast-forward and normal merges preserve the original build branch tag. If merging changes source or squash/rebase rewrites the build history, rebuild on the final `main`. The firmware tag and manifest reference source commit N; the artifact commit is N+1. The server verifies N is an ancestor of the checkout and permits only whitelisted artifacts after N, preventing stale binaries from being labeled as new source. `gen_release.py` validates the complete NUL-terminated tag, sizes and optional raw bootmedia before staging files and replacing `latest.json` last. Validation failure leaves the existing release intact. Without `build/bootmedia.bin`, the manifest omits it and removes the stale published copy. Custom media still installs on SD.
 
 ```text
-/releases/
+firmware/release/
   latest.json
-  firmware/    obd_brz_gauge.bin · partition-table.bin · bootloader.bin · ota_data_initial.bin
-  bootmedia/   bootmedia.bin
+  obd_brz_gauge.bin
+  bootloader/bootloader.bin
+  partition_table/partition-table.bin
+  ota_data_initial.bin
+  bootmedia.bin                         # optional legacy SD payload
 ```
 
-Re-run `gen_release.py` whenever release binaries change, or the app will
-compare fresh firmware against a stale manifest.
+The store server uses a dedicated firmware checkout, fetches `origin/main` every 60 seconds, and validates SHA256/size and source version from `firmware/release/latest.json`. It uploads versioned files, writes the database, then updates `PUBLIC_BASE_URL/firmware/esp32/latest.json`. Failures retry next cycle; successful state persists. The Docker watcher does not compile IDF. Web and App use the same manifest. For deployment and Android source/build/artifact commits and server checkout updates, see `docs/RELEASE_GUIDE.en.md` in the store repository.
 
 ## Commit conventions
 

@@ -1,4 +1,4 @@
-/* USB theme installation: stream into an isolated directory, validate, then
+/* Theme bundle installation: stream into an isolated directory, validate, then
  * swap with a recovery journal. Never change the selected theme on bad input. */
 #include "app_obd_dsp/theme_bundle.h"
 #include <dirent.h>
@@ -14,7 +14,6 @@
 #include "freertos/semphr.h"
 #include "app_obd_dsp/storage_util.h"
 #include "app_obd_dsp/theme_library.h"
-#include "app_obd_dsp/ota_wifi_server.h"
 #include "bsp_obd_dsp/nvs_app.h"
 #include "export_path/ui_ext.h"
 #include "theme_engine/theme_sidecar_core.h"
@@ -184,7 +183,7 @@ done:
 }
 
 esp_err_t theme_bundle_install(const char *path) {
-    if (ota_wifi_server_is_active() || !sd_card_is_mounted()) return ESP_ERR_INVALID_STATE;
+    if (!sd_card_is_mounted()) return ESP_ERR_INVALID_STATE;
     if (!storage_job_lock(pdMS_TO_TICKS(1000))) return ESP_ERR_TIMEOUT;
     /* A leftover journal must be recovered at boot before another install. */
     char key[65] = {0};

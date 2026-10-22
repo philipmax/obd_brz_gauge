@@ -52,6 +52,8 @@ App 刷写前用它做硬件匹配校验：
 注入。App 用 `firmware.count` 与 `latest.json` 比较判断新旧。
 硬件字段与所选 release 不一致时 App 应拒绝刷写。
 
+网页与 App 统一读取 `PUBLIC_BASE_URL/firmware/esp32/latest.json`（可通过 `VITE_RELEASE_BASE_URL` 配置目录）。兼容发布端 `device/files` 与旧 `hardware/firmware` 清单；下载和缓存校验 SHA256 与字节数。网页完整刷写先校验全部四个文件，再写入；App 上传前重新读取当前设备硬件。发布清单对应源码提交，后续产物提交不改变设备 build tag。
+
 ## WiFi OTA HTTP API
 
 App 连上设备 SoftAP 后走 HTTP（所有路径都应答 OPTIONS 预检，CORS 头给 `/ota/*` 及下述车型社区安装白名单）。
@@ -84,6 +86,9 @@ App 连上设备 SoftAP 后走 HTTP（所有路径都应答 OPTIONS 预检，COR
 另加 `X-OTA-Manifest-Size`。Body 为本块数据（`Content-Type` 含 `base64` 时按 base64 文本解码）。
 旧版网页串口上传器使用 `/ota/bootmedia/upload`，并只在 prepare 时发送长度；设备从同一会话
 最近一次成功的 `/ota/bootmedia/prepare` 读取长度，其余分块、SHA 校验和 SD 安装行为相同。
+`X-OTA-Manifest-Size: 0` 表示完整 OBV/OBV2 文件；该值也可由兼容路径沿用 prepare。
+
+App 的主题、开机动画、车型安装/启用和主题删除每次操作都重新发现 Wi-Fi 会话，优先 Wi-Fi；Android 失败后释放网络绑定并回退原生 USB，iOS 仅用 Wi-Fi。USB `hello` 的 `ota_active` 为 `true` 时，先发送 `ota.stop` 停止 HTTP 服务并清理未完成上传，再开始 USB 操作。客户端必须校验 JSON 对象、`ok === true` 和中间块的准确 `nextOffset`；协议错误立即停止，不按网络故障重试。主题/动画安装成功后由固件自动重启，App 不再发送第二次重启。主题删除与车型启用在业务成功后单独请求重启；重启失败只提示手动重启，不重放业务操作。
 
 - `X-Offset: 0` 开始一次新上传；中间块返回 `{"ok":true,"nextOffset":N}`
 - 偏移、总长或 SHA 与进行中的上传对不上：`unexpected chunk offset`
@@ -97,10 +102,10 @@ App 连上设备 SoftAP 后走 HTTP（所有路径都应答 OPTIONS 预检，COR
 各上传端点的 Body：
 
 - `/ota/firmware`：固件二进制，不超过 OTA 槽大小（3 MB）。
-- `/ota/theme`：`theme.bin`，受 SD 可用空间与格式限制，无旧 4 MB 分区上限；校验清单后
-  入库为 `/OBD/THEMES/<key>/theme.bin`，保存 NVS 选择。
+- `/ota/theme`：与 USB 命令 `5` 相同的 `OBDT` 主题流（客户端解包 ZIP，包含 `theme.bin`、`project.json` 和资源），受 SD 可用空间与格式限制；临时目录验证通过后通过恢复日志替换并保存 NVS 选择。上传或验证失败保留当前主题，不提前删除。兼容旧客户端直接上传 `theme.bin`，按文件头分流；无效的 `OBDT` 包不会回退到旧版导入。
 - `/ota/bootmedia`：`[manifest][bin]`，`X-OTA-Size` 为总长，manifest ≤4 KB；
   SD 文件 `/OBD/BOOT/bootmedia.raw` 中 manifest 补 `0xFF` 到 4 KB，SHA 不包含填充。
+  manifest 长度为 `0` 时为完整 OBV/OBV2，写入 `boot.obv.part`，同步并验证后才提交为 `boot.obv`。新动画提交成功后清理其他旧格式；清理失败记录警告，保留新文件并返回安装成功。
 
 **错误响应**：`/ota/*` 出错为 HTTP 400 + `{"error":"<原因>"}`，如 `unauthorized`、
 `missing headers`、`invalid headers`、`SD card required`、`not enough SD space`、`install failed`。
@@ -111,8 +116,7 @@ App 连上设备 SoftAP 后走 HTTP（所有路径都应答 OPTIONS 预检，COR
 **媒体必须用 SD**：prepare 与上传都要求已挂载 SD，空闲空间至少为文件大小（动画含填充）
 加 64 KB 余量。`storage` 固定为 `"sd"`；主题兼容字段 `partitionSize` 和动画 `free`
 表示 SD 空闲空间减 64 KB（截到 `UINT32_MAX`），不再表示 Flash 容量；`psramFree` /
-`largestBlock` 仅供诊断，不要求整个媒体包能装入 PSRAM。动画上传不会使主题或公共
-`boot.obv` 失效；旧版 App 上传仍写独立的公共 SD 开机动画文件。
+`largestBlock` 仅供诊断，不要求整个媒体包能装入 PSRAM。动画上传不改变主题；只有新动画提交成功后才清理公共目录中的其他旧格式。
 
 ## USB 网页管理、主题与开机动画
 
@@ -122,7 +126,8 @@ App 连上设备 SoftAP 后走 HTTP（所有路径都应答 OPTIONS 预检，COR
 
 | 请求 JSON | 成功回复 | 生效 |
 |----------|----------|------|
-| `{"op":"hello"}` | `{"ok":true,"usb_management":1}` | 确认协议，不修改设备 |
+| `{"op":"hello"}` | `{"ok":true,"usb_management":1,"ota_active":false}` | 确认协议与 OTA 状态，不修改设备 |
+| `{"op":"ota.stop"}` | `{"ok":true}` | 停止 HTTP OTA 并清理未完成上传，允许后续 USB 接管；不重启。启动/停止并发时返回 `ok:false`、`retryable:true`，不等待 LVGL 调用方 |
 | `{"op":"vehicle.install","profile":{...}}` | `{"ok":true,"id":"...","warnings":0,"issues":[]}` | 校验并安装，不启用、不重启 |
 | `{"op":"vehicle.activate","id":"..."}` | `{"ok":true,"pending":"..."}` | 下次启动启用；支持 `obd2.generic` |
 | `{"op":"theme.erase"}` | `{"ok":true,"deleted":true}` | 释放主题页面，删除当前 SD 主题目录和选择；`false` 表示未找到主题包 |

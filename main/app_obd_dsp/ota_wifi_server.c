@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <unistd.h>
 #include <sys/socket.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -43,12 +44,14 @@
 #include "app_obd_dsp/coredump_store.h"
 #include "app_obd_dsp/device_identity.h"
 #include "app_obd_dsp/theme_library.h"
+#include "app_obd_dsp/theme_bundle.h"
 #include "bsp_obd_dsp/nvs_app.h"
 #include "app_obd_dsp/theme_mount.h"
 #include "app_obd_dsp/upload_sink.h"
 #include "bsp_obd_dsp/ble_hub.h"
 #include "bsp_obd_dsp/sd_card.h"
 #include "media/video_elem.h"
+#include "media/boot_obv_validate.h"
 #include "media/video_player.h"
 #include "theme_engine/theme_interface.h"
 #include "freertos/semphr.h"
@@ -77,6 +80,27 @@ extern const uint8_t device_web_page_gz_end[]   asm("_binary_device_web_page_htm
 
 static ota_wifi_state_t s_state = OTA_WIFI_STATE_IDLE;
 static volatile bool s_active = false;
+static portMUX_TYPE s_lifecycle_mux = portMUX_INITIALIZER_UNLOCKED;
+static bool s_lifecycle_busy = false;
+
+/* Never wait for another lifecycle caller: the UI may hold lvgl_mux while
+ * an HTTP handler is waiting for it during httpd_stop(). */
+static bool lifecycle_try_take(void)
+{
+    portENTER_CRITICAL(&s_lifecycle_mux);
+    bool available = !s_lifecycle_busy;
+    if (available) s_lifecycle_busy = true;
+    portEXIT_CRITICAL(&s_lifecycle_mux);
+    return available;
+}
+
+static void lifecycle_give(void)
+{
+    portENTER_CRITICAL(&s_lifecycle_mux);
+    s_lifecycle_busy = false;
+    portEXIT_CRITICAL(&s_lifecycle_mux);
+}
+
 static httpd_handle_t s_httpd = NULL;
 static esp_netif_t *s_ap_netif = NULL;
 static char s_token[17] = {0};
@@ -542,15 +566,57 @@ static esp_err_t upload_run(httpd_req_t *req, const char *label, const char *don
         return send_err(req, why);   // "size mismatch" / "sha mismatch"
     }
 
+    /* Validate the staged OBV before replacing the current boot animation.
+     * FatFs publishes the directory size on sync, before the second reader. */
+    if (s_up_kind == OTA_UP_BOOTMEDIA && s_sink.manifest_size == 0) {
+        const char *reason = "animation sync failed";
+        char part[UPLOAD_PATH_MAX + 8];
+        snprintf(part, sizeof(part), "%s.part", s_sink.path);
+        if (fflush(s_sink.fp) != 0 || fsync(fileno(s_sink.fp)) != 0 ||
+            !boot_obv_validate_file(part, &reason)) {
+            upload_release();
+            set_state(OTA_WIFI_STATE_ERROR);
+            return send_err(req, reason ? reason : "invalid JPEG animation");
+        }
+    }
+
     // Commit with the connection still open; the App waits for this reply.
     ESP_LOGI(TAG, "%s verified (%u bytes), installing", label, (unsigned)s_sink.expected);
     set_state(OTA_WIFI_STATE_RECEIVING);
     t0 = esp_timer_get_time();
     err = upload_sink_commit(&s_sink);
     if (err == ESP_OK && s_up_kind == OTA_UP_THEME) {
-        char key[STORAGE_THEME_KEY_LEN];
-        err = theme_library_import_file(SD_THEME_UPLOAD, key, sizeof(key));
-        if (err == ESP_OK) err = theme_library_select(key);
+        char magic[4];
+        FILE *theme = fopen(SD_THEME_UPLOAD, "rb");
+        if (!theme) {
+            err = ESP_FAIL;
+        } else {
+            size_t count = fread(magic, 1, sizeof(magic), theme);
+            fclose(theme);
+            if (count == sizeof(magic) && memcmp(magic, "OBDT", sizeof(magic)) == 0) {
+                // Bundle errors must never fall through to the legacy importer.
+                err = theme_bundle_install(SD_THEME_UPLOAD);
+            } else {
+                // Keep /ota/theme compatible with existing bare theme.bin clients.
+                char key[STORAGE_THEME_KEY_LEN];
+                err = theme_library_import_file(SD_THEME_UPLOAD, key, sizeof(key));
+                if (err == ESP_OK) err = theme_library_select(key);
+            }
+        }
+    }
+    if (err == ESP_OK && s_up_kind == OTA_UP_BOOTMEDIA) {
+        /* Only retire previous formats once the new file is durable. */
+        const char *old_video = s_sink.manifest_size == 0 ? SD_BOOT_LEGACY : SD_BOOT_OBV;
+        esp_err_t video_err = sd_card_remove(old_video);
+        esp_err_t jpeg_err = sd_card_remove(SD_BOOT_JPEG);
+        /* The old format may legitimately be absent. The new file has already
+         * been committed and validated, so cleanup is best-effort. */
+        if (video_err != ESP_OK && video_err != ESP_ERR_NOT_FOUND) {
+            ESP_LOGW(TAG, "old boot media cleanup failed: %s", esp_err_to_name(video_err));
+        }
+        if (jpeg_err != ESP_OK && jpeg_err != ESP_ERR_NOT_FOUND) {
+            ESP_LOGW(TAG, "legacy JPEG cleanup failed: %s", esp_err_to_name(jpeg_err));
+        }
     }
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "%s install failed: %s (%s)", label, esp_err_to_name(err),
@@ -835,9 +901,7 @@ static esp_err_t coredump_erase_handler(httpd_req_t *req)
 }
 
 // POST /ota/bootmedia/prepare
-// Checks capacity and PSRAM only; never erases flash. An image larger than
-// the bootmedia partition is accepted when the SD card can hold it (it is
-// then streamed to SD_BOOT_LEGACY instead).
+// Checks SD capacity; manifest size zero selects a standalone OBV animation.
 static esp_err_t bootmedia_prepare_handler(httpd_req_t *req)
 {
     if (!validate_token(req)) {
@@ -854,13 +918,15 @@ static esp_err_t bootmedia_prepare_handler(httpd_req_t *req)
 
     uint32_t total_size = (uint32_t)strtoul(total_str, NULL, 10);
     uint32_t manifest_size = (uint32_t)strtoul(manifest_str, NULL, 10);
-    if (total_size == 0 || manifest_size == 0 || manifest_size >= total_size ||
-        manifest_size > BOOT_MEDIA_MANIFEST_MAX) {
+    if (total_size == 0 || (manifest_size != 0 &&
+        (manifest_size >= total_size || manifest_size > BOOT_MEDIA_MANIFEST_MAX))) {
         return send_err(req, "invalid prepare sizes");
     }
 
     if (!sd_card_is_mounted()) return send_err(req, "SD card required");
-    if (!sd_can_hold((uint64_t)total_size + BOOT_MEDIA_BIN_OFFSET - manifest_size))
+    uint64_t required = manifest_size == 0 ? total_size :
+        (uint64_t)total_size + BOOT_MEDIA_BIN_OFFSET - manifest_size;
+    if (!sd_can_hold(required))
         return send_err(req, "not enough SD space");
     uint64_t sd_free = sd_card_get_free_bytes() - BOOTMEDIA_SD_MARGIN;
     size_t free_space = sd_free > UINT32_MAX ? UINT32_MAX : (size_t)sd_free;
@@ -881,7 +947,7 @@ static esp_err_t bootmedia_prepare_handler(httpd_req_t *req)
     return send_json_response(req, 200, json);
 }
 
-// POST /ota/bootmedia — chunked [manifest][bin] stream.
+// POST /ota/bootmedia — OBV or legacy [manifest][bin] stream.
 static esp_err_t bootmedia_handle(httpd_req_t *req, bool legacy_path)
 {
     if (!validate_token(req)) {
@@ -902,7 +968,7 @@ static esp_err_t bootmedia_handle(httpd_req_t *req, bool legacy_path)
         return send_err(req, "missing headers");
     }
     if (!has_size && legacy_path) {
-        if (s_bootmedia_prepared_size == 0 || s_bootmedia_prepared_manifest_size == 0) {
+        if (s_bootmedia_prepared_size == 0) {
             return send_err(req, "missing headers");
         }
         snprintf(size_str, sizeof(size_str), "%lu", (unsigned long)s_bootmedia_prepared_size);
@@ -918,8 +984,8 @@ static esp_err_t bootmedia_handle(httpd_req_t *req, bool legacy_path)
     uint32_t offset = hdr_u32(req, "X-Offset", 0);
     bool is_last = hdr_last(req);
 
-    if (total_size == 0 || manifest_size == 0 || manifest_size > BOOT_MEDIA_MANIFEST_MAX ||
-        manifest_size >= total_size || offset > total_size ||
+    if (total_size == 0 || (manifest_size != 0 &&
+        (manifest_size > BOOT_MEDIA_MANIFEST_MAX || manifest_size >= total_size)) || offset > total_size ||
         (!is_base64 && (uint32_t)req->content_len > total_size - offset)) {
         ESP_LOGE(TAG, "invalid sizes/offset: total=%lu manifest=%lu offset=%lu content_len=%d",
                  (unsigned long)total_size, (unsigned long)manifest_size,
@@ -940,12 +1006,14 @@ static esp_err_t bootmedia_handle(httpd_req_t *req, bool legacy_path)
             upload_release();
             return send_err(req, "SD card required");
         }
-        if (!sd_can_hold((uint64_t)total_size + BOOT_MEDIA_BIN_OFFSET - manifest_size)) {
+        uint64_t required = manifest_size == 0 ? total_size :
+            (uint64_t)total_size + BOOT_MEDIA_BIN_OFFSET - manifest_size;
+        if (!sd_can_hold(required)) {
             upload_release();
             return send_err(req, "not enough SD space");
         }
         esp_err_t err = upload_sink_open(&s_sink, UPLOAD_SINK_SD_FILE, total_size, sha,
-                                        SD_BOOT_LEGACY, manifest_size);
+                                        manifest_size == 0 ? SD_BOOT_OBV : SD_BOOT_LEGACY, manifest_size);
         if (err != ESP_OK) {
             upload_release();
             return send_err(req, "SD bootmedia upload open failed");
@@ -985,8 +1053,7 @@ static void ota_timeout_task(void *arg)
         if (esp_timer_get_time() - s_last_activity_us > OTA_IDLE_TIMEOUT_US) {
             ESP_LOGW(TAG, "WiFi OTA idle timeout (no HTTP activity for %lld s), stopping",
                      (long long)(OTA_IDLE_TIMEOUT_US / 1000000));
-            ota_wifi_server_stop();
-            break;
+            if (ota_wifi_server_stop()) break;
         }
         vTaskDelay(pdMS_TO_TICKS(2000));
     }
@@ -1038,7 +1105,7 @@ static void register_handlers(void)
     register_uri("/*", HTTP_OPTIONS, options_handler);
 }
 
-bool ota_wifi_server_start(ota_wifi_info_t *info)
+static bool ota_wifi_server_start_impl(ota_wifi_info_t *info)
 {
     if (s_state != OTA_WIFI_STATE_IDLE) {
         ESP_LOGW(TAG, "WiFi OTA already running");
@@ -1198,15 +1265,30 @@ bool ota_wifi_server_start(ota_wifi_info_t *info)
     return true;
 }
 
-void ota_wifi_server_stop(void)
+bool ota_wifi_server_start(ota_wifi_info_t *info)
 {
+    if (!lifecycle_try_take()) return false;
+    bool started = ota_wifi_server_start_impl(info);
+    lifecycle_give();
+    return started;
+}
+
+bool ota_wifi_server_stop(void)
+{
+    if (!lifecycle_try_take()) return false;
     if (s_state == OTA_WIFI_STATE_IDLE) {
         s_active = false;
-        return;
+        lifecycle_give();
+        return true;
     }
 
     if (s_httpd) {
-        httpd_stop(s_httpd);
+        esp_err_t err = httpd_stop(s_httpd);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "httpd stop failed: %s", esp_err_to_name(err));
+            lifecycle_give();
+            return false;
+        }
         s_httpd = NULL;
     }
     // No handler can run any more: release upload buffers / temp files.
@@ -1225,6 +1307,8 @@ void ota_wifi_server_stop(void)
     s_state = OTA_WIFI_STATE_IDLE;
     s_active = false;
     ESP_LOGI(TAG, "WiFi OTA stopped");
+    lifecycle_give();
+    return true;
 }
 
 bool ota_wifi_server_is_active(void)

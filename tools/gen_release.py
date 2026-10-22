@@ -34,6 +34,7 @@ import shutil
 import subprocess
 import sys
 import time
+import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BUILD_DIR = os.path.join(ROOT, "build")
@@ -90,18 +91,16 @@ def sha256(path):
 
 
 def main():
-    # 1. Copy the fresh build artifacts into the release directory.
-    for rel in BINS.values():
+    # Validate the complete build before changing any published artifact.
+    bins = {key: rel for key, rel in BINS.items()
+            if key != "bootmedia" or os.path.isfile(os.path.join(BUILD_DIR, rel))}
+    for rel in bins.values():
         src = os.path.join(BUILD_DIR, rel)
-        dst = os.path.join(RELEASE_DIR, rel)
-        if not os.path.isfile(src):
-            sys.exit(f"missing build artifact: {src}\nRun `idf.py build` first.")
-        os.makedirs(os.path.dirname(dst), exist_ok=True)
-        shutil.copy2(src, dst)
-        print(f"copied {rel}")
+        if not os.path.isfile(src) or os.path.getsize(src) == 0:
+            sys.exit(f"missing or empty build artifact: {src}\nRun `idf.py build` first.")
 
     # 1a. Validate firmware size (REFACTOR_PLAN.md P6)
-    fw_path = os.path.join(RELEASE_DIR, "obd_brz_gauge.bin")
+    fw_path = os.path.join(BUILD_DIR, "obd_brz_gauge.bin")
     fw_size = os.path.getsize(fw_path)
     if fw_size > MAX_FIRMWARE_SIZE:
         sys.exit(f"ERROR: Firmware {fw_size} bytes exceeds {MAX_FIRMWARE_SIZE} bytes (3 MB OTA slot limit)")
@@ -114,15 +113,16 @@ def main():
         pct = fw_size * 100.0 / MAX_FIRMWARE_SIZE
         print(f"✓ Firmware size: {fw_size} bytes ({pct:.1f}% of 3 MB limit)")
 
-    # 1b. Validate bootmedia: raw layout (tools/make_bootmedia_raw.py) and size.
-    bm_path = os.path.join(RELEASE_DIR, "bootmedia.bin")
-    bm_size = os.path.getsize(bm_path)
-    with open(bm_path, "rb") as f:
-        bm_head = f.read(BOOTMEDIA_MANIFEST_MAX)
-    if bm_size <= BOOTMEDIA_MANIFEST_MAX or not (0x61 <= bm_head[0] <= 0x7A):
-        sys.exit("ERROR: bootmedia.bin is not the raw [manifest 4 KB][bin] layout "
-                 "(SPIFFS image?) - rebuild it with tools/make_bootmedia_raw.py")
-    print(f"✓ bootmedia size: {bm_size} bytes (raw)")
+    # Legacy raw animation is optional: current media lives on SD.
+    if "bootmedia" in bins:
+        bm_path = os.path.join(BUILD_DIR, "bootmedia.bin")
+        bm_size = os.path.getsize(bm_path)
+        with open(bm_path, "rb") as f:
+            bm_head = f.read(BOOTMEDIA_MANIFEST_MAX)
+        if bm_size <= BOOTMEDIA_MANIFEST_MAX or not (0x61 <= bm_head[0] <= 0x7A):
+            sys.exit("ERROR: bootmedia.bin is not the raw [manifest 4 KB][bin] layout "
+                     "(SPIFFS image?) - rebuild it with tools/make_bootmedia_raw.py")
+        print(f"✓ bootmedia size: {bm_size} bytes (raw)")
 
     # 2. Build the version metadata from the current git HEAD.
     branch = git("rev-parse", "--abbrev-ref", "HEAD")
@@ -135,17 +135,17 @@ def main():
     #     HEAD. A mismatch means it was built before the last commit (the old
     #     "one release behind" bug) - never publish that.
     with open(fw_path, "rb") as f:
-        if build_tag.encode() not in f.read():
+        if build_tag.encode() + b"\0" not in f.read():
             sys.exit(f"ERROR: firmware was not built from HEAD ({build_tag}).\n"
                      "Commit first, then `idf.py reconfigure build` (or use tools/release.sh).")
 
     # built timestamp from the freshly copied firmware image (its build mtime).
-    fw_path = os.path.join(RELEASE_DIR, "obd_brz_gauge.bin")
+    fw_path = os.path.join(BUILD_DIR, "obd_brz_gauge.bin")
     built = time.strftime("%b %d %Y %H:%M:%S", time.localtime(os.path.getmtime(fw_path)))
 
     files = {}
-    for key, rel in BINS.items():
-        p = os.path.join(RELEASE_DIR, rel)
+    for key, rel in bins.items():
+        p = os.path.join(BUILD_DIR, rel)
         files[key] = {"path": rel, "size": os.path.getsize(p), "sha256": sha256(p)}
 
     # Complete-flash map (offsets from partitions.csv). Custom media is SD-only.
@@ -178,13 +178,32 @@ def main():
         "files": files,
         "flash_files": flash_files,
         "resource_storage": "sd",
-        "sd_files": {"/OBD/BOOT/bootmedia.raw": "bootmedia.bin"},
+        "sd_files": {"/OBD/BOOT/bootmedia.raw": "bootmedia.bin"} if "bootmedia" in bins else {},
     }
 
-    out = os.path.join(RELEASE_DIR, "latest.json")
-    with open(out, "w") as f:
-        json.dump(manifest, f, indent=2)
-        f.write("\n")
+    # Stage all bytes first. Publish the manifest last; failed validation above
+    # leaves the existing release untouched. The watcher also checks every hash.
+    os.makedirs(RELEASE_DIR, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=".release-", dir=os.path.dirname(RELEASE_DIR)) as stage:
+        for rel in bins.values():
+            dst = os.path.join(stage, rel)
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            shutil.copy2(os.path.join(BUILD_DIR, rel), dst)
+        for key, rel in bins.items():
+            if sha256(os.path.join(stage, rel)) != files[key]["sha256"]:
+                sys.exit("ERROR: build artifacts changed while preparing release")
+        with open(os.path.join(stage, "latest.json"), "w") as f:
+            json.dump(manifest, f, indent=2)
+            f.write("\n")
+        for rel in bins.values():
+            dst = os.path.join(RELEASE_DIR, rel)
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            os.replace(os.path.join(stage, rel), dst)
+        if "bootmedia" not in bins:
+            stale = os.path.join(RELEASE_DIR, "bootmedia.bin")
+            if os.path.exists(stale):
+                os.unlink(stale)
+        os.replace(os.path.join(stage, "latest.json"), os.path.join(RELEASE_DIR, "latest.json"))
 
     print(f"wrote latest.json  count={count}  build_tag={manifest['firmware']['build_tag']}")
     print("next: git add firmware/release/ && git commit -m \"build: update release firmware binaries\"")

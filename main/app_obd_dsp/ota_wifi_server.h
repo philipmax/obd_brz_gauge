@@ -33,8 +33,9 @@ typedef struct {
 // 所有主题页面对象。返回 true 表示启动成功，info 中填充 WiFi 信息。
 bool ota_wifi_server_start(ota_wifi_info_t *info);
 
-// 停止 WiFi OTA 服务
-void ota_wifi_server_stop(void);
+// 停止 WiFi OTA 服务。与启动/停止并发时返回 false，调用方稍后重试；
+// 不等待生命周期锁，避免 LVGL 调用方与等待 LVGL 的 HTTP handler 互锁。
+bool ota_wifi_server_stop(void);
 
 // 从 ota_wifi_server_start() 进入起到 ota_wifi_server_stop() 结束为 true。
 // SD 导入、主题库切换等后台任务据此暂停。

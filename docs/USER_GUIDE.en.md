@@ -189,8 +189,8 @@ power-loss-atomic.
 
 ## Updating from the phone app
 
-The companion app (`android_app/app-debug.apk`) can push three things; each
-requires the gauge to be in OTA mode first (**version page → OTA button**):
+The companion app (`android_app/app-debug.apk`) supports the transfers below. Before Wi-Fi operations,
+enter OTA mode (**version page → OTA button**) and join the gauge hotspot:
 
 - **Firmware**: the phone joins the gauge's WiFi hotspot (`OBD-Gauge-OTA-XXXX`,
   password `88888888`) for fast transfer, written to the inactive OTA slot
@@ -198,8 +198,10 @@ requires the gauge to be in OTA mode first (**version page → OTA button**):
 - **Theme package**: pushes a runtime theme to the SD library and saves its selection
   (see [THEMES.en.md](THEMES.en.md))
 
+Theme and boot-animation installation, vehicle installation/activation and theme deletion try Wi-Fi first. Android automatically falls back to native USB on Wi-Fi failure; iOS supports Wi-Fi only. Android checks USB management capability first; new firmware can stop OTA reception and hand over automatically, while older firmware requires exiting OTA mode. If OTA is starting or stopping, the operation asks you to retry later; wait for it to finish before retrying or swiping to exit. Failed theme/animation installation preserves current files; firmware automatically reboots on success. Vehicle installation and activation remain separate actions. If deletion or activation succeeds but reboot is unconfirmed, the App prompts a manual restart without replaying the operation.
+
 The device exposes hardware and build info via `GET /ota/info`; the app
-validates compatibility before flashing and refuses
+validates compatibility before flashing firmware and refuses
 mismatched hardware. Protocol details in [APP_PROTOCOL.en.md](APP_PROTOCOL.en.md).
 
 **Firmware verification and rollback**: after a new firmware boots, a

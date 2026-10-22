@@ -26,11 +26,19 @@ char *device_serial_rpc(const char *json, bool *restart)
         cJSON_AddStringToObject(response, "error", "invalid USB management request");
         goto finish;
     }
-    if (ota_wifi_server_is_active() && strcmp(name, "hello")) {
+    if (ota_wifi_server_is_active() && strcmp(name, "hello") && strcmp(name, "ota.stop")) {
         cJSON_AddStringToObject(response, "error", "exit OTA mode before USB management");
         goto finish;
     }
-    if (!strcmp(name, "vehicle.install")) {
+    if (!strcmp(name, "ota.stop")) {
+        /* The USB worker owns no LVGL/storage locks here. Stop joins the HTTP
+         * task before aborting its staged upload, so USB can take over safely. */
+        ok = ota_wifi_server_stop();
+        if (!ok) {
+            cJSON_AddStringToObject(response, "error", "OTA start/stop busy; retry shortly");
+            cJSON_AddBoolToObject(response, "retryable", true);
+        }
+    } else if (!strcmp(name, "vehicle.install")) {
         vp_issue_t *items = calloc(64, sizeof(*items));
         if (items) {
             vp_issues_t issues;
@@ -103,6 +111,7 @@ char *device_serial_rpc(const char *json, bool *restart)
     } else if (!strcmp(name, "hello")) {
         ok = true;
         cJSON_AddNumberToObject(response, "usb_management", 1);
+        cJSON_AddBoolToObject(response, "ota_active", ota_wifi_server_is_active());
     } else if (!strcmp(name, "reboot")) {
         ok = true;
         *restart = true;

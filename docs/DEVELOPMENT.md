@@ -380,25 +380,21 @@ CI（`.github/workflows/ci.yml`）跑 9 个 job：`contracts`（
 
 ## 发布流程
 
-`tools/release.sh` 一键发版：激活 ESP-IDF 环境（eim）→ 提交源码（**必须先提交**，
-`count` 取 git 提交数；若没有未提交改动则跳过这一步，直接发当前 HEAD）→
-`idf.py reconfigure build`（重新 configure 让 CMake 重读 commit 数）→
-`tools/gen_release.py` 把 `build/` 产物拷进 `firmware/release/` 并重写
-`latest.json`（每个文件记 sha256/size；固件内嵌的 build tag 和 HEAD 不一致会
-拒绝写出）→ 单独一个 `build:` commit 提交产物（源码和产物提交分开，
-AGENTS.md 要求）→ 推送。
+在开发分支（例如 `rebuild`）执行 `./tools/release.sh "fix: describe change"`，再将源码、产物与清单一起合并到 `main` 并推送 `main`，触发正式发布。脚本自动激活 EIM，提交源码 → `idf.py reconfigure build` → 生成清单 → 单独 `build:` 产物提交 → `git push --no-verify`。源码与产物提交均使用 `--no-verify`；自动源码提交排除 `build/`、`firmware/release/` 和两份 CHANGELOG，执行前检查其余暂存范围。本地与服务器分支不必相同：本地可选 `FIRMWARE_BRANCH` 只限制构建分支，服务器默认监听 `main`。
 
-App 侧发布目录最小布局：
+快进与普通 merge 保留原构建分支 tag；若合并修改源码，或 squash/rebase 改写构建历史，须在最终 `main` 重新构建。固件 build tag 与清单指向源码提交 N，产物提交是 N+1。服务器校验 N 是当前 checkout 的祖先，并要求 N 之后只有白名单产物变化；不会把旧二进制标成新源码版本。`gen_release.py` 先校验完整 NUL 结尾 tag、文件大小和可选 raw bootmedia，再暂存文件、最后替换 `latest.json`；校验失败不改现有发布目录。没有 `build/bootmedia.bin` 时清单不包含它，并移除旧发布副本。自定义媒体仍安装到 SD。
 
 ```text
-/releases/
+firmware/release/
   latest.json
-  firmware/    obd_brz_gauge.bin · partition-table.bin · bootloader.bin · ota_data_initial.bin
-  bootmedia/   bootmedia.bin
+  obd_brz_gauge.bin
+  bootloader/bootloader.bin
+  partition_table/partition-table.bin
+  ota_data_initial.bin
+  bootmedia.bin                         # optional legacy SD payload
 ```
 
-release 二进制有变动时要重跑 `gen_release.py` 更新 `latest.json`，
-否则 App 会拿旧 manifest 比对新固件。
+商店服务器使用专用固件 checkout，每 60 秒 fetch `origin/main`，从 `firmware/release/latest.json` 校验 SHA256/size 和源码版本。上传版本目录文件后写数据库，最后更新 `PUBLIC_BASE_URL/firmware/esp32/latest.json`；失败下周期重试，成功状态持久保存。Docker watcher 不编译 IDF。网页与 App 使用同一清单；完整部署和 Android APK 的源码提交、构建、产物提交与服务器拉取步骤见商店仓库 `docs/RELEASE_GUIDE.md`。
 
 ## 提交约定
 

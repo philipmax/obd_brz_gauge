@@ -4,6 +4,8 @@ English | [简体中文](THEMES.md)
 
 This project has **two coexisting theme systems** for different scenarios:
 
+The App tries Wi-Fi first for theme installation, falls back to USB on Android, and uses Wi-Fi only on iOS. Both paths carry the same `OBDT` stream, receiving, verifying and unpacking into staging before replacement protected by a recovery journal. Failure preserves the current theme; the App does not delete it first. Firmware automatically reboots after confirming installation; the App sends no duplicate reboot. Current-theme deletion uses the same transport selection and requests reboot separately after deletion succeeds; reboot failure only prompts a manual restart.
+
 | | Compiled-in theme (TOML) | Runtime theme (SD card) |
 |---|---|---|
 | What changes | 8 decorative colors + bezel/needle/dial artwork (reskin, no layout) | Colors + artwork + **custom gauge pages and layout** (layout.json) |

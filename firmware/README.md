@@ -12,7 +12,7 @@
 | `release/partition_table/partition-table.bin` | 分区表 |
 | `release/ota_data_initial.bin` | OTA 数据初始分区 |
 | `release/obd_brz_gauge.bin` | 应用固件 |
-| `release/bootmedia.bin` | 开机动画（raw 格式：[manifest 补 0xFF 到 4KB][bin]）|
+| `release/bootmedia.bin` | 可选旧版开机动画（raw 格式：[manifest 补 0xFF 到 4KB][bin]）|
 | `release/latest.json` | 发布清单（build tag + sha256），App 用它检测新固件 |
 
 ## 烧录地址

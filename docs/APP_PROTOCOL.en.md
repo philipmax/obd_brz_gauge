@@ -57,6 +57,8 @@ Used by the app for hardware compatibility checks before flashing:
 against `latest.json` to decide whether an update exists. If any hardware
 field differs from the selected release, the app must refuse to flash.
 
+Web and App read `PUBLIC_BASE_URL/firmware/esp32/latest.json` (directory configurable through `VITE_RELEASE_BASE_URL`). Both publisher `device/files` and legacy `hardware/firmware` manifests are supported; downloads and caches verify SHA256 and byte count. Complete web flashing verifies all four files before writing; the App rereads current device hardware before uploading. The release manifest references the source commit; subsequent artifact commits do not change the device build tag.
+
 ## WiFi OTA HTTP API
 
 Once the app has joined the device SoftAP, transfers go over HTTP (every path
@@ -93,6 +95,9 @@ default 0), `X-Last` (`1` = final chunk); `/ota/bootmedia` also carries
 The legacy browser serial uploader uses `/ota/bootmedia/upload` and sends lengths only during prepare;
 the device reuses the latest successful `/ota/bootmedia/prepare` sizes in this session. Chunking,
 SHA verification and SD installation are otherwise identical.
+`X-OTA-Manifest-Size: 0` denotes a complete OBV/OBV2 file; the compatibility path may also reuse this value from prepare.
+
+For themes, boot animations, vehicle installation/activation and theme deletion, the App discovers a fresh Wi-Fi session for every operation and tries Wi-Fi first. Android releases the network binding and falls back to native USB on failure; iOS uses Wi-Fi only. When USB `hello` reports `ota_active: true`, send `ota.stop` to stop HTTP and clean up the incomplete upload before using USB. Clients must verify a JSON object, `ok === true` and the exact intermediate `nextOffset`; protocol errors stop immediately without network retries. Firmware automatically reboots after theme/animation installation, so the App sends no second reboot. Theme deletion and vehicle activation request reboot separately after business success; reboot failure prompts a manual restart without replaying the operation.
 
 - `X-Offset: 0` starts a new upload; intermediate chunks get `{"ok":true,"nextOffset":N}`
 - Offset, total size or SHA that don't match the upload in progress: `unexpected chunk offset`
@@ -107,10 +112,10 @@ SHA verification and SD installation are otherwise identical.
 Upload bodies:
 
 - `/ota/firmware`: firmware binary within the 3 MB OTA slot.
-- `/ota/theme`: `theme.bin`, limited by SD space and format, without the old 4 MB limit.
-  Validate the manifest, install `/OBD/THEMES/<key>/theme.bin`, save NVS selection.
+- `/ota/theme`: the same `OBDT` stream as USB command `5` (client-unpacked ZIP containing `theme.bin`, `project.json` and resources), limited by SD space and format. After staged validation, a recovery journal protects replacement and the NVS selection. Upload or validation failure preserves the current theme without deleting it first. Legacy clients may still upload bare `theme.bin`; the file header selects the importer, and an invalid `OBDT` bundle never falls back to legacy import.
 - `/ota/bootmedia`: `[manifest][bin]`, total length in `X-OTA-Size`, manifest ≤4 KB.
   SD `/OBD/BOOT/bootmedia.raw` pads the manifest to 4 KB with `0xFF`; SHA excludes padding.
+  A manifest length of `0` denotes complete OBV/OBV2, staged as `boot.obv.part`, synced and validated before committing to `boot.obv`. Other old formats are cleaned up after commit; cleanup failures log warnings, preserve the new file and return installation success.
 
 **Errors**: `/ota/*` returns HTTP 400 + `{"error":"<原因>"}`, including `unauthorized`,
 `missing headers`, `invalid headers`, `SD card required`, `not enough SD space`, `install failed`.
@@ -122,8 +127,7 @@ first chunks of `/ota/theme` / `/ota/bootmedia` return `theme library busy`.
 file size (including animation padding) + 64 KB. `storage` is always `"sd"`. Legacy fields
 `partitionSize` (theme) and `free` (animation) mean SD free space minus 64 KB, capped at
 `UINT32_MAX`, not Flash capacity. `psramFree` / `largestBlock` are diagnostics; the entire
-media package need not fit in PSRAM. Legacy boot-animation uploads do not replace theme media;
-they continue to write the shared SD fallback file `/OBD/BOOT/bootmedia.raw`.
+media package need not fit in PSRAM. Animation uploads do not change themes; other formats in the shared directory are cleaned up only after the new animation commits.
 
 ## USB Web Management, Theme and Boot-Animation
 
@@ -133,7 +137,8 @@ Management RPC uses command `6` BEGIN_RPC: its 40-byte payload is JSON length `u
 
 | Request JSON | Success reply | Effect |
 |----------|----------|------|
-| `{"op":"hello"}` | `{"ok":true,"usb_management":1}` | Confirm protocol without changes |
+| `{"op":"hello"}` | `{"ok":true,"usb_management":1,"ota_active":false}` | Confirm protocol and OTA state without changes |
+| `{"op":"ota.stop"}` | `{"ok":true}` | Stop HTTP OTA and clean up the incomplete upload for subsequent USB takeover; no reboot. Concurrent start/stop returns `ok:false`, `retryable:true` without waiting on the LVGL caller |
 | `{"op":"vehicle.install","profile":{...}}` | `{"ok":true,"id":"...","warnings":0,"issues":[]}` | Validate and install; no activation or reboot |
 | `{"op":"vehicle.activate","id":"..."}` | `{"ok":true,"pending":"..."}` | Activate on next boot; supports `obd2.generic` |
 | `{"op":"theme.erase"}` | `{"ok":true,"deleted":true}` | Release theme pages, delete current SD theme directory and selection; `false` means no package was found |

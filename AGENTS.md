@@ -47,6 +47,7 @@ BLE 连 ELM327 兼容适配器读车况，ESP-NOW 三连表联动，双主题系
 - 视频无限条件等待必须配对 header/ring/UI/控制通知；stop 唤醒两 worker，event group 由 session 引用保活（`main/media/video_player.c`）
 - 视频 start/stop/pause/resume 在 LVGL task 或持有 `lvgl_mux` 时调用；worker 不操作 LVGL（`main/media/video_player.h`）
 - LVGL task 默认通知槽 0 专用于帧唤醒，绑定后永不删除/重绑；通知不带 session/view 指针（`main/app_obd_dsp/lvgl_runtime.h`）
+- OTA 启停共用非阻塞生命周期保护；`ota_wifi_server_stop()` 返回 false 时不得继续 USB 接管或退出重启，稍后重试，避免持有 LVGL 锁等待 HTTP 清理造成互锁（`ota_wifi_server.c` / `ui_ScreenPageOTAMode.c`）
 - 发版前必须先 commit——build tag 的 count 取 git 提交数（`tools/release.sh` 流程）
 
 ## 构建与验证

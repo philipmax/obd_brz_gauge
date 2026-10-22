@@ -22,17 +22,17 @@ MSG="${1:-feat: update}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-# Warn if not on main branch (release should usually happen on main)
+# Build on the current branch; publication starts when artifacts reach main.
+# An explicit FIRMWARE_BRANCH optionally restricts the local build branch.
 CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
-if [ "$CURRENT_BRANCH" != "main" ]; then
-    echo "WARNING: You are on branch '$CURRENT_BRANCH', not 'main'" >&2
-    echo "         Releases are typically cut from 'main'" >&2
-    read -p "Continue anyway? [y/N] " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo "Aborted."
-        exit 1
-    fi
+RELEASE_BRANCH="${FIRMWARE_BRANCH:-}"
+if [ "$CURRENT_BRANCH" = "HEAD" ]; then
+    echo "Release requires a named branch; detached HEAD is not supported." >&2
+    exit 1
+fi
+if [ -n "$RELEASE_BRANCH" ] && [ "$CURRENT_BRANCH" != "$RELEASE_BRANCH" ]; then
+    echo "Release branch must be '$RELEASE_BRANCH'; current branch is '$CURRENT_BRANCH'." >&2
+    exit 1
 fi
 
 # ---- Activate ESP-IDF ------------------------------------------------------
@@ -80,7 +80,7 @@ idf() {
 
 # ---- 1. Commit the source (never the build artifacts) ----
 git add -A
-git reset -q -- build/ firmware/release/ 2>/dev/null || true
+git reset -q -- build/ firmware/release/ CHANGELOG.md CHANGELOG.en.md
 if git diff --cached --quiet; then
     echo "No source changes — releasing HEAD as is."
 else
@@ -98,8 +98,10 @@ git add -f \
     build/obd_brz_gauge.bin \
     build/bootloader/bootloader.bin \
     build/partition_table/partition-table.bin \
-    build/ota_data_initial.bin \
-    build/bootmedia.bin
+    build/ota_data_initial.bin
+if [ -f build/bootmedia.bin ]; then
+    git add -f build/bootmedia.bin
+fi
 git add firmware/release/
 SRC_COUNT="$(git rev-list --count HEAD)"
 SRC_HASH="$(git rev-parse --short=12 HEAD)"
@@ -110,6 +112,6 @@ else
 fi
 
 # ---- 5. Push ----
-git push --no-verify
+git push --no-verify origin "$CURRENT_BRANCH"
 
 echo "✓ Released firmware count=${SRC_COUNT} git=${SRC_HASH} (artifacts at $(git rev-parse --short HEAD))"
