@@ -33,7 +33,7 @@ void ui_ScreenPageOilPressure_screen_init(void)
     lv_obj_set_style_bg_opa(ui_ChartDot, 255, LV_PART_MAIN);   // color set by apply
     lv_obj_align(ui_ChartDot, LV_ALIGN_CENTER, -106, -22);
 
-    // Layout unified with the brake temp page: value Size28 + unit on the same row, chart moved up to +62
+    // Layout: value Size28 + unit on the same row, chart moved up to +62
     ui_LabelOilPressureText = lv_label_create(ui_ScreenPageOilPressure);
     lv_label_set_text(ui_LabelOilPressureText, "--.-");
     lv_obj_set_style_text_font(ui_LabelOilPressureText, &ui_font_FontTypoderSize36, LV_PART_MAIN);

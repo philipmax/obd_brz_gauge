@@ -1,4 +1,16 @@
-build/
+# build/ is ignored except the 5 artifacts the obd_theme_store firmware-watcher
+# reads from origin/main for the web "complete" flash bundle
+# (backend/src/services/firmwareWatcher.ts findFirmwareFiles; bootmedia optional).
+/build/*
+!/build/obd_brz_gauge.bin
+!/build/ota_data_initial.bin
+!/build/bootmedia.bin
+!/build/bootloader/
+/build/bootloader/*
+!/build/bootloader/bootloader.bin
+!/build/partition_table/
+/build/partition_table/*
+!/build/partition_table/partition-table.bin
 managed_components/
 sdkconfig.old
 sdkconfig
@@ -6,14 +18,16 @@ sdkconfig
 .qwen/
 .DS_Store
 **/.DS_Store
-main/SAX0AC BC CC.pdf
 __pycache__/
 *.pyc
-# generated PID probe artifacts (from tools/analyze_proble.py)
+# generated PID probe artifacts
+# (fake_elm327.py / parse_carscanner_backup.py write timestamped files)
 pid_can_summary.csv
-tools/probe_log
-tools/elm_pids
-tools/pids_full.csv
+carscanner_pids.csv
+tools/probe_log*
+tools/elm_pids*
+tools/elm_trace_*
+tools/pids_full*.csv
 .mimosa
 .zcode
 # per-developer AI preferences (see AGENTS.md self-update protocol)

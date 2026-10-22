@@ -1,0 +1,356 @@
+{
+  "format": "skygauge.signals/1",
+  "registry_version": 1,
+  "editor_compat": {
+    "repo": "obd_theme_store",
+    "branch": "codex/local-frontend",
+    "commit": "5a7484e",
+    "sources": [
+      "frontend/src/lib/gaugeModel.ts:17-64 (DATA_SOURCES, DATA_SOURCE_LABELS, DATA_SOURCE_DIVISORS, DATA_SOURCE_FORMATS)",
+      "frontend/src/lib/themeContract.ts:29-53 (DataSourceSpec, DATA_SOURCE_SPECS)"
+    ],
+    "note": "The 11 editor keys, their order and their delivery encodings are frozen by the editor. 'editor' blocks below are verbatim copies; tools/fixtures_node/run_ts_crosscheck.mjs compares them with the pinned editor checkout."
+  },
+  "conventions": {
+    "id": "16-bit numeric id, written as a 4-digit upper-case hex string. Ids are runtime-only; themes, rules and profiles always reference signals by 'key'.",
+    "internal": "Runtime value is int32 fixed point: internal = R(engineering_value * internal.scale), R(v) = floor(v + 0.5) evaluated in double. internal.min/max is the plausibility range in internal units; a sample outside it is stored as invalid (replaces the legacy sentinel values).",
+    "valid": "Every signal carries a valid bit and a last-update timestamp. A value is valid only if the bit is set and now - ts < stale_ms (stale_ms 0 = never stale; obd.* values are initial and get tuned in P3). When sys.obd_link < 2 every obd.* signal is invalid.",
+    "delivery": "Value handed to theme bindings and rules. Conversion from internal: op 'identity' (d = v), 'mul' (d = ROUND(v * by)), 'div' (d = ROUND(v / by)); ROUND is 'half_up' = R(), 'floor' = floor(), 'exact' (result is always integral). Rules receive the delivered value as double; an invalid signal is delivered to rules as NaN (relational ops and == false, != true), bindings show the invalid state.",
+    "profile_units": "Units a vehicle profile may declare for the RPN result of a standard signal, mapped to the factor that converts that unit into the internal unit (internal = R(rpn_result * factor)). profile_unit_default applies when the profile signal has no 'unit'.",
+    "legacy": "Mappings to the pre-refactor parallel definitions. cache = obd_data_snapshot_t (main/app_obd_dsp/obd_data_cache.h:31-46); theme_snapshot = obd_snapshot_t (main/theme_engine/theme_interface.h:27-40); disp_item = disp_item_t (main/export_path/ui_disp_item.h:22-35); racechrono = virtual CAN id (main/bsp_obd_dsp/racechrono_ble_diy.c:81-89); espnow_v5 = espnow_obd_packet_t field (main/bsp_obd_dsp/espnow_link.c:86-105). 'to_internal' converts the legacy value into the internal unit, 'from_internal' converts back."
+  },
+  "ranges": [
+    {"prefix": "obd.", "first": "0x0001", "last": "0x007F", "allocation": "static", "description": "Standard engine/vehicle signals. Keys of the 11 editor data sources never change."},
+    {"prefix": "sys.", "first": "0x0080", "last": "0x00BF", "allocation": "static", "description": "Read-only device state (link, role, page, ...)."},
+    {"prefix": "cfg.", "first": "0x00C0", "last": "0x00FF", "allocation": "reserved", "description": "Reserved for user-configured thresholds read from NVS (e.g. cfg.rpm_warn). No entries in registry v1."},
+    {"prefix": "veh.", "first": "0x0100", "last": "0x011F", "allocation": "dynamic", "max_entries": 32, "key_pattern": "^veh\\.[a-z0-9_]{1,24}$", "description": "Vehicle-profile custom signals. Ids are assigned at profile load time in profile declaration order; unit/decimals/range come from the profile. No entries in the registry."},
+    {"prefix": "ext.", "first": "0x0200", "last": "0x02FF", "allocation": "reserved", "description": "External sensors added later (e.g. ext.tpms.* from the stashed TPMS BLE client). Existing ADS1115 oil pressure stays on obd.oil_pressure. No entries in registry v1."},
+    {"prefix": "flag.", "first": "0x0400", "last": "0x040F", "allocation": "reserved", "description": "Reserved for rule cascades (rules v2.1). No entries in registry v1."}
+  ],
+  "retired": [
+    {
+      "former_key": "obd.brake_temp",
+      "reason": "Brake temperature (RS485) is removed from the firmware; the key is never assigned.",
+      "legacy": {
+        "cache": {"field": "brake_temp_x10", "unit": "0.1 C", "invalid": -1000},
+        "disp_item": {"name": "DISP_ITEM_BKT", "index": 9, "note": "index stays reserved; NVS fields storing disp_item indices must not be renumbered"},
+        "racechrono": {"id": "0xF109", "note": "never reuse this id"},
+        "espnow_v5": {"field": "brake_temp_x10", "ctype": "int16_t", "note": "field stays in the v5 struct; a master must send -1000 (invalid) for the v5 compatibility period"}
+      }
+    }
+  ],
+  "allocation_policy": {
+    "racechrono_next_id": "0xF10A",
+    "racechrono_note": "F101-F108 keep their meaning; F109 is retired; new signals are allocated from F10A upward (REFACTOR_PLAN.md P3).",
+    "espnow": "v6 (TLV) carries signals by numeric id; v5 field mapping is listed per signal for the transition period."
+  },
+  "signals": [
+    {
+      "id": "0x0001",
+      "key": "obd.rpm",
+      "label": {"zh": "转速", "en": "Engine speed"},
+      "kind": "continuous",
+      "internal": {"unit": "rpm", "eng_unit": "rpm", "scale": 1, "min": 0, "max": 20000},
+      "stale_ms": 5000,
+      "profile_units": {"rpm": 1},
+      "profile_unit_default": "rpm",
+      "delivery": {"unit": "rpm", "op": "identity", "expr": "v"},
+      "editor": {"index": 0, "label": "转速", "unit": "RPM", "rawScale": 1, "min": 0, "max": 10000, "preview": 3500, "pickerLabel": "转速 (RPM)", "divisor": null, "format": null},
+      "legacy": {
+        "cache": {"field": "rpm", "ctype": "uint16_t", "unit": "rpm", "invalid": null, "to_internal": {"op": "identity"}},
+        "theme_snapshot": {"field": "rpm", "ctype": "uint16_t"},
+        "disp_item": {"name": "DISP_ITEM_RPM", "index": 5},
+        "racechrono": {"id": "0xF101", "from_internal": {"op": "identity"}, "note": "0 reported as invalid"},
+        "espnow_v5": {"field": "rpm", "ctype": "uint16_t", "from_internal": {"op": "identity"}}
+      }
+    },
+    {
+      "id": "0x0002",
+      "key": "obd.speed",
+      "label": {"zh": "速度", "en": "Vehicle speed"},
+      "kind": "continuous",
+      "internal": {"unit": "km/h", "eng_unit": "km/h", "scale": 1, "min": 0, "max": 400},
+      "stale_ms": 5000,
+      "profile_units": {"km/h": 1, "mph": 1.609344},
+      "profile_unit_default": "km/h",
+      "delivery": {"unit": "km/h", "op": "identity", "expr": "v"},
+      "editor": {"index": 1, "label": "速度", "unit": "km/h", "rawScale": 1, "min": 0, "max": 255, "preview": 80, "pickerLabel": "速度 (km/h)", "divisor": null, "format": null},
+      "legacy": {
+        "cache": {"field": "speed", "ctype": "uint8_t", "unit": "km/h", "invalid": null, "to_internal": {"op": "identity"}},
+        "theme_snapshot": {"field": "speed", "ctype": "uint8_t"},
+        "disp_item": {"name": "DISP_ITEM_SPEED", "index": 6},
+        "racechrono": {"id": "0xF102", "from_internal": {"op": "identity"}},
+        "espnow_v5": {"field": "speed", "ctype": "uint8_t", "from_internal": {"op": "identity"}, "note": "clamp to 255"}
+      }
+    },
+    {
+      "id": "0x0003",
+      "key": "obd.boost",
+      "label": {"zh": "增压", "en": "Boost (gauge)"},
+      "kind": "continuous",
+      "internal": {"unit": "0.01 bar", "eng_unit": "bar", "scale": 100, "min": -120, "max": 600},
+      "stale_ms": 5000,
+      "profile_units": {"bar": 100, "0.1bar": 10, "kPa_rel": 1, "psi": 6.894757},
+      "profile_unit_default": "bar",
+      "delivery": {"unit": "0.01 bar (gauge, signed)", "op": "identity", "expr": "v", "note": "1 kPa = 0.01 bar, so (MAP - baro) in kPa is delivered at full precision"},
+      "editor": {"index": 2, "label": "增压", "unit": "bar", "rawScale": 100, "min": -100, "max": 250, "preview": 120, "pickerLabel": "增压 (Bar)", "divisor": 100, "format": "%d.%02d"},
+      "legacy": {
+        "cache": {"field": "boost_x10", "ctype": "int16_t", "unit": "0.1 bar", "invalid": -32768, "to_internal": {"op": "mul", "by": 10, "round": "exact"}},
+        "theme_snapshot": {"field": "boost", "ctype": "int16_t"},
+        "disp_item": {"name": "DISP_ITEM_BOOST", "index": 10},
+        "racechrono": null,
+        "espnow_v5": {"field": "boost_x10", "ctype": "int16_t", "from_internal": {"op": "div", "by": 10, "round": "half_up"}, "invalid": -32768}
+      }
+    },
+    {
+      "id": "0x0004",
+      "key": "obd.coolant_temp",
+      "label": {"zh": "水温", "en": "Coolant temperature"},
+      "kind": "continuous",
+      "internal": {"unit": "C", "eng_unit": "C", "scale": 1, "min": -40, "max": 215},
+      "stale_ms": 15000,
+      "profile_units": {"C": 1},
+      "profile_unit_default": "C",
+      "delivery": {"unit": "C (signed)", "op": "identity", "expr": "v", "note": "negative values are delivered as-is (the legacy snapshot clamped them to 0)"},
+      "editor": {"index": 3, "label": "水温", "unit": "°C", "rawScale": 1, "min": 0, "max": 255, "preview": 90, "pickerLabel": "水温 (°C)", "divisor": null, "format": null},
+      "legacy": {
+        "cache": {"field": "coolant_temp", "ctype": "int16_t", "unit": "C", "invalid": -40, "to_internal": {"op": "identity"}, "note": "-40 is the reset value used as a de-facto invalid marker"},
+        "theme_snapshot": {"field": "coolant_temp", "ctype": "uint8_t"},
+        "disp_item": {"name": "DISP_ITEM_CLT", "index": 0},
+        "racechrono": {"id": "0xF103", "from_internal": {"op": "identity"}},
+        "espnow_v5": {"field": "coolant_temp", "ctype": "int16_t", "from_internal": {"op": "identity"}, "invalid": -40}
+      }
+    },
+    {
+      "id": "0x0005",
+      "key": "obd.oil_pressure",
+      "label": {"zh": "油压", "en": "Oil pressure"},
+      "kind": "continuous",
+      "internal": {"unit": "0.01 bar", "eng_unit": "bar", "scale": 100, "min": 0, "max": 2000},
+      "stale_ms": 5000,
+      "profile_units": {"bar": 100, "0.1bar": 10, "kPa": 1, "hPa": 0.1, "psi": 6.894757},
+      "profile_unit_default": "bar",
+      "delivery": {"unit": "PSI (integer)", "op": "mul", "by": 0.145038, "round": "half_up", "expr": "R(v * 0.145038)", "note": "= round(bar * 14.5038). Fixes the legacy snapshot bug that divided by 10 twice (5.0 bar shown as 7 PSI instead of 73)."},
+      "editor": {"index": 4, "label": "油压", "unit": "PSI", "rawScale": 1, "min": 0, "max": 255, "preview": 45, "pickerLabel": "油压 (Bar)", "divisor": null, "format": null},
+      "legacy": {
+        "cache": {"field": "oil_pressure_x10", "ctype": "int16_t", "unit": "0.1 bar", "invalid": -1, "to_internal": {"op": "mul", "by": 10, "round": "exact"}},
+        "theme_snapshot": {"field": "oil_pressure", "ctype": "uint8_t"},
+        "disp_item": {"name": "DISP_ITEM_OILP", "index": 8},
+        "racechrono": null,
+        "espnow_v5": {"field": "oil_pressure_x10", "ctype": "int16_t", "from_internal": {"op": "div", "by": 10, "round": "half_up"}, "invalid": -1}
+      }
+    },
+    {
+      "id": "0x0006",
+      "key": "obd.gear",
+      "label": {"zh": "档位", "en": "Gear"},
+      "kind": "discrete",
+      "internal": {"unit": "gear", "eng_unit": "gear", "scale": 1, "min": -1, "max": 8},
+      "enum": {"-1": "R", "0": "N", "1": "1", "2": "2", "3": "3", "4": "4", "5": "5", "6": "6", "7": "7", "8": "8"},
+      "stale_ms": 5000,
+      "profile_units": {"gear": 1},
+      "profile_unit_default": "gear",
+      "delivery": {"unit": "gear (-1=R, 0=N, 1..8)", "op": "identity", "expr": "v", "note": "unknown gear is invalid (NaN to rules), never 127; otherwise rules like gear >= 5 fire while unknown"},
+      "editor": {"index": 5, "label": "档位", "unit": "", "rawScale": 1, "min": -1, "max": 8, "preview": 3, "pickerLabel": "档位", "divisor": null, "format": null},
+      "legacy": {
+        "cache": {"field": "gear", "ctype": "int8_t", "unit": "gear", "invalid": 127, "to_internal": {"op": "identity"}},
+        "theme_snapshot": {"field": "gear", "ctype": "int8_t"},
+        "disp_item": null,
+        "racechrono": null,
+        "espnow_v5": null
+      }
+    },
+    {
+      "id": "0x0007",
+      "key": "obd.battery_voltage",
+      "label": {"zh": "电池电压", "en": "Battery voltage"},
+      "kind": "continuous",
+      "internal": {"unit": "mV", "eng_unit": "V", "scale": 1000, "min": 0, "max": 32000},
+      "stale_ms": 5000,
+      "profile_units": {"V": 1000, "mV": 1},
+      "profile_unit_default": "V",
+      "delivery": {"unit": "0.1 V (integer)", "op": "div", "by": 100, "round": "floor", "expr": "floor(v / 100)", "note": "same truncation as the legacy snapshot (bat_mv / 100)"},
+      "editor": {"index": 6, "label": "电池电压", "unit": "V", "rawScale": 10, "min": 0, "max": 255, "preview": 136, "pickerLabel": "电池电压 (V)", "divisor": 10, "format": "%d.%d"},
+      "legacy": {
+        "cache": {"field": "bat_mv", "ctype": "int32_t", "unit": "mV", "invalid": -1, "to_internal": {"op": "identity"}},
+        "theme_snapshot": {"field": "battery_voltage", "ctype": "uint8_t"},
+        "disp_item": {"name": "DISP_ITEM_BAT", "index": 7},
+        "racechrono": {"id": "0xF108", "from_internal": {"op": "identity"}},
+        "espnow_v5": {"field": "bat_mv", "ctype": "int32_t", "from_internal": {"op": "identity"}, "invalid": -1}
+      }
+    },
+    {
+      "id": "0x0008",
+      "key": "obd.oil_temp",
+      "label": {"zh": "油温", "en": "Oil temperature"},
+      "kind": "continuous",
+      "internal": {"unit": "C", "eng_unit": "C", "scale": 1, "min": -40, "max": 215},
+      "stale_ms": 15000,
+      "profile_units": {"C": 1},
+      "profile_unit_default": "C",
+      "delivery": {"unit": "C (signed)", "op": "identity", "expr": "v"},
+      "editor": {"index": 7, "label": "油温", "unit": "°C", "rawScale": 1, "min": 0, "max": 255, "preview": 95, "pickerLabel": "油温 (°C)", "divisor": null, "format": null},
+      "legacy": {
+        "cache": {"field": "oil_temp", "ctype": "int16_t", "unit": "C", "invalid": -100, "to_internal": {"op": "identity"}},
+        "theme_snapshot": {"field": "oil_temp", "ctype": "uint8_t"},
+        "disp_item": {"name": "DISP_ITEM_OIL", "index": 2},
+        "racechrono": {"id": "0xF105", "from_internal": {"op": "identity"}},
+        "espnow_v5": {"field": "oil_temp", "ctype": "int16_t", "from_internal": {"op": "identity"}, "invalid": -100}
+      }
+    },
+    {
+      "id": "0x0009",
+      "key": "obd.afr",
+      "label": {"zh": "空燃比", "en": "Air-fuel ratio"},
+      "kind": "continuous",
+      "internal": {"unit": "AFR x100", "eng_unit": "AFR", "scale": 100, "min": 500, "max": 3000},
+      "stale_ms": 5000,
+      "profile_units": {"AFR": 100, "lambda": 1470},
+      "profile_unit_default": "AFR",
+      "delivery": {"unit": "AFR x100", "op": "identity", "expr": "v"},
+      "editor": {"index": 8, "label": "空燃比", "unit": "AFR", "rawScale": 100, "min": 0, "max": 65535, "preview": 1470, "pickerLabel": "空燃比 (AFR)", "divisor": 100, "format": "%d.%02d"},
+      "legacy": {
+        "cache": {"field": "afr_x100", "ctype": "int16_t", "unit": "AFR x100", "invalid": -1, "to_internal": {"op": "identity"}},
+        "theme_snapshot": {"field": "afr", "ctype": "uint16_t"},
+        "disp_item": {"name": "DISP_ITEM_AFR", "index": 11},
+        "racechrono": null,
+        "espnow_v5": {"field": "afr_x100", "ctype": "int16_t", "from_internal": {"op": "identity"}, "invalid": -1}
+      }
+    },
+    {
+      "id": "0x000A",
+      "key": "obd.throttle",
+      "label": {"zh": "节气门开度", "en": "Throttle position"},
+      "kind": "continuous",
+      "internal": {"unit": "%", "eng_unit": "%", "scale": 1, "min": 0, "max": 100},
+      "stale_ms": 5000,
+      "profile_units": {"%": 1},
+      "profile_unit_default": "%",
+      "delivery": {"unit": "% (0..100)", "op": "identity", "expr": "v"},
+      "editor": {"index": 9, "label": "节气门开度", "unit": "%", "rawScale": 1, "min": 0, "max": 100, "preview": 65, "pickerLabel": "节气门开度 (%)", "divisor": null, "format": null},
+      "legacy": {
+        "cache": {"field": "tps", "ctype": "int16_t", "unit": "%", "invalid": -1, "to_internal": {"op": "identity"}},
+        "theme_snapshot": {"field": "throttle", "ctype": "uint8_t"},
+        "disp_item": {"name": "DISP_ITEM_TPS", "index": 4},
+        "racechrono": {"id": "0xF107", "from_internal": {"op": "mul", "by": 10, "round": "exact"}, "note": "exported as % x10"},
+        "espnow_v5": {"field": "tps", "ctype": "int16_t", "from_internal": {"op": "identity"}, "invalid": -1}
+      }
+    },
+    {
+      "id": "0x000B",
+      "key": "obd.intake_temp",
+      "label": {"zh": "进气温度", "en": "Intake air temperature"},
+      "kind": "continuous",
+      "internal": {"unit": "C", "eng_unit": "C", "scale": 1, "min": -40, "max": 215},
+      "stale_ms": 15000,
+      "profile_units": {"C": 1},
+      "profile_unit_default": "C",
+      "delivery": {"unit": "C (signed)", "op": "identity", "expr": "v"},
+      "editor": {"index": 10, "label": "进气温度", "unit": "°C", "rawScale": 1, "min": 0, "max": 255, "preview": 35, "pickerLabel": "进气温度 (°C)", "divisor": null, "format": null},
+      "legacy": {
+        "cache": {"field": "intake_temp", "ctype": "int16_t", "unit": "C", "invalid": -40, "to_internal": {"op": "identity"}},
+        "theme_snapshot": {"field": "intake_temp", "ctype": "uint8_t"},
+        "disp_item": {"name": "DISP_ITEM_IAT", "index": 1},
+        "racechrono": {"id": "0xF104", "from_internal": {"op": "identity"}},
+        "espnow_v5": {"field": "intake_temp", "ctype": "int16_t", "from_internal": {"op": "identity"}, "invalid": -40}
+      }
+    },
+    {
+      "id": "0x000C",
+      "key": "obd.load",
+      "label": {"zh": "发动机负荷", "en": "Engine load"},
+      "kind": "continuous",
+      "internal": {"unit": "%", "eng_unit": "%", "scale": 1, "min": 0, "max": 100},
+      "stale_ms": 5000,
+      "profile_units": {"%": 1},
+      "profile_unit_default": "%",
+      "delivery": {"unit": "% (0..100)", "op": "identity", "expr": "v", "note": "not an editor data source; bindable only by key"},
+      "editor": null,
+      "legacy": {
+        "cache": {"field": "load_pct", "ctype": "int16_t", "unit": "%", "invalid": -1, "to_internal": {"op": "identity"}},
+        "theme_snapshot": null,
+        "disp_item": {"name": "DISP_ITEM_LOAD", "index": 3},
+        "racechrono": {"id": "0xF106", "from_internal": {"op": "mul", "by": 10, "round": "exact"}, "note": "exported as % x10"},
+        "espnow_v5": {"field": "load_pct", "ctype": "int16_t", "from_internal": {"op": "identity"}, "invalid": -1}
+      }
+    },
+    {
+      "id": "0x0080",
+      "key": "sys.obd_link",
+      "label": {"zh": "OBD 链路", "en": "OBD link"},
+      "kind": "discrete",
+      "internal": {"unit": "state", "eng_unit": "state", "scale": 1, "min": 0, "max": 2},
+      "enum": {"0": "none", "1": "connected, no data", "2": "data flowing"},
+      "stale_ms": 0,
+      "profile_units": null,
+      "profile_unit_default": null,
+      "delivery": {"unit": "state", "op": "identity", "expr": "v"},
+      "producer": "master/standalone: ELM327 BLE client state; slave: 0 if no ESP-NOW packet for 2 s, else 2 when packet flags bit0 is set, 1 otherwise",
+      "editor": null,
+      "legacy": {
+        "cache": null,
+        "theme_snapshot": null,
+        "disp_item": null,
+        "racechrono": null,
+        "espnow_v5": {"field": "flags", "ctype": "uint8_t", "bit": 0, "note": "bit0 = master connected to ELM327"}
+      }
+    },
+    {
+      "id": "0x0081",
+      "key": "sys.role",
+      "label": {"zh": "联动角色", "en": "Multi-gauge role"},
+      "kind": "discrete",
+      "internal": {"unit": "state", "eng_unit": "state", "scale": 1, "min": 0, "max": 2},
+      "enum": {"0": "master", "1": "slave", "2": "standalone"},
+      "stale_ms": 0,
+      "profile_units": null,
+      "profile_unit_default": null,
+      "delivery": {"unit": "state", "op": "identity", "expr": "v"},
+      "producer": "nvs_user_cfg_t.device_role (ESPNOW_ROLE_* in main/bsp_obd_dsp/espnow_link.h:9-11)",
+      "editor": null,
+      "legacy": {"cache": null, "theme_snapshot": null, "disp_item": null, "racechrono": null, "espnow_v5": null}
+    },
+    {
+      "id": "0x0082",
+      "key": "sys.page_index",
+      "label": {"zh": "主题页序号", "en": "Theme page index"},
+      "kind": "discrete",
+      "internal": {"unit": "index", "eng_unit": "index", "scale": 1, "min": 0, "max": 31},
+      "stale_ms": 0,
+      "profile_units": null,
+      "profile_unit_default": null,
+      "delivery": {"unit": "index", "op": "identity", "expr": "v"},
+      "producer": "ui_theme_gauge_page_index (main/export_path/ui.c:77)",
+      "editor": null,
+      "legacy": {"cache": null, "theme_snapshot": null, "disp_item": null, "racechrono": null, "espnow_v5": null}
+    },
+    {
+      "id": "0x0083",
+      "key": "sys.rpm_flash",
+      "label": {"zh": "换挡闪烁", "en": "Shift flash active"},
+      "kind": "discrete",
+      "internal": {"unit": "bool", "eng_unit": "bool", "scale": 1, "min": 0, "max": 1},
+      "stale_ms": 0,
+      "profile_units": null,
+      "profile_unit_default": null,
+      "delivery": {"unit": "bool", "op": "identity", "expr": "v"},
+      "producer": "ui_ext_rpm_is_flashing() (main/export_path/ui_ext.c:766)",
+      "editor": null,
+      "legacy": {"cache": null, "theme_snapshot": null, "disp_item": null, "racechrono": null, "espnow_v5": null}
+    },
+    {
+      "id": "0x0084",
+      "key": "sys.uptime_s",
+      "label": {"zh": "开机时长", "en": "Uptime"},
+      "kind": "continuous",
+      "internal": {"unit": "s", "eng_unit": "s", "scale": 1, "min": 0, "max": 2147483647},
+      "stale_ms": 0,
+      "profile_units": null,
+      "profile_unit_default": null,
+      "delivery": {"unit": "s", "op": "identity", "expr": "v"},
+      "producer": "esp_timer_get_time() / 1000000",
+      "editor": null,
+      "legacy": {"cache": null, "theme_snapshot": null, "disp_item": null, "racechrono": null, "espnow_v5": null}
+    }
+  ]
+}

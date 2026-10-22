@@ -153,11 +153,13 @@ static void on_device_selected(lv_event_t *e) {
     elm327_ble_scan_only_stop();
     s_scanning = false;
 
-    nvs_user_cfg_t cfg = *nvs_cfg_get();
+    nvs_user_cfg_t base;
+    nvs_cfg_snapshot(&base);
+    nvs_user_cfg_t cfg = base;
     strncpy(cfg.ble_device_name, name, sizeof(cfg.ble_device_name) - 1);
     cfg.ble_device_name[sizeof(cfg.ble_device_name) - 1] = '\0';
     memcpy(cfg.ble_obd_mac, mac, 6);
-    nvs_cfg_set(&cfg);
+    nvs_cfg_update(&base, &cfg);
 
     // Refresh the saved device panel immediately
     if (s_saved_name_lbl) lv_label_set_text(s_saved_name_lbl, name);
@@ -178,10 +180,12 @@ static void on_pair_result(bool ok, const char *name, const uint8_t mac[6]) {
     if (ok) {
         espnow_link_bind_master(mac);
 
-        nvs_user_cfg_t cfg = *nvs_cfg_get();
+        nvs_user_cfg_t base;
+        nvs_cfg_snapshot(&base);
+        nvs_user_cfg_t cfg = base;
         strncpy(cfg.ble_device_name, name ? name : "", sizeof(cfg.ble_device_name) - 1);
         cfg.ble_device_name[sizeof(cfg.ble_device_name) - 1] = '\0';
-        nvs_cfg_set(&cfg);
+        nvs_cfg_update(&base, &cfg);
         ESP_LOGI(TAG_BLE_UI, "Paired with master: %s", cfg.ble_device_name);
 
         if (s_saved_name_lbl) lv_label_set_text(s_saved_name_lbl, cfg.ble_device_name);
@@ -206,19 +210,22 @@ static void on_pair_result(bool ok, const char *name, const uint8_t mac[6]) {
 static void on_saved_device_delete(lv_event_t *e) {
     if (s_slave_mode) {
         espnow_link_unbind_master();
-        nvs_user_cfg_t cfg = *nvs_cfg_get();
+        nvs_user_cfg_t base;
+        nvs_cfg_snapshot(&base);
+        nvs_user_cfg_t cfg = base;
         cfg.ble_device_name[0] = '\0';
-        nvs_cfg_set(&cfg);
+        nvs_cfg_update(&base, &cfg);
         ESP_LOGI(TAG_BLE_UI, "Unbound saved master");
     } else {
-        // If currently connected, disconnect BLE first
-        if (elm327_ble_is_connected()) {
-            elm327_ble_disconnect();
-        }
-        nvs_user_cfg_t cfg = *nvs_cfg_get();
+        // Always disconnect: also drops the bound target so a saved adapter that is
+        // not connected right now stops auto-reconnecting.
+        elm327_ble_disconnect();
+        nvs_user_cfg_t base;
+        nvs_cfg_snapshot(&base);
+        nvs_user_cfg_t cfg = base;
         cfg.ble_device_name[0] = '\0';
         memset(cfg.ble_obd_mac, 0, sizeof(cfg.ble_obd_mac));
-        nvs_cfg_set(&cfg);
+        nvs_cfg_update(&base, &cfg);
         ESP_LOGI(TAG_BLE_UI, "Saved BLE device cleared");
     }
 
@@ -249,9 +256,15 @@ static void start_scan(void) {
     }
 }
 
+static void on_screen_visibility(lv_event_t *e)
+{
+    if (lv_event_get_code(e) == LV_EVENT_SCREEN_LOADED) start_scan();
+    else s_scanning = false;  // Allow a new scan when returning to this page.
+}
+
 void ui_ScreenPageBLEScan_screen_init(void)
 {
-    s_slave_mode = (nvs_cfg_get()->device_role == ESPNOW_ROLE_SLAVE);
+    s_slave_mode = (nvs_cfg_read().device_role == ESPNOW_ROLE_SLAVE);
 
     ui_ScreenPageBLEScan = lv_obj_create(NULL);
     lv_obj_clear_flag(ui_ScreenPageBLEScan, LV_OBJ_FLAG_SCROLLABLE);
@@ -287,13 +300,14 @@ void ui_ScreenPageBLEScan_screen_init(void)
     lv_obj_align(s_label_status, LV_ALIGN_TOP_MID, 0, 50);
 
     // ==== SAVED DEVICE SECTION ====
-    const nvs_user_cfg_t *saved_cfg = nvs_cfg_get();
+    nvs_user_cfg_t saved_cfg = nvs_cfg_read();
     bool has_saved;
     if (s_slave_mode) {
-        const uint8_t *bound_mac = espnow_link_get_bound_master_mac();
+        uint8_t bound_mac[6];
+        espnow_link_get_bound_master_mac(bound_mac);
         has_saved = (bound_mac[0] | bound_mac[1] | bound_mac[2] | bound_mac[3] | bound_mac[4] | bound_mac[5]) != 0;
     } else {
-        has_saved = (saved_cfg->ble_device_name[0] != '\0');
+        has_saved = (saved_cfg.ble_device_name[0] != '\0');
     }
 
     s_label_saved_hdr = lv_label_create(ui_ScreenPageBLEScan);
@@ -317,7 +331,7 @@ void ui_ScreenPageBLEScan_screen_init(void)
 
     // Device name inside panel
     s_saved_name_lbl = lv_label_create(s_saved_panel);
-    lv_label_set_text(s_saved_name_lbl, has_saved ? saved_cfg->ble_device_name : "");
+    lv_label_set_text(s_saved_name_lbl, has_saved ? saved_cfg.ble_device_name : "");
     lv_obj_set_style_text_font(s_saved_name_lbl, &ui_font_FontTypoderSize20, LV_PART_MAIN);
     lv_obj_set_style_text_color(s_saved_name_lbl, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
     lv_obj_align(s_saved_name_lbl, LV_ALIGN_LEFT_MID, 4, 0);
@@ -376,7 +390,10 @@ void ui_ScreenPageBLEScan_screen_init(void)
     lv_obj_move_foreground(spinner_ring);   // bring the ring to the front
     lv_obj_add_event_cb(ui_ScreenPageBLEScan, ui_event_ble_scan_background, LV_EVENT_GESTURE, NULL);
 
-    // Start scanning
-    start_scan();
+    // Creation may happen behind the boot animation. Start radio work only
+    // after the page is visible, including when returning to a retained page.
+    s_scanning = false;
+    lv_obj_add_event_cb(ui_ScreenPageBLEScan, on_screen_visibility, LV_EVENT_SCREEN_LOADED, NULL);
+    lv_obj_add_event_cb(ui_ScreenPageBLEScan, on_screen_visibility, LV_EVENT_SCREEN_UNLOADED, NULL);
 }
 

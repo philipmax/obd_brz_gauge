@@ -7,7 +7,7 @@
 //  alarm coloring, natural ranges.
 //
 //  Raw value conventions: temperature °C, percentage %, RPM rpm, speed km/h, voltage mV,
-//              oil pressure / boost pressure / brake temp are all ×10 integers.
+//              oil pressure / boost pressure are ×10 integers, AFR is ×100.
 //  Natural range: nmin/nmax are in natural units, div satisfies raw = natural × div.
 // ================================================================
 
@@ -19,6 +19,8 @@
 extern "C" {
 #endif
 
+// Values are persisted in NVS (cfg display maps / needle & chart source, chartalarm index):
+// append only, never renumber, never reuse a retired slot.
 typedef enum {
     DISP_ITEM_CLT = 0,
     DISP_ITEM_IAT,
@@ -29,11 +31,19 @@ typedef enum {
     DISP_ITEM_SPEED,
     DISP_ITEM_BAT,
     DISP_ITEM_OILP,
-    DISP_ITEM_BKT,
-    DISP_ITEM_BOOST,
-    DISP_ITEM_AFR,
+    DISP_ITEM_RESERVED_9 = 9,   // retired (former brake temp), slot kept, never reuse
+    DISP_ITEM_BOOST = 10,
+    DISP_ITEM_AFR = 11,
     DISP_ITEM_COUNT
 } disp_item_t;
+
+_Static_assert(DISP_ITEM_COUNT == 12, "disp_item_t values are persisted in NVS; append only");
+
+// true for items a user may pick (excludes retired slots and out-of-range values)
+static inline bool ui_disp_item_is_selectable(uint8_t item)
+{
+    return item < DISP_ITEM_COUNT && item != DISP_ITEM_RESERVED_9;
+}
 
 // Invalid-sample sentinel for the generic chart page (distinct from legit negative values like coolant temp -10)
 #define CHART_INVALID (-32768)
@@ -58,7 +68,7 @@ extern const needle_scale_meta_t s_needle_scale_meta[DISP_ITEM_COUNT];
 bool disp_item_read_value(disp_item_t item,
                           int16_t clt, int16_t iat, int16_t oil,
                           int16_t load_pct, int16_t tps, int32_t bat_mv,
-                          int16_t oilp_x10, int16_t brake_x10,
+                          int16_t oilp_x10,
                           uint16_t rpm, uint16_t speed, int16_t boost_x10,
                           int16_t afr_x100,
                           int32_t *out);
@@ -82,9 +92,6 @@ const char *ui_disp_item_name(uint8_t item);
 const char *ui_disp_item_unit(uint8_t item);
 uint32_t ui_disp_item_color(uint8_t item);
 void ui_disp_item_range(uint8_t item, int32_t *nmin, int32_t *nmax, int32_t *div);
-
-// Get the natural-range metadata directly (item must be < DISP_ITEM_COUNT)
-const needle_scale_meta_t *ui_disp_item_scale(disp_item_t item);
 
 #ifdef __cplusplus
 }

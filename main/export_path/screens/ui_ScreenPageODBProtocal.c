@@ -117,7 +117,7 @@ void ui_ScreenPageODBProtocal_screen_init(void)
     lv_obj_move_foreground(ui_SpinnerODBProtocalEgg);   // bring the ring to the front
     lv_obj_add_event_cb(ui_ScreenPageODBProtocal, ui_event_obd_prot_background, LV_EVENT_ALL, NULL);
     /* Set the initial roller based on the current NVS protocol */
-    const nvs_user_cfg_t *cfg = nvs_cfg_get();
-    lv_roller_set_selected(ui_RollerODBProtocalChoose, cfg->protocol, LV_ANIM_OFF);
+    nvs_user_cfg_t cfg = nvs_cfg_read();
+    lv_roller_set_selected(ui_RollerODBProtocalChoose, cfg.protocol, LV_ANIM_OFF);
 
 }

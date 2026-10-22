@@ -2,183 +2,304 @@
 
 English | [简体中文](VEHICLES.md)
 
-Profiles are switched with the **VEHICLE** roller on the Settings page,
-applying immediately. Adding a vehicle is **data-driven**: edit 2 files,
-no parser changes.
+The firmware only has **`OBD2 Generic`** (`obd2.generic`, standard SAE J1979)
+built in. Every other vehicle is a **JSON vehicle profile**
+(schema `skygauge.vehicle/1`) that gets installed/activated through the web UI
+or companion app (via the `/api/v1/vehicles` API) — it is never compiled into
+the firmware, so adding a vehicle needs no
+firmware code changes.
 
 ```
-Default behavior = standard OBD2 (SAE J1979)
-Only vehicles declared in vehicle_custom_config.h get custom CAN rules
-or oil-temp formulas.
+Default behavior = firmware-builtin obd2.generic (standard OBD2, nothing to install)
+Other vehicles are installed and activated through the web UI or App; changes take effect after reboot
 ```
 
-| File | Purpose |
-|------|---------|
-| [main/app_obd_dsp/vehicle_profiles.c](../main/app_obd_dsp/vehicle_profiles.c) | Base parameters (gear ratios / tire / oil strategy / protocol lock)|
-| [main/app_obd_dsp/vehicle_custom_config.h](../main/app_obd_dsp/vehicle_custom_config.h) | Custom overrides (CAN rules / oil formulas / UDS header switching / gear DID)|
-| [main/app_obd_dsp/vehicle_profiles.h](../main/app_obd_dsp/vehicle_profiles.h) | Struct definitions + API (authoritative field reference for this page)|
+The web editor at `/vehicles/editor` starts with standard OBD2, local JSON or a community profile, lists collection data and PIDs, and supports editing or adding items.
+New standard profiles include 9 built-in standard items at editable one-second intervals; imported profiles retain their original frequencies.
+Adding standard data preserves custom or disabled items and complete manufacturer requests and fallback fields for BMW, Jeep and other vehicles. See [PID_GUIDE.md](PID_GUIDE.en.md) for fields and formulas.
 
-## Built-in profile table
+## Vehicle profile catalog
 
-From `s_profiles[]` in `vehicle_profiles.c` (shown in this order on the
-Settings page):
+The catalog repo currently holds **17 profiles**
+([vehicles/catalog/](../vehicles/catalog/)); the firmware only has
+`obd2.generic` built in, the other 16 are JSON files waiting to be installed:
 
-| # | Name | Protocol | PID addressing | Oil temp | Gear | Boost | Notes |
-|---|------|----------|----------------|----------|------|-------|-------|
-| 0 | `OBD2 Generic` | Auto | Physical 7E0 | `01 5C` | Ratio estimate | — | Generic SAE J1979; 6MT placeholder ratios |
-| 1 | `ZN/C6 CAN` | 6 locked | Physical 7E0 | Toyota `21 01` | Ratio estimate | — | **The only CAN ATMA profile**: 0x140 throttle, 0x360 oil/coolant; RPM stays on OBD. Fully verified on a real car |
-| 2 | `ZN/C6 PID` | 6 locked | Physical 7E0 | Toyota `21 01` | Ratio estimate | — | Pure-OBD fallback for cheap adapters without ATMA |
-| 3 | `ZD8 OBD` | 6 locked | Physical 7E0 | `01 5C` | Ratio estimate | — | BRZ Gen2 FA24, OBD-only |
-| 4 | `ZD8` | 6 locked | Physical 7E0 | `01 5C` | Ratio estimate | — | Same config as #3, standard-PID fallback variant |
-| 5 | `MX-5 ND` | Auto | Physical 7E0 | `22 13 10` 2-byte → `22 11 1F` fallback | Ratio estimate | — | 40 ms timeout (Mazda CAN answers fast)|
-| 6 | `BMW F/G` | 6 locked | Functional 7DF | `01 5C` | **Direct DID `DA2E`** (EGS) | ✓ | G20/G21/G22 B48/B58 + ZF 8HP; gear via 6F1 extended-address request / 618 receive filter |
-| 7 | `Supra A90` | 6 locked | Functional 7DF | `22 44 02` (°C=raw×0.75−48) → `01 5C` fallback | Ratio estimate (placeholder) | ✓ | B58/B48; **OBD oil-pressure DID `4436`** (hPa), replaces ADS1115 |
-| 8 | `BMW G OBD` | **7 locked** | Functional 7DF | `01 5C` → `22 44 02` fallback | Ratio estimate | ✓ | G-series auto-detect is unstable; locked to 7 |
-| 9 | `BMW E` | 6 locked | Functional 7DF | `22 44 02` (6F1 header) → `22 58 22` fallback | Ratio estimate | — | E9x/E46/E39; **OBD oil-pressure DID `586F`** (6F1 header, verified on N55)|
-| 10 | `JCW F56` | Auto | Physical 7E0 | MINI `22 58 22` (A−60) → `01 5C` fallback | Ratio estimate | ✓ | B48, FWD |
-| 11 | `MINI R55` | 6 locked | Functional 7DF | MINI `22 58 22` → `01 5C` fallback | Ratio estimate | ✓ | N14/N18/N16 |
-| 12 | `POS 997.2` | 6 locked | Physical 7E0 | `01 5C` | Ratio estimate (PDK 7-speed) | — | 987.2/997.2 DFI |
-| 13 | `POS 997.1` | 6 locked | Physical 7E0 | `01 5C` | Ratio estimate | — | 987.1/997.1 M96/M97; Gen2 placeholder ratios |
-| 14 | `GIULIA 2.0T` | 7 locked | **29-bit functional `18DB33F1`** | `22 13 02` @ `18DA10F1` | Ratio estimate | ✓ | Giorgio platform; slow UDS responses, 50 ms poll gap |
-| 15 | `jeep` | 7 locked | 29-bit functional `18DB33F1` | `01 5C` | Ratio estimate (placeholder) | — | Generic placeholder; ratios/tire to be refined |
-| 16 | `Honda Integra` | 7 locked | 29-bit functional `18DB33F1` | `01 5C` attempted | **Disabled** (CVT, `gear_count=0`) | ✓ | 11th-gen Civic platform L15C7; non-Type-R may lack a physical oil-temp sensor |
+| id | Name | Protocol | Addressing | Gear source | Boost | Oil pressure (OBD) | Notes |
+|---|---|---|---|---|---|---|---|
+| `obd2.generic` | `OBD2 Generic` | Auto | Physical 7E0 | Ratio estimate | — | — | **Firmware-builtin**, generic SAE J1979 |
+| `subaru.zc6.can` | `ZN/C6 CAN` | 6 locked | Physical 7E0 | Ratio estimate | — | — | The only profile using CAN broadcast monitoring (`ATMA`, `monitor` block); RPM still comes from OBD |
+| `subaru.zc6.pid` | `ZN/C6 PID` | 6 locked | Physical 7E0 | Ratio estimate | — | — | Pure-OBD fallback for adapters that don't support ATMA |
+| `subaru.zd8.obd` | `ZD8 OBD` | 6 locked | Physical 7E0 | Ratio estimate | — | — | Same polling as `subaru.zd8.pid`; both profiles are kept so the legacy NVS index maps 1:1 |
+| `subaru.zd8.pid` | `ZD8` | 6 locked | Physical 7E0 | Ratio estimate | — | — | Same as above |
+| `mazda.mx5nd` | `MX-5 ND` | Auto | Physical 7E0 | Ratio estimate | — | — | 40 ms short timeout (Mazda CAN answers fast) |
+| `bmw.fg` | `BMW F/G` | 6 locked | Functional 7DF | Direct DID + ratio fallback | ✓ | — | G20/G21/G22; falls back to ratio estimation when the gear DID answer misbehaves (`fail_after 1`) |
+| `toyota.supra_a90` | `Supra A90` | 6 locked | Functional 7DF | Ratio estimate | ✓ | ✓ | B58/B48; the only other profile with an OBD oil-pressure signal |
+| `bmw.g.obd` | `BMW G OBD` | **7 locked** | Functional 7DF | Ratio estimate | ✓ | — | G-series auto-detect is unstable, locked to protocol 7 |
+| `bmw.e` | `BMW E` | 6 locked | Functional 7DF | Direct DID | — | ✓ | E9x/E46/E39 |
+| `mini.jcw_f56` | `JCW F56` | Auto | Physical 7E0 | Ratio estimate | ✓ | — | B48, FWD |
+| `mini.r55` | `MINI R55` | 6 locked | Functional 7DF | Ratio estimate | ✓ | — | N14/N18/N16; UDS `22 58 22` always goes over physical 7E0 (see behavior changes below) |
+| `porsche.997_2` | `POS 997.2` | 6 locked | Physical 7E0 | Ratio estimate (7-speed) | — | — | 987.2/997.2 DFI |
+| `porsche.997_1` | `POS 997.1` | 6 locked | Physical 7E0 | Ratio estimate | — | — | 987.1/997.1 M96/M97 |
+| `alfa.giulia_20t` | `GIULIA 2.0T` | 7 locked | 29-bit functional `18DB33F1` | Ratio estimate | ✓ | — | Giorgio platform; 50 ms poll gap (slow UDS responses) |
+| `jeep.generic` | `jeep` | 7 locked | 29-bit functional `18DB33F1` | Ratio estimate | — | — | Generic placeholder; ratios/tire still need to be refined for the real car |
+| `honda.integra` | `Honda Integra` | 7 locked | 29-bit functional `18DB33F1` | Disabled (CVT) | ✓ | — | 11th-gen Civic platform L15C7; non-Type-R trims may lack a physical oil-temp sensor |
 
-Notes:
+Numbers come from [`vehicles/catalog/*.vehicle.json`](../vehicles/catalog/);
+field definitions are in [`contracts/vehicle-rpn.md`](../contracts/vehicle-rpn.md)
+(the `skygauge.vehicle/1` schema, RPN formula opcodes, service/addressing
+whitelist, static validation rules).
 
-- **Gear column**: direct CAN / Mode 22 DID reads win when available
-  (e.g. BMW F/G's DA2E); otherwise gear is estimated from
-  RPM ÷ speed → gear ratio; `gear_count=0` (CVT) disables the estimate
-- **Oil temp** has a four-level fallback chain (primary → secondary →
-  tertiary → quaternary); consecutive primary failures switch automatically
-- `OBD2 Generic`, `Supra A90`, `MINI R55`, `jeep` and `Honda Integra` are not
-  in the override table — they rely on the enum strategy baked into their
-  profile, which is equally data-driven
+## Editable import pack
 
-## Adding a vehicle
+[vehicles/import/](../vehicles/import/README.en.md) provides **18 complete importable
+templates**: independent `custom.*` copies of all 17 catalog profiles, plus
+`custom.bmw.g.gear`. The original catalog still has 17 profiles. Templates expose
+request headers, response prefixes and polling intervals for customization. Copy
+a selected JSON to the SD card's `OBD/IMPORT/`, then select the profile and reboot.
 
-### Step 1: base parameters (append to `s_profiles[]` in `vehicle_profiles.c`)
+`custom.bmw.g.gear` reuses `bmw.fg` protocol 6 and the raw EGS request
+`18 03 22 DA 2E` (`hdr: 6F1`, `rx: 618`, `expect: 62DA2E`) to read a gear
+value of 0..8, with ratio fallback on failure. The protocol 7
+`custom.bmw.g.obd` is still supplied separately. Choose for the actual vehicle;
+generation adds no vehicle testing.
 
-```c
+Requested signals use `rate: "round"` and `period_ms`: RPM 100 ms;
+speed/gear/load/throttle/boost 200 ms; AFR/oil pressure 500 ms;
+temperatures/battery voltage 1000 ms. These are minimum intervals; polling still
+runs serially. CAN monitoring and ratio derivation retain their original settings.
+See the pack README and [PID_GUIDE.md](PID_GUIDE.en.md) for request formats,
+bit decoding, adjustments and the complete file list.
+
+## Inherit standard OBD2 by default
+
+Only vehicle-specific signals need declarations. The root `defaults` field defaults to
+`"obd2"`; omitted standard signals inherit the built-in Generic OBD2 requests, formulas,
+units, filters and polling policies. The smallest importable profile can omit both
+`bus` and `signals`:
+
+```json
 {
-    .name = "My Car",                    // display name; also the override match key
-    .final_drive_ratio = 3.73f,          // final drive ratio
-    .tire_rolling_radius_m = 0.310f,     // tire rolling radius (m)
-    .gear_count = 6,                     // forward gears; 0 for CVT (disables estimation)
-    .gear_ratios = {0, 3.63f, 2.38f, 1.56f, 1.18f, 1.00f, 0.81f},
-    .gear_tolerance = 0.15f,             // gear detection tolerance (±15%)
-    // Optional below; omit = pure OBD2 standard + auto protocol
-    .oil_temp_strategy = { ... },        // 4-level fallback chain (enum in vehicle_profiles.h)
-    .has_boost = true,                   // turbo car: show boost (standard PID 01 0B)
-    .forced_protocol = 6,                // lock ELM327 protocol (0=auto; lock where detection is unstable)
-    .obd_functional_addr = true,         // true = ATSH7DF functional addressing (most German cars)
-    .obd_29bit_functional = true,        // 29-bit functional broadcast ATSH18DB33F1 (Honda 11th gen / FCA)
-    .obd_oil_pressure_did = 0x4436,      // Mode 22 oil-pressure DID (hPa); replaces ADS1115 if present
-    .obd_gear_did = 0xDA2E,              // Mode 22 gear DID; replaces ratio estimation if present
-    .obd_timeout = 0x0A,                 // ATST timeout (0=default 0x19; lower for fast cars)
-    .poll_gap_ms = 1,                    // poll gap ms (0=default 30 ms)
-    .speed_scale = 1.0f,                 // speed correction factor (0/omitted=1.0)
-    .can_broadcast_mode = false,         // true = ATMA CAN monitoring (currently ZN/C6 CAN only)
-},
+  "schema": "skygauge.vehicle/1",
+  "id": "custom.mycar",
+  "rev": 1,
+  "name": "My Car"
+}
 ```
 
-**If the car only needs standard OBD2, you are done here.**
+These 9 standard signals are added:
 
-### Step 2 (optional): custom overrides (`vehicle_custom_config.h`)
+| 信号 / Signal | PID |
+|---|---|
+| `obd.rpm` | `010C` |
+| `obd.intake_temp` | `010F` |
+| `obd.speed` | `010D` |
+| `obd.coolant_temp` | `0105` |
+| `obd.load` | `0104` |
+| `obd.throttle` | `0111` |
+| `obd.oil_temp` | `015C` |
+| `obd.battery_voltage` | `0142` |
+| `obd.afr` | `0144` |
 
-Only needed for CAN broadcast decoding, non-standard UDS headers or special
-oil-temp formulas.
+An explicit signal **replaces the entire default definition** for its id. Fields are
+not merged, and a standard PID is not added as an automatic failure fallback. For
+example, a custom `obd.oil_temp` polls only the oil-temperature paths written in its
+`src` array. An id alone or only a `period_ms` change is insufficient: a complete
+`src` / `derive` definition is still required. Omission uses the default; to explicitly
+disable a signal, add this entry to `signals`:
 
-#### 2a. CAN broadcast decode rules
+```json
+{"id": "obd.oil_temp", "disabled": true}
+```
+
+Disabled entries allow only `id`, `disabled` and `notes`, and are excluded from polling.
+For fully custom requests or pure CAN monitoring, set root `"defaults": "none"`;
+`signals` must then be a nonempty array. When `bus.proto` is omitted, standard OBD-II
+protocol selection is used: the engine reuses a saved or already-detected protocol,
+and auto-detects when neither is available. To lock a vehicle to a specific protocol,
+such as Jeep/BMW protocol 7 or BMW protocol 6, set `bus.proto` explicitly. Without
+`bus`, the other defaults are header `7E0`, `ATST=0x19` and a 30 ms request gap. Inherited standard requests use the
+vehicle's `bus.hdr`; special headers remain configurable through each `src.hdr`.
+Drivetrain ratios and ratio-derived `obd.gear` are not inherited: declare a direct gear
+source or supply the vehicle's own `drivetrain`. Automatic completion does not imply
+ECU support for a PID; unavailable values still follow existing failure rules and
+show `--`. Resource limits, polling rates and signal dependencies are validated
+after completion.
+
+[Sparse examples](../vehicles/examples/README.en.md) include a minimal standard OBD2
+profile and a BMW G profile that declares only direct gear. Installation works the
+same way and requires firmware with this inheritance feature.
+
+## Install and activate
+
+There are three equivalent ways to get a profile onto the device:
+
+### 1. SD card drop folder (`/OBD/IMPORT`)
+
+Drop these files into the SD card's `OBD/IMPORT/` directory; a scan runs on
+boot or when the card is inserted:
+
+| File | Effect |
+|---|---|
+| `<id>.vehicle.json` | Installs a vehicle profile (validated + compiled, not activated) |
+| `ACTIVATE.TXT` | First line holds a profile id; activates it (takes effect on next boot) |
+| `RESET.TXT` | Rolls back to `obd2.generic` |
+
+Processing order (`sd_import.c`): `*.vehicle.json` files are installed first,
+then `ACTIVATE.TXT` is processed; **`RESET.TXT` is always processed last and
+overrides any `ACTIVATE.TXT` in the same batch.** Results are appended to
+`OBD/IMPORT/IMPORT.LOG` (`<time> OK|ERR <file>: <detail>`); successful files
+are renamed to `.ok`, failed ones to `.err` plus a matching `.err.txt` listing
+the specific validator issues.
+
+### 2. Web UI and companion App
+
+Install, activate, roll back and remove vehicle profiles through the web UI or
+companion App. The gauge has no vehicle-management page. The web UI and App use
+the device API below; activation still requires a reboot to take effect.
+
+### 3. `/api/v1/vehicles` API
+
+This HTTP API is served on the OTA hotspot (requires `X-OTA-Token`) for the
+web UI and companion App to manage profiles:
+
+| Method | Path | Effect |
+|---|---|---|
+| `GET` | `/api/v1/vehicles` | Lists installed profiles + active state/safe mode/last error |
+| `POST` | `/api/v1/vehicles` | Uploads and installs a profile (validate + compile + store, **not activated**) |
+| `POST` | `/api/v1/vehicles/activate` | `{"id":"..."}`, activates it (returns `reboot_required:true`) |
+| `POST` | `/api/v1/vehicles/reset` | Rolls back to `obd2.generic` |
+| `POST` | `/api/v1/vehicles/rollback` | Rolls back to the previous profile |
+| `POST` | `/api/v1/vehicles/remove` | `{"id":"..."}`, removes an installed profile |
+| `GET` | `/api/v1/vehicles/<id>` | Reads a profile's raw source JSON |
+| `DELETE` | `/api/v1/vehicles/<id>` | Removes a profile |
+
+**Whichever method is used, activation only takes effect on the next
+reboot** — the current boot keeps running the old profile.
+
+Storage: installed profiles are kept at `/config/vehicles/<id>.json` on the
+config partition, mirrored to the SD card at `/OBD/CFG/vehicles`; the active
+profile is additionally copied into `nvs_app`'s `veh/blob` (≤8KB) so it
+survives a config-partition wipe.
+
+## Lifecycle and safety
+
+State machine (`main/vehicle/vp_manager.c`):
+
+```
+install        -> INSTALLED
+activate(id)   -> PENDING (takes effect on next boot)
+next boot verification passes -> ACTIVE
+3 boots without passing verification -> roll back to the previous profile,
+                                         then to obd2.generic
+```
+
+**Verification rule**: wait 20 seconds after boot, require battery voltage
+≥13.0V, and require `min(3, number of signals in the profile)` distinct
+signal slots to answer (RPM counts toward this if the profile has it).
+
+**Safe mode**: 3 consecutive crashes (panic / interrupt watchdog / task
+watchdog reset) trigger safe mode, which forces `obd2.generic` and stops
+processing SD-import `*.vehicle.json` / `ACTIVATE.TXT` files (`RESET.TXT` is
+still processed, for manual recovery). The crash counter clears after 60
+seconds of crash-free uptime.
+
+## Legacy index migration
+
+Legacy firmware stored a vehicle index in NVS (`vehicle_profile_idx`). After
+an upgrade, the first boot maps it to a new profile id using the table below
+and auto-installs + activates it
+(`main/app_obd_dsp/first_boot_migration.c`'s `vp_manager_legacy_id()`):
+
+| Legacy index | New id |
+|---|---|
+| 0 | `obd2.generic` |
+| 1 | `subaru.zc6.can` |
+| 2 | `subaru.zc6.pid` |
+| 3 | `subaru.zd8.obd` |
+| 4 | `subaru.zd8.pid` |
+| 5 | `mazda.mx5nd` |
+| 6 | `bmw.fg` |
+| 7 | `toyota.supra_a90` |
+| 8 | `bmw.g.obd` |
+| 9 | `bmw.e` |
+| 10 | `mini.jcw_f56` |
+| 11 | `mini.r55` |
+| 12 | `porsche.997_2` |
+| 13 | `porsche.997_1` |
+| 14 | `alfa.giulia_20t` |
+| 15 | `jeep.generic` |
+| 16 | `honda.integra` |
+
+Migration first looks for `OBD/CATALOG/<id>.vehicle.json` (or `<id>.json`) on
+the SD card to install + activate; if not found, it records the target id in
+NVS and retries later once an SD card is inserted or in the background.
+**If the user manually resets or activates a different vehicle in the
+meantime, migration no longer overrides that choice**
+(`first_boot_migration_drop_vehicle()`, triggered internally by `RESET.TXT`,
+the web UI or App's `/api/v1/vehicles/reset`, or any manual `activate` call).
+
+## Behavior changes vs legacy firmware
+
+These differences come from the old-vs-new comparison tests in
+`test/host/vehicle/fixtures/golden/*.json`, pinned by the host unit tests:
+
+- **`obd.boost` (7 turbo profiles)**: legacy firmware truncated
+  `(MAP-100)/10` to 0.1 bar resolution; the new profiles store 0.01 bar
+  resolution, so the display is finer-grained
+- **`mini.r55`'s `22 58 22` (oil-temp query)**: legacy sent it on the
+  functional header 7DF; the new engine refuses service `22` on a functional
+  header and always sends it on the physical header 7E0 instead
+- **`bmw.fg`'s `obd.gear`**: legacy fell back to the ratio-estimated gear
+  after a single out-of-range DID answer; the new engine uses
+  `fail_after 1` + `fallback: "ratio"` — more explicit, same net effect
+- **`subaru.zc6.can`'s CAN coolant/oil temp**: when no frames arrive within
+  `monitor.stale_ms` (15000 ms), legacy firmware wrote coolant as -40 and
+  marked oil invalid; the new engine marks both invalid (no more fake -40°C)
+- **`mazda.mx5nd` / `mini.jcw_f56` / `obd2.generic`'s `ATSP0`**: when
+  `bus.proto` is 0, the engine sends `ATSP` with the previously saved or
+  auto-detected protocol (`nvs_user_cfg_t.protocol` -> `vp_engine_cfg_t.proto`),
+  matching legacy behavior — not a regression
+
+## ADS1115 oil-pressure sensor (V1 hardware) fallback
+
+The V1 hardware board (`CONFIG_OBD_HW_VERSION_V1_WAVESHARE`) has an ADS1115
+analog oil-pressure sensor wired in. The firmware only enables ADS1115
+sampling when **the active profile has no `obd.oil_pressure` signal**
+(`main/app_main.c`):
 
 ```c
-static const can_rule_t can_rules_mycar[] = {
-    // CAN_ID  bit_off  bit_len  scale       offset  channel
-    { 0x140,   16,      14,      1.0f,       0.0f,   CH_RPM },
-    { 0x360,   16,       8,      1.0f,      -40.0f,  CH_OIL_TEMP },
-};
+#if CONFIG_OBD_HW_VERSION_V1_WAVESHARE
+    if (!vp_manager_has_signal(SIG_OBD_OIL_PRESSURE)) {
+        signal_store_set_local(SIG_OBD_OIL_PRESSURE, true);
+        oil_pressure_start();
+    }
+#endif
 ```
 
-- `bit_off` counts from the LSB (SAE J1939 style): byte0 bit0 = 0, byte1
-  bit0 = 8
-- Final value = raw × scale + offset
-- Channels: `CH_RPM` `CH_SPEED` `CH_OIL_TEMP` `CH_COOLANT` `CH_TPS` `CH_LOAD`
-  `CH_INTAKE` `CH_BOOST` `CH_GEAR`
+Currently only `toyota.supra_a90` (DID `4436`) and `bmw.e` (DID `586F`) carry
+an OBD oil-pressure signal; activating either disables ADS1115. Every other
+profile (including `obd2.generic`) falls back to ADS1115.
 
-#### 2b. Oil-temp formulas
+## Adding or editing a vehicle
 
-```c
-static const oil_formula_t oil_std = {
-    OIL_STD_PID, {0x5C}, 1, 0, 1, 1.0f, -40.0f, 0   // standard 01 5C
-};
-static const oil_formula_t oil_uds = {
-    OIL_UDS_22, {0x13,0x10}, 2, 0, 2, 0.01f, -40.0f, 0  // UDS 22, 2 bytes big-endian
-};
-```
+No firmware code changes needed — just write a JSON file that matches the
+`skygauge.vehicle/1` schema:
 
-| Type | Description | Command |
-|------|-------------|---------|
-| `OIL_STD_PID` | Standard Mode 01 | `01 XX\r` |
-| `OIL_UDS_22` | UDS Mode 22 (1–2 bytes) | `22 XX XX\r` |
-| `OIL_SPECIAL` | Special parsing (Toyota Mode 21 legacy; needs dedicated code) | custom |
-
-#### 2c. Register the override
-
-```c
-{
-    .match_name      = "My Car",        // must exactly match the name in vehicle_profiles.c
-    .can_rules       = can_rules_mycar, // NULL = no CAN
-    .can_rule_count  = 2,
-    .oil_primary     = &oil_uds,        // primary formula (NULL = standard 01 5C)
-    .oil_secondary   = &oil_std,        // fallback (switches after 5 consecutive failures)
-    .forced_protocol = 6,               // 0 = auto
-    .functional_addr = true,            // true = ATSH7DF
-    .obd_timeout     = 0x0F,            // ATST (0 = default)
-    .has_boost       = true,
-    .poll_gap_ms     = 1,               // 0 = default 30 ms
-    // UDS / gear-query header switching (BMW, FCA and other extended-addressing cars):
-    .uds_header_cmd         = "ATSH18DA10F1\r", // header switched in for oil-temp queries, restored after
-    .obd_gear_header_cmd    = "ATSH6F1\r",      // header for the gear DID (NULL = uds_header_cmd, then 7E0)
-    .obd_gear_rx_filter_cmd = "ATCRA618\r",     // gear-reply filter (NULL = ELM327 default filter)
-    .obd_gear_raw_frame     = "18 03 22 DA 2E\r", // raw frame sent with ATCAF0 (target byte + ISO-TP PCI)
-},
-```
-
-## Runtime lookup
-
-```
-vehicle_profile_get_override()
-    ├── override found  → custom CAN rules / oil formulas / UDS headers
-    └── returns NULL    → pure standard OBD2 (01 0C/0D/05/5C/0F/04/11/42)
-```
-
-## CAN rule parser API
-
-Defined in `vehicle_custom_config.h` (static inline, no separate .c):
-
-```c
-bool can_extract_bits_le(const uint8_t data[8], uint8_t bit_off,
-                         uint8_t bit_len, uint32_t *out);
-void can_apply_rules(const can_rule_t *rules, uint8_t count,
-                     uint16_t can_id, const uint8_t data[8],
-                     float channels[CH_COUNT]);
-const char *oil_formula_build_cmd(const oil_formula_t *f, char *buf, size_t buflen);
-int16_t oil_formula_parse_resp(const oil_formula_t *f,
-                               const uint32_t *resp_data, uint8_t resp_len);
-```
-
-## Notes
-
-1. **Names must match exactly** — if the profile `name` and the override
-   `match_name` differ, the override silently never applies
-2. **Gear DID vs ratio estimation** — `obd_gear_did` wins when it answers;
-   on failure it falls back to ratio estimation; extended-addressing cars
-   also need the three `obd_gear_*` fields (see the BMW F/G entry)
-3. **Two-byte formulas** combine big-endian:
-   `value = data[byte] * 256 + data[byte+1]`
-4. **Migration status**: the legacy switch/case in `elm327_ble_client.c` is
-   still active, bridged with the data tables via
-   `vehicle_profile_get_override()`; migration to the generic parsers is
-   incremental
+1. Follow [`contracts/vehicle-rpn.md`](../contracts/vehicle-rpn.md) (signals,
+   sources, RPN formulas, CAN rules, the service/AT whitelist — with 3 full
+   worked examples); for a tutorial-style walkthrough you can copy field by
+   field, see [PID_GUIDE.en.md](PID_GUIDE.en.md)
+2. Use any existing file in [`vehicles/catalog/`](../vehicles/catalog/) as a
+   starting template
+3. Install + activate it through one of the three methods above, and check
+   `IMPORT.LOG` or `GET /api/v1/vehicles`'s `last_error` for validation
+   failures (error codes such as `E_SIZE`/`E_SCHEMA`/`E_LIMIT`/`E_SIGNAL`/
+   `E_SERVICE`/`E_AT`/`E_RPN_*` are documented in the schema doc)
+4. Limits: profile text ≤16384 bytes, ≤48 signals total (of which ≤32 may be
+   custom `veh.*` signals)
 5. To discover private PIDs for an unknown car, use the
    [fake-ELM327 hunting workflow in the tools](DEVELOPMENT.en.md#tool-scripts) —
    no car needed
+
+When a profile JSON is added to or replaced in the catalog, update the
+catalog table at the top of this file to match.

@@ -1,0 +1,25 @@
+{
+  "format": "skygauge.editor-pin/1",
+  "repo": "obd_theme_store",
+  "github": "steveEcode/obd-theme-store",
+  "branch": "codex/local-frontend",
+  "commit": "5a7484ef2b25165e0f722ab4da6d8a18ff32e631",
+  "files": {
+    "frontend/src/lib/ruleEngine.ts": "d828878942274920978f19f6b4c531644f5e57bca6e6a32e8e15417303c5dcbc",
+    "frontend/src/lib/themePacker.ts": "f83319165a06b76622268d5dde30dbe4ac5f78a5ab765e9f19d25f8bdd08c115",
+    "frontend/src/lib/themeContract.ts": "7845e9cf8cf7883a6f515b1b112a084c1ede0929c5a2361b66456256423ae5f9",
+    "frontend/src/lib/gaugeModel.ts": "b049e2b9e6252134f500f1376631b8566275b90e882153300504d6fdb0da52a4"
+  },
+  "theme_limits": {
+    "partitionBytes": 4194304,
+    "manifestBytes": 16384,
+    "pageLayoutBytes": 65536,
+    "maxNamedAssets": 16,
+    "maxNamedFonts": 16,
+    "maxBindingsPerPage": 32,
+    "maxRulesPerPage": 16,
+    "maxPages": 32,
+    "maxConditionsPerRule": 4,
+    "maxActionsPerRule": 8
+  }
+}

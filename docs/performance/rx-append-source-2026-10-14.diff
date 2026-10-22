@@ -1,0 +1,23 @@
+--- vp_engine.c.before
++++ vp_engine.c.after
+@@ -1798,15 +1798,18 @@
+ {
+     size_t i;
+     bool line = false;
++    size_t used;
+ 
+     if (!e || !data) return;
++    used = e->rx_len;
+     for (i = 0; i < len; i++) {
+         char c = (char)data[i];
+         if (c == '\0') continue;
+         if (c == '>') e->prompt = true;
+         if (c == '\r' || c == '\n' || c == '>') line = true;
+-        if (e->rx_len < ENG_RX_CAP) e->rxbuf[e->rx_len++] = c;
+-    }
++        if (used < ENG_RX_CAP) e->rxbuf[used++] = c;
++    }
++    e->rx_len = (uint16_t)used;
+     e->rxbuf[e->rx_len] = '\0';
+     if (e->busy && e->cur.kind == K_MA && (line || e->rx_len >= ENG_RX_CAP)) {
+         mon_consume(e, e->sink.now_ms(e->sink.ctx), false);

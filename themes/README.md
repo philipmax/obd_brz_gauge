@@ -11,10 +11,10 @@ themes/
 ├── registry.txt   # slot -> id 登记表，只能末尾追加（槽位 0 必须 default）
 ├── _TEMPLATE/     # 复制这个开始做新主题
 ├── builtin/       # 固件自带：default / amber / ocean
-├── community/     # 社区主题放这里
-└── example_boost_oil/  # 运行时主题示例（theme_manifest.json + layout.json，
-                        #   用 theme_packer 打包，不参与编译期代码生成）
+└── community/     # 社区主题放这里
 ```
+
+运行时主题（theme_0 / SD 主题库）由编辑器导出 `theme.bin`，不放在这里。
 
 最快上手：
 

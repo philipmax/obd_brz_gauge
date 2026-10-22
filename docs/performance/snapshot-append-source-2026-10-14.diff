@@ -1,0 +1,71 @@
+--- a/main/bsp_obd_dsp/espnow_v6.c
++++ b/main/bsp_obd_dsp/espnow_v6.c
+@@ -223,6 +223,30 @@
+     }
+     s->rec[i].value = value;
+ 
++    bool is_veh;
++    uint32_t bit;
++    if (id_mask_bit(num_id, &is_veh, &bit)) {
++        if (is_veh) s->veh_valid |= bit;
++        else        s->std_valid |= bit;
++    }
++    return true;
++}
++
++/* The caller builds a fresh snapshot from disjoint, unique signal IDs. */
++bool espnow_snapshot_append_unique(espnow_snapshot_t *s, uint16_t num_id, int32_t value)
++{
++    if (!s) return false;
++    if (num_id == ESPNOW_ID_GEAR) {
++        if (value < INT8_MIN || value >= ESPNOW_GEAR_INVALID) return false;
++        s->gear = (int8_t)value;
++        s->std_valid |= 1u << (ESPNOW_ID_GEAR - ESPNOW_ID_STD_FIRST);
++        return true;
++    }
++    if (num_id == 0 || id_is_sys(num_id) || s->n_rec >= ESPNOW_SNAP_MAX_REC) return false;
++
++    const int i = s->n_rec++;
++    s->rec[i].num_id = num_id;
++    s->rec[i].value = value;
+     bool is_veh;
+     uint32_t bit;
+     if (id_mask_bit(num_id, &is_veh, &bit)) {
+--- a/main/bsp_obd_dsp/espnow_v6.h
++++ b/main/bsp_obd_dsp/espnow_v6.h
+@@ -139,6 +139,11 @@
+  * veh_valid bits are set from num_id. Rejects id 0, sys.* ids, gear outside
+  * int8 / equal to 127, and a full snapshot. */
+ bool espnow_snapshot_put(espnow_snapshot_t *s, uint16_t num_id, int32_t value);
++/* Append without scanning for duplicates. The caller MUST guarantee that a
++ * non-gear num_id is absent from rec[]; use put() when replacing a value.
++ * The same invalid-ID, gear and capacity checks apply. Gear updates its byte
++ * even in a full snapshot. Record order and mask behavior match put(). */
++bool espnow_snapshot_append_unique(espnow_snapshot_t *s, uint16_t num_id, int32_t value);
+ bool espnow_snapshot_get(const espnow_snapshot_t *s, uint16_t num_id, int32_t *out);
+ 
+ /* v5: legacy units and sentinels, retired offset 23 = -1000. Returns 47 or 0. */
+--- a/main/bsp_obd_dsp/espnow_link.c
++++ b/main/bsp_obd_dsp/espnow_link.c
+@@ -200,9 +200,11 @@
+ 
+     // The first batch also includes sys.obd_link. A profile change between the
+     // two batches is harmless: removed slots are reported invalid by the store.
++    // A fresh snapshot visits every OBD slot once; registry IDs are unique.
++    // Dynamic IDs below are disjoint from the static OBD range.
+     for (int i = 0; i < SIG_OBD_COUNT; i++) {
+         if (valid & (UINT64_C(1) << i)) {
+-            espnow_snapshot_put(s, sig_registry[slots[i]].num_id, values[i]);
++            espnow_snapshot_append_unique(s, sig_registry[slots[i]].num_id, values[i]);
+         }
+     }
+ 
+@@ -213,7 +215,7 @@
+     for (int i = 0; i < n_veh; i++) {
+         if (valid & (UINT64_C(1) << i)) {
+             const uint16_t num_id = (uint16_t)(SIG_VEH_ID_BASE + i);
+-            espnow_snapshot_put(s, num_id, values[i]);
++            espnow_snapshot_append_unique(s, num_id, values[i]);
+         }
+     }
+     // Linked test: slaves follow the master's simulated RPM ramp (the master shows it via the override layer).

@@ -1,0 +1,98 @@
+--- vp_engine.c.before
++++ vp_engine.c.after
+@@ -29,6 +29,9 @@
+ #define ENG_MAX_LINES       32
+ #define ENG_STEPS           24
+ #define ENG_CMD_CAP         20
++#if ENG_CMD_CAP < 14
++#error "state commands require prefix + 8 hex digits + NUL"
++#endif
+ 
+ #define ENG_DEF_TIMEOUT     3000
+ #define ENG_DEF_DETECT      2000
+@@ -234,13 +237,22 @@
+     return -1;
+ }
+ 
+-static void fmt_id(char *out, size_t cap, const char *prefix, uint32_t id)
+-{
+-    if (id & VP_ID_29BIT) {
+-        snprintf(out, cap, "%s%08X", prefix, (unsigned)(id & VP_ID_MASK));
+-    } else {
+-        snprintf(out, cap, "%s%03X", prefix, (unsigned)(id & 0x7FFu));
+-    }
++/* State commands have fixed prefixes and at most eight hex digits. */
++static const char eng_hex[] = "0123456789ABCDEF";
++
++static void fmt_hex(char *out, uint32_t value, unsigned digits)
++{
++    out[digits] = '\0';
++    while (digits) {
++        out[--digits] = eng_hex[value & 0x0Fu];
++        value >>= 4;
++    }
++}
++
++static void fmt_id(char *out, uint32_t id)
++{
++    if (id & VP_ID_29BIT) fmt_hex(out, id & VP_ID_MASK, 8);
++    else fmt_hex(out, id & 0x7FFu, 3);
+ }
+ 
+ static uint32_t resp_timeout(const vp_engine_t *e)
+@@ -340,20 +352,34 @@
+     char c[ENG_CMD_CAP];
+     eng_step_t *s;
+ 
++    /* Fixed byte stores avoid out-of-line memcpy under IDF compiler flags.
++     * Keep constant-only snprintf calls: the compiler folds them to stores. */
+     switch (st) {
+     case ST_HDR:
+-        fmt_id(c, sizeof(c), "ATSH", val);
++        c[0] = 'A'; c[1] = 'T';
++        c[2] = 'S'; c[3] = 'H';
++        fmt_id(c + 4, val);
+         break;
+     case ST_RX:
+         if (val == 0) snprintf(c, sizeof(c), "ATCRA");
+-        else fmt_id(c, sizeof(c), "ATCRA", val);
++        else {
++            c[0] = 'A'; c[1] = 'T';
++            c[2] = 'C'; c[3] = 'R'; c[4] = 'A';
++            fmt_id(c + 5, val);
++        }
+         break;
+     case ST_CEA:
+         if (val == ENG_CEA_OFF_VAL) snprintf(c, sizeof(c), "ATCEA");
+-        else snprintf(c, sizeof(c), "ATCEA%02X", (unsigned)(val & 0xFFu));
++        else {
++            c[0] = 'A'; c[1] = 'T';
++            c[2] = 'C'; c[3] = 'E'; c[4] = 'A';
++            fmt_hex(c + 5, val & 0xFFu, 2);
++        }
+         break;
+     default:
+-        snprintf(c, sizeof(c), "ATCAF%u", val ? 0u : 1u);
++        c[0] = 'A'; c[1] = 'T';
++        c[2] = 'C'; c[3] = 'A'; c[4] = 'F';
++        c[5] = val ? '0' : '1'; c[6] = '\0';
+         break;
+     }
+     s = q_push(e, K_STATE, c, 0);
+@@ -1302,14 +1328,13 @@
+     const vp_request_t *q = &e->req[r];
+     char c[ENG_CMD_CAP];
+     eng_step_t *s;
+-    static const char hex[] = "0123456789ABCDEF";
+     uint8_t k, n = q->tx_len < 8 ? q->tx_len : 8;
+ 
+     // This runs on every OBD poll. Format bytes directly instead of invoking
+     // snprintf once per byte (up to eight formatter calls per request).
+     for (k = 0; k < n; k++) {
+-        c[2u * k] = hex[q->tx[k] >> 4];
+-        c[2u * k + 1u] = hex[q->tx[k] & 0x0Fu];
++        c[2u * k] = eng_hex[q->tx[k] >> 4];
++        c[2u * k + 1u] = eng_hex[q->tx[k] & 0x0Fu];
+     }
+     c[2u * n] = '\0';
+     s = q_push(e, K_REQ, c, e->p->gap_ms);

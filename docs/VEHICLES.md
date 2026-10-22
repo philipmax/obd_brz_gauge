@@ -2,163 +2,260 @@
 
 [English](VEHICLES.en.md) | 简体中文
 
-车型在设置页 **VEHICLE** 滚轮里切换，立即生效。新增车型是**数据驱动**的：
-只需编辑 2 个文件，不需要改解析逻辑。
+固件只内置 **`OBD2 Generic`**（`obd2.generic`，标准 SAE J1979）。其余车型是
+**JSON 车型档案**（schema `skygauge.vehicle/1`），通过网页或配套 App（经
+`/api/v1/vehicles` 接口）安装/激活，不编译进固件，新增
+车型不需要改固件代码。
 
 ```
-默认行为 = OBD2 标准协议（SAE J1979）
-只有在 vehicle_custom_config.h 里声明了的车型，才会使用自定义 CAN 规则或油温公式。
+默认行为 = 固件内置 obd2.generic（标准 OBD2，无需安装任何东西）
+其余车型需通过网页或 App 安装档案，再激活，重启后生效
 ```
+
+网页 `/vehicles/editor` 可从标准 OBD2、本地 JSON 或社区协议开始，列出采集数据与 PID，并修改或新增数据。
+新建标准配置包含 9 项内置标准数据，每项默认 1 秒一次，间隔可修改；导入的配置保留原频率。
+补入标准数据不覆盖已有自定义或关闭项，宝马、Jeep 等厂商原始请求与回退字段保持完整。字段与公式说明见 [PID_GUIDE.md](PID_GUIDE.md)。
+
+## 车型档案目录
+
+当前车型目录仓库共 **17 个档案**（[vehicles/catalog/](../vehicles/catalog/)），
+固件只内置其中的 `obd2.generic`，其余 16 个是待安装的 JSON 文件：
+
+| id | 名称 | 协议 | 寻址 | 挡位来源 | 增压 | 油压(OBD) | 备注 |
+|---|---|---|---|---|---|---|---|
+| `obd2.generic` | `OBD2 Generic` | 自动 | 物理 7E0 | 比值估算 | — | — | **固件内置**，通用 SAE J1979 |
+| `subaru.zc6.can` | `ZN/C6 CAN` | 6 锁定 | 物理 7E0 | 比值估算 | — | — | 唯一用 CAN 广播监听（`ATMA`，`monitor` 块）的档案；RPM 仍走 OBD |
+| `subaru.zc6.pid` | `ZN/C6 PID` | 6 锁定 | 物理 7E0 | 比值估算 | — | — | 不支持 ATMA 的适配器用这个（纯 OBD 回退） |
+| `subaru.zd8.obd` | `ZD8 OBD` | 6 锁定 | 物理 7E0 | 比值估算 | — | — | 与 `subaru.zd8.pid` 轮询策略相同；两个档案都保留以让老 NVS 序号 1:1 映射 |
+| `subaru.zd8.pid` | `ZD8` | 6 锁定 | 物理 7E0 | 比值估算 | — | — | 同上 |
+| `mazda.mx5nd` | `MX-5 ND` | 自动 | 物理 7E0 | 比值估算 | — | — | 40ms 短超时（CAN 响应快） |
+| `bmw.fg` | `BMW F/G` | 6 锁定 | 功能 7DF | DID 直读 + 比值回退 | ✓ | — | G20/G21/G22；挡位 DID 应答异常时回退比值估算（`fail_after 1`） |
+| `toyota.supra_a90` | `Supra A90` | 6 锁定 | 功能 7DF | 比值估算 | ✓ | ✓ | B58/B48；唯一另一个带 OBD 油压信号的档案 |
+| `bmw.g.obd` | `BMW G OBD` | **7 锁定** | 功能 7DF | 比值估算 | ✓ | — | G 系自动检测不稳，锁定协议 7 |
+| `bmw.e` | `BMW E` | 6 锁定 | 功能 7DF | DID 直读 | — | ✓ | E9x/E46/E39 |
+| `mini.jcw_f56` | `JCW F56` | 自动 | 物理 7E0 | 比值估算 | ✓ | — | B48 前驱 |
+| `mini.r55` | `MINI R55` | 6 锁定 | 功能 7DF | 比值估算 | ✓ | — | N14/N18/N16；UDS `22 58 22` 固定走物理 7E0（见下方行为变化） |
+| `porsche.997_2` | `POS 997.2` | 6 锁定 | 物理 7E0 | 比值估算（7 速） | — | — | 987.2/997.2 DFI |
+| `porsche.997_1` | `POS 997.1` | 6 锁定 | 物理 7E0 | 比值估算 | — | — | 987.1/997.1 M96/M97 |
+| `alfa.giulia_20t` | `GIULIA 2.0T` | 7 锁定 | 29 位功能 `18DB33F1` | 比值估算 | ✓ | — | Giorgio 平台；50ms 轮询间隔（UDS 响应慢） |
+| `jeep.generic` | `jeep` | 7 锁定 | 29 位功能 `18DB33F1` | 比值估算 | — | — | 通用占位，齿比/轮胎待按实际车型修正 |
+| `honda.integra` | `Honda Integra` | 7 锁定 | 29 位功能 `18DB33F1` | 禁用（CVT） | ✓ | — | 11 代思域平台 L15C7；非 Type R 可能无物理油温传感器 |
+
+数字以 [`vehicles/catalog/*.vehicle.json`](../vehicles/catalog/) 为准，字段定义见
+[`contracts/vehicle-rpn.md`](../contracts/vehicle-rpn.md)（`skygauge.vehicle/1` schema、
+RPN 公式操作码、服务/寻址白名单、静态校验规则）。
+
+## 可编辑导入包
+
+[vehicles/import/](../vehicles/import/README.md) 提供 **18 份完整可导入模板**：
+现有 17 份档案的独立 `custom.*` 副本，加一份 `custom.bmw.g.gear`。
+原始车型目录仍为 17 份。模板展开请求头、应答前缀和轮询间隔，适合复制后修改；
+直接把选中的 JSON 放进 SD 卡 `OBD/IMPORT/` 即可安装，再选择车型并重启。
+
+`custom.bmw.g.gear` 复用 `bmw.fg` 的协议 6、EGS 原始请求
+`18 03 22 DA 2E`（`hdr: 6F1`、`rx: 618`、`expect: 62DA2E`），
+直接读取 0..8 的挡位值，失败回退齿比估算。原协议 7 的 `custom.bmw.g.obd`
+仍单独提供；两者按实际车辆选择，本次生成没有新增实车验证。
+
+请求信号使用 `rate: "round"` 和 `period_ms`：转速 100 ms；车速/挡位/负载/
+节气门/增压 200 ms；空燃比/油压 500 ms；温度/电瓶电压 1000 ms。
+这些是最小间隔，实际轮询仍串行执行。纯 CAN 监听与比值推导沿用原配置。
+请求格式、按位解码、调整方法及完整文件表见导入包 README 和
+[PID_GUIDE.md](PID_GUIDE.md)。
+
+## 默认继承标准 OBD2
+
+现在只需声明车型特有的信号；根字段 `defaults` 缺省为 `"obd2"`，
+未声明的标准信号自动继承内置 Generic OBD2 的请求、公式、单位、过滤与轮询策略。
+最小可导入配置如下，`bus` 和 `signals` 都可以省略：
+
+```json
+{
+  "schema": "skygauge.vehicle/1",
+  "id": "custom.mycar",
+  "rev": 1,
+  "name": "My Car"
+}
+```
+
+补齐以下 9 个标准信号：
+
+| 信号 / Signal | PID |
+|---|---|
+| `obd.rpm` | `010C` |
+| `obd.intake_temp` | `010F` |
+| `obd.speed` | `010D` |
+| `obd.coolant_temp` | `0105` |
+| `obd.load` | `0104` |
+| `obd.throttle` | `0111` |
+| `obd.oil_temp` | `015C` |
+| `obd.battery_voltage` | `0142` |
+| `obd.afr` | `0144` |
+
+显式声明的信号**整体替换**同 id 的默认定义，不做字段合并，也不自动追加标准 PID
+作为失败回退。例如自定义 `obd.oil_temp` 后，只有你在 `src` 中写出的油温路径会被请求；
+只写 `id` 或只改 `period_ms` 不够，仍需完整的 `src` / `derive` 定义。
+省略信号时用默认值，显式禁用时在 `signals` 数组里写：
+
+```json
+{"id": "obd.oil_temp", "disabled": true}
+```
+
+禁用项只允许 `id`、`disabled`、`notes`，不进入轮询。需要完全自定义请求或纯 CAN
+监听时，设置根字段 `"defaults": "none"`，此时 `signals` 必须为非空数组。
+没有声明 `bus.proto` 时默认使用标准 OBD-II 协议选择：优先沿用设备已保存或本次连接已检测到的协议；两者都没有时执行自动探测。需要锁定 Jeep、BMW 等车型的特定协议时，显式填写 `bus.proto`（例如 `6` 或 `7`）。没有 `bus` 时其余默认值为请求头 `7E0`、`ATST=0x19`、请求间隔 30 ms；
+继承的标准请求使用车型的 `bus.hdr`，需要特殊头的请求仍在各自 `src.hdr` 指定。
+传动比和 `obd.gear` 的比值推导不会继承；挡位需显式直读或提供本车的 `drivetrain`。
+自动补齐不代表 ECU 支持该 PID，读不到仍按现有失效规则显示 `--`。
+资源上限、轮询频率与信号依赖均在补齐后校验。
+
+[精简示例](../vehicles/examples/README.md) 提供标准 OBD2 最小配置及仅声明 BMW G
+直读挡位的配置；安装方式相同，需要包含此默认继承功能的固件。
+
+## 安装与激活
+
+有三种方式把档案装进设备，效果相同：
+
+### 1. SD 卡 drop 文件夹（`/OBD/IMPORT`）
+
+把以下文件放进 SD 卡 `OBD/IMPORT/` 目录，开机或插卡时触发扫描：
 
 | 文件 | 作用 |
 |---|---|
-| [main/app_obd_dsp/vehicle_profiles.c](../main/app_obd_dsp/vehicle_profiles.c) | 车型基础参数（传动比 / 挡位 / 轮胎 / 油温策略 / 协议锁定）|
-| [main/app_obd_dsp/vehicle_custom_config.h](../main/app_obd_dsp/vehicle_custom_config.h) | 自定义覆盖（CAN 规则 / 油温公式 / UDS 头切换 / 挡位 DID）|
-| [main/app_obd_dsp/vehicle_profiles.h](../main/app_obd_dsp/vehicle_profiles.h) | 结构体定义 + API（本页字段说明的权威来源）|
+| `<id>.vehicle.json` | 安装一个车型档案（校验+编译，不激活） |
+| `ACTIVATE.TXT` | 第一行写 profile id，激活它（下次开机生效） |
+| `RESET.TXT` | 回退到 `obd2.generic` |
 
-## 内置车型总表
+处理顺序（`sd_import.c`）：先装 `*.vehicle.json`，再处理 `ACTIVATE.TXT`，
+**`RESET.TXT` 总是最后处理，会覆盖同一批次里的 `ACTIVATE.TXT`**。
+结果写入 `OBD/IMPORT/IMPORT.LOG`（`<时间> OK|ERR <文件>: <详情>`），
+成功的文件重命名为 `.ok`，失败的重命名为 `.err` 并生成同名 `.err.txt`
+列出校验器给出的具体问题。
 
-来源 `vehicle_profiles.c` 的 `s_profiles[]`（设置页按此顺序显示）：
+### 2. 网页与配套 App
 
-| # | 名称 | 协议 | 标准寻址 | 油温读取 | 挡位 | 增压 | 备注 |
-|---|------|------|----------|----------|------|------|------|
-| 0 | `OBD2 Generic` | 自动 | 物理 7E0 | `01 5C` | 比值估算 | — | 通用 SAE J1979，传动比为 6MT 占位值 |
-| 1 | `ZN/C6 CAN` | 6 锁定 | 物理 7E0 | Toyota `21 01` | 比值估算 | — | **唯一 CAN ATMA 监听**：0x140 节气门、0x360 油温/水温；RPM 走 OBD。已在实车完整验证 |
-| 2 | `ZN/C6 PID` | 6 锁定 | 物理 7E0 | Toyota `21 01` | 比值估算 | — | 不支持 ATMA 的廉价适配器用这个（纯 OBD 回退）|
-| 3 | `ZD8 OBD` | 6 锁定 | 物理 7E0 | `01 5C` | 比值估算 | — | BRZ 二代 FA24，OBD-only |
-| 4 | `ZD8` | 6 锁定 | 物理 7E0 | `01 5C` | 比值估算 | — | 与 #3 配置相同，标准 PID 回退版本 |
-| 5 | `MX-5 ND` | 自动 | 物理 7E0 | `22 13 10` 双字节 → `22 11 1F` 回退 | 比值估算 | — | 40ms 超时（马自达 CAN 响应快）|
-| 6 | `BMW F/G` | 6 锁定 | 功能 7DF | `01 5C` | **DID `DA2E` 直读**（EGS 变速箱）| ✓ | G20/G21/G22 B48/B58 + ZF 8HP；挡位走 6F1 扩展寻址请求 / 618 过滤接收 |
-| 7 | `Supra A90` | 6 锁定 | 功能 7DF | `22 44 02`（°C=raw×0.75−48）→ `01 5C` 回退 | 比值估算（占位）| ✓ | B58/B48；**OBD 油压 DID `4436`**（hPa），替代 ADS1115 |
-| 8 | `BMW G OBD` | **7 锁定** | 功能 7DF | `01 5C` → `22 44 02` 回退 | 比值估算 | ✓ | G 系自动检测不稳，锁定协议 7 |
-| 9 | `BMW E` | 6 锁定 | 功能 7DF | `22 44 02`（6F1 头）→ `22 58 22` 回退 | 比值估算 | — | E9x/E46/E39；**OBD 油压 DID `586F`**（6F1 头，N55 验证）|
-| 10 | `JCW F56` | 自动 | 物理 7E0 | MINI `22 58 22`（A−60）→ `01 5C` 回退 | 比值估算 | ✓ | B48 前驱 |
-| 11 | `MINI R55` | 6 锁定 | 功能 7DF | MINI `22 58 22` → `01 5C` 回退 | 比值估算 | ✓ | N14/N18/N16 |
-| 12 | `POS 997.2` | 6 锁定 | 物理 7E0 | `01 5C` | 比值估算（PDK 7 速）| — | 987.2/997.2 DFI |
-| 13 | `POS 997.1` | 6 锁定 | 物理 7E0 | `01 5C` | 比值估算 | — | 987.1/997.1 M96/M97，齿比为 Gen2 占位 |
-| 14 | `GIULIA 2.0T` | 7 锁定 | **29 位功能 `18DB33F1`** | `22 13 02` @ `18DA10F1` | 比值估算 | ✓ | Giorgio 平台；UDS 响应慢，50ms 轮询间隔 |
-| 15 | `jeep` | 7 锁定 | 29 位功能 `18DB33F1` | `01 5C` | 比值估算（占位）| — | 通用占位，齿比 / 轮胎待按实际车型修正 |
-| 16 | `Honda Integra` | 7 锁定 | 29 位功能 `18DB33F1` | `01 5C` 尝试 | **禁用**（CVT，`gear_count=0`）| ✓ | 思域 11 代平台 L15C7；非 Type R 可能无物理油温传感器 |
+车型配置的安装、激活、回退和删除通过网页或配套 App 完成。仪表不提供车型管理页面；
+网页或 App 通过以下设备 API 操作，激活后仍需重启才生效。
 
-说明：
+### 3. `/api/v1/vehicles` API（配套 App）
 
-- **挡位列**：优先用 CAN / Mode 22 DID 直读的精确挡位（如 BMW F/G 的 DA2E），没有直读来源时按"转速 ÷ 车速 → 传动比"估算，`gear_count=0`（CVT）则禁用估算
-- **油温**有四级回退链（primary → secondary → tertiary → quaternary），主策略连续失败自动切换
-- `OBD2 Generic`、`Supra A90`、`MINI R55`、`jeep`、`Honda Integra` 不在 override 表里 —— 它们只用 profile 自带的枚举策略，行为同样是数据驱动的
+OTA 热点下提供这组 HTTP 接口（需要 `X-OTA-Token`），供网页或配套 App 管理车型：
 
-## 新增车型
-
-### 步骤 1：基础参数（`vehicle_profiles.c` 的 `s_profiles[]` 末尾追加）
-
-```c
-{
-    .name = "My Car",                    // 显示名称，也是 override 的匹配键
-    .final_drive_ratio = 3.73f,          // 主减速比
-    .tire_rolling_radius_m = 0.310f,     // 轮胎滚动半径（米）
-    .gear_count = 6,                     // 前进挡数；CVT 填 0（禁用挡位估算）
-    .gear_ratios = {0, 3.63f, 2.38f, 1.56f, 1.18f, 1.00f, 0.81f},
-    .gear_tolerance = 0.15f,             // 挡位识别容差（±15%）
-    // 以下可选，省略 = 纯 OBD2 标准 + 自动协议
-    .oil_temp_strategy = { ... },        // 油温四级回退链（枚举见 vehicle_profiles.h）
-    .has_boost = true,                   // 涡轮车显示增压（标准 PID 01 0B）
-    .forced_protocol = 6,                // 锁定 ELM327 协议（0=自动；BMW/本田等检测不稳时锁）
-    .obd_functional_addr = true,         // true=ATSH7DF 功能寻址（多数德系）
-    .obd_29bit_functional = true,        // 29 位功能广播 ATSH18DB33F1（本田 11 代/FCA）
-    .obd_oil_pressure_did = 0x4436,      // Mode 22 油压 DID（hPa），有则替代 ADS1115
-    .obd_gear_did = 0xDA2E,              // Mode 22 挡位 DID，有则替代比值估算
-    .obd_timeout = 0x0A,                 // ATST 超时（0=默认 0x19；响应快的车调小）
-    .poll_gap_ms = 1,                    // 轮询间隔 ms（0=默认 30ms）
-    .speed_scale = 1.0f,                 // 车速修正系数（0/不填=1.0）
-    .can_broadcast_mode = false,         // true=ATMA CAN 监听（目前仅 ZN/C6 CAN）
-},
-```
-
-**如果新车只需要标准 OBD2，到这里就结束了。**
-
-### 步骤 2（可选）：自定义覆盖（`vehicle_custom_config.h`）
-
-需要 CAN 广播解码、非标准 UDS 头或特殊油温公式时才做。
-
-#### 2a. CAN 广播解码规则
-
-```c
-static const can_rule_t can_rules_mycar[] = {
-    // CAN_ID  位偏移  位长  乘数        偏移    通道
-    { 0x140,   16,    14,   1.0f,       0.0f,  CH_RPM },
-    { 0x360,   16,     8,   1.0f,     -40.0f,  CH_OIL_TEMP },
-};
-```
-
-- `bit_off` 从 LSB 起算（SAE J1939 风格）：Byte0 bit0 = 0，Byte1 bit0 = 8
-- 最终值 = raw × scale + offset
-- 可用通道：`CH_RPM` `CH_SPEED` `CH_OIL_TEMP` `CH_COOLANT` `CH_TPS` `CH_LOAD` `CH_INTAKE` `CH_BOOST` `CH_GEAR`
-
-#### 2b. 油温公式
-
-```c
-static const oil_formula_t oil_std = {
-    OIL_STD_PID, {0x5C}, 1, 0, 1, 1.0f, -40.0f, 0   // 标准 01 5C
-};
-static const oil_formula_t oil_uds = {
-    OIL_UDS_22, {0x13,0x10}, 2, 0, 2, 0.01f, -40.0f, 0  // UDS 22 双字节大端
-};
-```
-
-| 类型 | 说明 | 命令格式 |
+| 方法 | 路径 | 作用 |
 |---|---|---|
-| `OIL_STD_PID` | 标准 Mode 01 | `01 XX\r` |
-| `OIL_UDS_22` | UDS Mode 22（1–2 字节）| `22 XX XX\r` |
-| `OIL_SPECIAL` | 特殊解析（Toyota Mode 21 等遗留，需专用代码）| 自定义 |
+| `GET` | `/api/v1/vehicles` | 列出已装档案 + 当前激活状态/安全模式/最近错误 |
+| `POST` | `/api/v1/vehicles` | 上传并安装档案（校验+编译+存储，**不激活**） |
+| `POST` | `/api/v1/vehicles/activate` | `{"id":"..."}`，激活（返回 `reboot_required:true`） |
+| `POST` | `/api/v1/vehicles/reset` | 回退到 `obd2.generic` |
+| `POST` | `/api/v1/vehicles/rollback` | 回到上一个档案 |
+| `POST` | `/api/v1/vehicles/remove` | `{"id":"..."}`，删除已装档案 |
+| `GET` | `/api/v1/vehicles/<id>` | 读取某档案的原始 JSON |
+| `DELETE` | `/api/v1/vehicles/<id>` | 删除某档案 |
 
-#### 2c. 注册 override
+**无论哪种方式，激活都要等下次重启才生效**，当前这次开机继续用旧档案。
+
+存储位置：安装的档案存在配置分区 `/config/vehicles/<id>.json`，并镜像一份到
+SD 卡 `/OBD/CFG/vehicles`；激活中的档案另外复制一份到 `nvs_app` 的
+`veh/blob`（≤8KB），这样清配置分区也不会丢当前车型。
+
+## 生命周期与安全机制
+
+状态机（`main/vehicle/vp_manager.c`）：
+
+```
+install        → INSTALLED
+activate(id)   → PENDING（下次开机生效）
+下次开机验证通过 → ACTIVE
+3 次开机验证都不通过 → 回退到上一个档案，再不行回退到 obd2.generic
+```
+
+**验证规则**：开机后等待 20 秒，要求电压 ≥13.0V，且至少
+`min(3, 该档案的信号数)` 个不同信号槛位有应答（转速如果档案里有就必须算在内）。
+
+**安全模式**：连续 3 次崩溃（panic / 中断看门狗 / 任务看门狗复位）后进入安全模式，
+强制用 `obd2.generic` 且不再处理 SD 导入里的 `*.vehicle.json` / `ACTIVATE.TXT`
+（`RESET.TXT` 仍会处理，用于手动脱困）。运行满 60 秒无崩溃后清除崩溃计数。
+
+## 老固件车型序号迁移
+
+老固件用 NVS 里的车型序号（`vehicle_profile_idx`），升级后首次开机按下表
+映射成新的档案 id 并自动安装+激活（`main/app_obd_dsp/first_boot_migration.c`
+的 `vp_manager_legacy_id()`）：
+
+| 老序号 | 新 id |
+|---|---|
+| 0 | `obd2.generic` |
+| 1 | `subaru.zc6.can` |
+| 2 | `subaru.zc6.pid` |
+| 3 | `subaru.zd8.obd` |
+| 4 | `subaru.zd8.pid` |
+| 5 | `mazda.mx5nd` |
+| 6 | `bmw.fg` |
+| 7 | `toyota.supra_a90` |
+| 8 | `bmw.g.obd` |
+| 9 | `bmw.e` |
+| 10 | `mini.jcw_f56` |
+| 11 | `mini.r55` |
+| 12 | `porsche.997_2` |
+| 13 | `porsche.997_1` |
+| 14 | `alfa.giulia_20t` |
+| 15 | `jeep.generic` |
+| 16 | `honda.integra` |
+
+迁移会先找 SD 卡 `OBD/CATALOG/<id>.vehicle.json`（或 `<id>.json`）安装+激活；
+找不到时把目标 id 记入 NVS，等 SD 卡插上或联网后台重试。
+**用户在这期间手动重置或激活了别的车型，迁移就不再覆盖用户的选择**
+（`first_boot_migration_drop_vehicle()`，由内部 `RESET.TXT`、网页或 App 的
+`/api/v1/vehicles/reset`、以及任意一次手动 `activate` 触发）。
+
+## 相比老固件的行为变化
+
+以下差异来自 `test/host/vehicle/fixtures/golden/*.json` 的新旧对比测试，
+已在主机单元测试里锁定：
+
+- **`obd.boost`（涡轮车，7 个档案）**：老固件把 `(MAP-100)/10` 截断存成 0.1 bar
+  精度；新档案存 0.01 bar 精度，显示更细
+- **`mini.r55` 的 `22 58 22`（油温查询）**：老固件走功能寻址头 7DF 发送；
+  新引擎禁止 service `22` 用功能寻址头，固定改走物理头 7E0
+- **`bmw.fg` 的 `obd.gear`**：老固件只要 DID 应答一次超范围就回退比值挡位；
+  新引擎用 `fail_after 1` + `fallback: "ratio"`，行为更明确但效果一致
+- **`subaru.zc6.can` 的 CAN 水温/油温**：`monitor.stale_ms`（15000ms）内无帧时，
+  老固件把水温写成 -40、油温置为无效；新引擎把两者都标记为无效（不再假装 -40℃）
+- **`mazda.mx5nd` / `mini.jcw_f56` / `obd2.generic` 的 `ATSP0`**：
+  `bus.proto` 为 0 时沿用之前保存/自动检测到的协议（`nvs_user_cfg_t.protocol` →
+  `vp_engine_cfg_t.proto`），和老固件行为一致，不是新 bug
+
+## ADS1115 油压传感器（V1 硬件）回退
+
+V1 硬件板（`CONFIG_OBD_HW_VERSION_V1_WAVESHARE`）上接了 ADS1115 模拟油压传感器。
+只有当**当前激活档案没有 `obd.oil_pressure` 信号**时，固件才会启用 ADS1115
+采集（`main/app_main.c`）：
 
 ```c
-{
-    .match_name      = "My Car",        // 必须与 vehicle_profiles.c 的 name 完全一致
-    .can_rules       = can_rules_mycar, // NULL = 不用 CAN
-    .can_rule_count  = 2,
-    .oil_primary     = &oil_uds,        // 主油温公式（NULL = 标准 01 5C）
-    .oil_secondary   = &oil_std,        // 备用公式（主公式连续失败 5 次后切换）
-    .forced_protocol = 6,               // 0 = 自动
-    .functional_addr = true,            // true = ATSH7DF
-    .obd_timeout     = 0x0F,            // ATST（0 = 默认）
-    .has_boost       = true,
-    .poll_gap_ms     = 1,               // 0 = 默认 30ms
-    // UDS / 挡位查询的特殊头切换（宝马、FCA 等扩展寻址车型用）：
-    .uds_header_cmd         = "ATSH18DA10F1\r", // 查油温前临时切换的头，查完恢复
-    .obd_gear_header_cmd    = "ATSH6F1\r",      // 查挡位 DID 用的头（NULL=回退 uds_header_cmd 再 7E0）
-    .obd_gear_rx_filter_cmd = "ATCRA618\r",     // 挡位应答过滤（NULL=ELM327 默认过滤）
-    .obd_gear_raw_frame     = "18 03 22 DA 2E\r", // ATCAF0 裸帧（扩展寻址目标字节+ISO-TP PCI）
-},
+#if CONFIG_OBD_HW_VERSION_V1_WAVESHARE
+    if (!vp_manager_has_signal(SIG_OBD_OIL_PRESSURE)) {
+        signal_store_set_local(SIG_OBD_OIL_PRESSURE, true);
+        oil_pressure_start();
+    }
+#endif
 ```
 
-## 运行时查找逻辑
+目前 `toyota.supra_a90`（DID `4436`）和 `bmw.e`（DID `586F`）两个档案自带 OBD
+油压信号，激活这两个档案时 ADS1115 不会启动；其余档案（包括 `obd2.generic`）
+都走 ADS1115。
 
-```
-vehicle_profile_get_override()
-    ├── 找到 override → 使用自定义 CAN 规则 / 油温公式 / UDS 头
-    └── 返回 NULL    → 纯 OBD2 标准协议（01 0C/0D/05/5C/0F/04/11/42）
-```
+## 新增/修改车型
 
-## CAN 规则解析器 API
+不需要改固件代码，只需要写一个符合 `skygauge.vehicle/1` schema 的 JSON：
 
-定义在 `vehicle_custom_config.h`（static inline，无独立 .c）：
-
-```c
-bool can_extract_bits_le(const uint8_t data[8], uint8_t bit_off,
-                         uint8_t bit_len, uint32_t *out);
-void can_apply_rules(const can_rule_t *rules, uint8_t count,
-                     uint16_t can_id, const uint8_t data[8],
-                     float channels[CH_COUNT]);
-const char *oil_formula_build_cmd(const oil_formula_t *f, char *buf, size_t buflen);
-int16_t oil_formula_parse_resp(const oil_formula_t *f,
-                               const uint32_t *resp_data, uint8_t resp_len);
-```
-
-## 注意事项
-
-1. **name 必须完全匹配** —— profile 的 `name` 和 override 的 `match_name` 字符串不一致时 override 静默不生效
-2. **挡位 DID 与比值估算的关系** —— `obd_gear_did` 直读优先，无应答时回退比值估算；扩展寻址车型还需要配 `obd_gear_header_cmd` 等三个字段（参考 BMW F/G 条目）
-3. **双字节公式**按大端组合：`value = data[byte] * 256 + data[byte+1]`
-4. **迁移状态**：`elm327_ble_client.c` 里的旧 switch/case 解析仍在运行，与数据表通过 `vehicle_profile_get_override()` 桥接，后续逐步迁移到通用解析器
+1. 按 [`contracts/vehicle-rpn.md`](../contracts/vehicle-rpn.md) 写档案
+   （信号、来源、RPN 公式、CAN 规则、服务/AT 白名单都有详细说明和 3 个完整例子），
+   跟着抄字段改的教程版见 [PID_GUIDE.md](PID_GUIDE.md)
+2. 参考 [`vehicles/catalog/`](../vehicles/catalog/) 里任意一个现成档案起草
+3. 通过以上三种方式之一安装 + 激活，看 `IMPORT.LOG` 或
+   `GET /api/v1/vehicles` 的 `last_error` 排查校验失败（`E_SIZE`/`E_SCHEMA`/
+   `E_LIMIT`/`E_SIGNAL`/`E_SERVICE`/`E_AT`/`E_RPN_*` 等错误码见 schema 文档）
+4. 限制：档案文本 ≤16384 字节，信号 ≤48 个（其中 `veh.*` 自定义信号 ≤32 个）
 5. 找未知车型的私有 PID 可以用 [tools 里的伪 ELM327 挖掘流程](DEVELOPMENT.md#工具脚本)，不需要上车
+
+目录里新增/替换档案 JSON 时，同步更新本文件最上面的目录表格。

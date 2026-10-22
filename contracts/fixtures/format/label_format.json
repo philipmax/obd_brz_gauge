@@ -1,0 +1,184 @@
+{
+  "format": "skygauge.fixtures.label-format/1",
+  "generator": "tools/fixtures_node/run_ts_crosscheck.mjs --emit-format",
+  "editor": {
+    "repo": "obd_theme_store",
+    "commit": "5a7484ef2b25165e0f722ab4da6d8a18ff32e631",
+    "code": [
+      "frontend/src/lib/themePacker.ts:34-44 isIntOnlyFormat",
+      "frontend/src/lib/themePacker.ts:46-101 formatOneIntConversion, formatIntPrintf",
+      "frontend/src/components/canvas/FabricCanvas.tsx:1224-1233 createLabel data branch (no dataDisplay)"
+    ]
+  },
+  "semantics": "text = formatIntPrintf(fmt, args) with fmt = (format && isIntOnlyFormat(format)) ? format : \"%d\"; args = divisor > 1 ? [trunc(raw/divisor), abs(raw % divisor)] : [trunc(raw)]. null = field absent in the layout JSON.",
+  "cases": [
+    {
+      "name": "F01",
+      "format": "%d",
+      "divisor": null,
+      "raw": 1234,
+      "text": "1234"
+    },
+    {
+      "name": "F02",
+      "format": "%d.%02d",
+      "divisor": 100,
+      "raw": 150,
+      "text": "1.50"
+    },
+    {
+      "name": "F03",
+      "format": "%d.%02d",
+      "divisor": 100,
+      "raw": 105,
+      "text": "1.05"
+    },
+    {
+      "name": "F04",
+      "format": "%d.%d",
+      "divisor": 10,
+      "raw": 136,
+      "text": "13.6"
+    },
+    {
+      "name": "F05",
+      "format": "%d.%02d",
+      "divisor": 100,
+      "raw": -150,
+      "text": "-1.50"
+    },
+    {
+      "name": "F06",
+      "format": "%d.%02d",
+      "divisor": 100,
+      "raw": -50,
+      "text": "0.50"
+    },
+    {
+      "name": "F07",
+      "format": "%5d",
+      "divisor": null,
+      "raw": 42,
+      "text": "   42"
+    },
+    {
+      "name": "F08",
+      "format": "%-5d|",
+      "divisor": null,
+      "raw": 42,
+      "text": "42   |"
+    },
+    {
+      "name": "F09",
+      "format": "%05d",
+      "divisor": null,
+      "raw": -42,
+      "text": "-0042"
+    },
+    {
+      "name": "F10",
+      "format": "%+d",
+      "divisor": null,
+      "raw": 5,
+      "text": "+5"
+    },
+    {
+      "name": "F11",
+      "format": "%x",
+      "divisor": null,
+      "raw": 255,
+      "text": "ff"
+    },
+    {
+      "name": "F12",
+      "format": "%X",
+      "divisor": null,
+      "raw": -1,
+      "text": "FFFFFFFF"
+    },
+    {
+      "name": "F13",
+      "format": "%u",
+      "divisor": null,
+      "raw": -5,
+      "text": "-5"
+    },
+    {
+      "name": "F14",
+      "format": "% d",
+      "divisor": null,
+      "raw": 5,
+      "text": "5"
+    },
+    {
+      "name": "F15",
+      "format": "%d %d",
+      "divisor": null,
+      "raw": 7,
+      "text": "7 0"
+    },
+    {
+      "name": "F16",
+      "format": "%c",
+      "divisor": null,
+      "raw": 65,
+      "text": "A"
+    },
+    {
+      "name": "F17",
+      "format": "%d%%",
+      "divisor": null,
+      "raw": 65,
+      "text": "65%"
+    },
+    {
+      "name": "F18",
+      "format": "%s",
+      "divisor": null,
+      "raw": 3,
+      "text": "3"
+    },
+    {
+      "name": "F19",
+      "format": "%.2d",
+      "divisor": null,
+      "raw": 5,
+      "text": "52d"
+    },
+    {
+      "name": "F20",
+      "format": "%d km/h",
+      "divisor": null,
+      "raw": 88,
+      "text": "88 km/h"
+    },
+    {
+      "name": "F21",
+      "format": "%o",
+      "divisor": null,
+      "raw": 8,
+      "text": "10"
+    },
+    {
+      "name": "F22",
+      "format": "%d.%02d",
+      "divisor": 100,
+      "raw": 0,
+      "text": "0.00"
+    },
+    {
+      "name": "F23",
+      "format": null,
+      "divisor": null,
+      "raw": 3500,
+      "text": "3500"
+    },
+    {
+      "name": "F24",
+      "format": "%+05d",
+      "divisor": null,
+      "raw": 7,
+      "text": "+0007"
+    }
+  ]
+}

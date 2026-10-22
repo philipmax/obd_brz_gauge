@@ -8,15 +8,16 @@ void ble_adv_extract_name(const uint8_t *adv_data, uint8_t adv_data_len, uint8_t
     out_name[0] = '\0';
     if (!adv_data) return;
 
-    uint8_t total_len = adv_data_len + scan_rsp_len;
-    uint8_t idx = 0;
+    // size_t: no wrap-around however malformed the length bytes are
+    size_t total_len = (size_t)adv_data_len + scan_rsp_len;
+    size_t idx = 0;
     while (idx + 1 < total_len) {
-        uint8_t field_len = adv_data[idx];
+        size_t field_len = adv_data[idx];
         if (field_len == 0) break;
         if (idx + 1 + field_len > total_len) break;
 
         uint8_t ad_type = adv_data[idx + 1];
-        uint8_t payload_len = field_len - 1;
+        size_t payload_len = field_len - 1;
         const uint8_t *payload = &adv_data[idx + 2];
 
         if ((ad_type == ESP_BLE_AD_TYPE_NAME_CMPL || ad_type == ESP_BLE_AD_TYPE_NAME_SHORT) && payload_len > 0) {
@@ -25,6 +26,6 @@ void ble_adv_extract_name(const uint8_t *adv_data, uint8_t adv_data_len, uint8_t
             out_name[copy_len] = '\0';
             return;
         }
-        idx += (uint8_t)(field_len + 1);
+        idx += field_len + 1;
     }
 }

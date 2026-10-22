@@ -1,0 +1,62 @@
+--- a/main/theme_engine/theme_page.c
++++ b/main/theme_engine/theme_page.c
+@@ -412,7 +412,11 @@
+ {
+     tic_variant_t v;
+     if (!te_make_variant(el, im, k, &v)) return 0;
+-    if (v.kind == TIC_KIND_POINTER) return (size_t)v.dw * v.dh * 3u;
++    if (v.kind == TIC_KIND_POINTER) {
++        if (im->fmt == TPX_FMT_RGB565 && v.dw == im->w && v.dh == im->h)
++            return k->has_tint ? (size_t)v.dw * v.dh * 2u : 0;
++        return (size_t)v.dw * v.dh * 3u;
++    }
+     size_t px = (size_t)v.win_w * (size_t)v.win_h;
+     if (im->fmt == TPX_FMT_RGBA8888) return px * 3u;
+     return (!k->has_tint && v.win_w == im->w) ? 0 : px * 2u;
+@@ -488,20 +492,24 @@
+     memset(&plan, 0, sizeof(plan));
+     tpx_err_t r;
+     if (v.kind == TIC_KIND_POINTER) {
+-        r = tpx_resample(&src, v.dw, v.dh, &a, &rs);
+-        if (r == TPX_ERR_NOMEM) {
+-            te_evict_all(c);
++        // Identity uses the validated mapped source directly. RGB565 can
++        // stay zero-copy unless a tint requires an owned color plane.
++        if (src.w != v.dw || src.h != v.dh) {
+             r = tpx_resample(&src, v.dw, v.dh, &a, &rs);
+-        }
+-        if (r != TPX_OK) {
+-            *status = r == TPX_ERR_NOMEM ? TE_ACQ_NOMEM : TE_ACQ_ERR;
+-            return NULL;
+-        }
+-        src.data = rs;
+-        src.size = (size_t)v.dw * v.dh * 4u;
+-        src.fmt = TPX_FMT_RGBA8888;
+-        src.w = v.dw;
+-        src.h = v.dh;
++            if (r == TPX_ERR_NOMEM) {
++                te_evict_all(c);
++                r = tpx_resample(&src, v.dw, v.dh, &a, &rs);
++            }
++            if (r != TPX_OK) {
++                *status = r == TPX_ERR_NOMEM ? TE_ACQ_NOMEM : TE_ACQ_ERR;
++                return NULL;
++            }
++            src.data = rs;
++            src.size = (size_t)v.dw * v.dh * 4u;
++            src.fmt = TPX_FMT_RGBA8888;
++            src.w = v.dw;
++            src.h = v.dh;
++        }
+         tpx_opts_t o = {0, 0, v.dw, v.dh, false, 0, 0, TPX_CROP_ALL};
+         r = tpx_plan(&src, &o, &plan);
+         if (r == TPX_OK && plan.cf != TPX_CF_NONE) {
+@@ -543,7 +551,7 @@
+         te_evict_all(c);
+         r = tpx_render(&src, &plan, &a, &img);
+     }
+-    te_free(rs);   // the render always copies out of the resampled bitmap
++    te_free(rs);   // only scaled pointers have a temporary RGBA bitmap
+     if (r != TPX_OK) {
+         *status = r == TPX_ERR_NOMEM ? TE_ACQ_NOMEM : TE_ACQ_ERR;
+         return NULL;

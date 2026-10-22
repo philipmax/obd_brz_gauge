@@ -23,7 +23,7 @@ static uint8_t s_active = 0;
 void ui_theme_init(void)
 {
     // Reuses the (previously unused) theme_cfg.theme byte — no NVS layout change.
-    uint8_t idx = nvs_cfg_get()->theme_cfg.theme;
+    uint8_t idx = nvs_cfg_read().theme_cfg.theme;
     s_active = (idx < ui_theme_count()) ? idx : 0;
     ESP_LOGD(TAG, "active slot=%u id=%s name=%s (%u registered)",
              s_active, g_ui_themes[s_active]->id, g_ui_themes[s_active]->name,
@@ -49,9 +49,11 @@ void ui_theme_set_active(uint8_t idx)
 {
     if (idx >= ui_theme_count()) idx = 0;
     s_active = idx;
-    nvs_user_cfg_t cfg = *nvs_cfg_get();
+    nvs_user_cfg_t base;
+    nvs_cfg_snapshot(&base);
+    nvs_user_cfg_t cfg = base;
     cfg.theme_cfg.theme = idx;
-    nvs_cfg_set(&cfg);
+    nvs_cfg_update(&base, &cfg);
 }
 
 const char *ui_theme_names_joined(void)
@@ -61,8 +63,9 @@ const char *ui_theme_names_joined(void)
 
     size_t need = 1;   // trailing NUL
     for (uint8_t i = 0; i < g_ui_theme_count; i++) {
-        need += strlen(g_ui_themes[i]->name) + 1;   // name + '\n' (last one unused)
+        need += strlen(g_ui_themes[i]->name);
     }
+    if (g_ui_theme_count > 1) need += g_ui_theme_count - 1;
 
     char *buf = malloc(need);
     if (!buf) {
@@ -72,11 +75,14 @@ const char *ui_theme_names_joined(void)
         return g_ui_themes[0]->name;
     }
 
-    buf[0] = '\0';
+    char *dst = buf;
     for (uint8_t i = 0; i < g_ui_theme_count; i++) {
-        if (i > 0) strlcat(buf, "\n", need);
-        strlcat(buf, g_ui_themes[i]->name, need);
+        if (i > 0) *dst++ = '\n';
+        size_t name_len = strlen(g_ui_themes[i]->name);
+        memcpy(dst, g_ui_themes[i]->name, name_len);
+        dst += name_len;
     }
+    *dst = '\0';
     s_joined = buf;
     return s_joined;
 }

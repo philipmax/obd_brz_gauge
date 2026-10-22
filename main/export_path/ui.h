@@ -13,22 +13,11 @@ extern "C" {
 #include "lvgl.h"
 
 #include "ui_helpers.h"
-#include "ui_events.h"
 #include "ui_disp_item.h"
 #include "ui_theme.h"
 #include "esp_log.h"
 #include "app_obd_dsp/obd_data_cache.h"
 
-#define USE_GIF_LOGO        0
-#define USE_GIF_EASTER_EGG  0
-// Custom boot logo switch: 1=use the customer's custom image (imgBootLogoCustom) as the boot animation; 0=use the default SKY GAUGE
-// Before setting 1, convert the customer PNG to an LVGL C array (variable name imgBootLogoCustom) in the images/ directory
-#define USE_CUSTOM_BOOT_LOGO 0
-// Custom RPM-warning flash images: 1=flash 3 images in a loop (replacing red/black); 0=default red/black flash
-// Before setting 1, convert the 3 PNGs to LVGL C arrays in the images/ directory
-#define USE_CUSTOM_RPM_FLASH 0
-
-#define COLOR_MITSUBISHI_RED    0xFFFFFF //main color white (originally Mitsubishi red)
 #define COLOR_DOMIANT_PINK      0xFFFFFF //main color white (originally pink)
 #define COLOR_SECONDARY_PINK    0x333333 //secondary color dark gray (originally dark pink)
 
@@ -36,24 +25,6 @@ extern "C" {
 
 void ui_ScreenPageLogo_screen_init(void);
 extern lv_obj_t * ui_ScreenPageLogo;
-extern lv_obj_t * imageLogo;
-
-// SCREEN: ui_ScreenPageMain
-void ui_ScreenPageMain_screen_init(void);
-extern lv_obj_t * ui_ScreenPageMain;
-extern lv_obj_t * ui_ImageMainPageback;
-extern lv_obj_t * ui_SpinnerMainPage;
-extern lv_obj_t * ui_ArcGearNumBack;
-extern lv_obj_t * ui_LabelGeningRpmText;
-extern lv_obj_t * ui_LabelGeningRpmUnitText;
-extern lv_obj_t * ui_LabelCarSpeedText;
-extern lv_obj_t * ui_LabelCarSpeedUnitText;
-extern lv_obj_t * ui_ContainerMainPageBottomBlock;
-extern lv_obj_t * ui_LabelGearNumText;
-extern lv_obj_t * ui_ContainerMainPageMlieageBlock;
-extern lv_obj_t * ui_LabelMainMlieageText;
-extern lv_obj_t * ui_LabelMainMieageNum;
-// CUSTOM VARIABLES
 
 // SCREEN: ui_ScreenPageGear
 void ui_ScreenPageGear_screen_init(void);
@@ -66,6 +37,7 @@ extern lv_obj_t * ui_ImageGearBlackEar;
 
 // SCREEN: ui_ScreenPageThemeGauge (theme-partition custom gauge page)
 void ui_ScreenPageThemeGauge_screen_init(void);
+void ui_ScreenPageThemeGauge_attach(lv_obj_t *screen);
 extern lv_obj_t * ui_ScreenPageThemeGauge;
 void ui_event_theme_gauge_background(lv_event_t * e);
 extern uint8_t ui_theme_gauge_page_index;  // Current theme page index
@@ -104,7 +76,6 @@ void ui_ScreenPageEasterEgg_screen_init(void);
 extern lv_obj_t * ui_ScreenPageEasterEgg;
 extern lv_obj_t * ui_SpinnerEasterEgg;
 extern lv_obj_t * ArcPageEasterEggBack;
-extern lv_obj_t * imageEasterEgg;
 extern lv_obj_t * ui_ImageEggBlackEar;
 extern lv_obj_t * ui_LabelEasterEggInfo;  // dynamically updated device info label
 void ui_event_easter_egg_ota_button(lv_event_t * e);  // OTA mode button handler
@@ -119,9 +90,7 @@ void ui_event_ble_scan_background(lv_event_t * e);
 // SCREEN: ui_ScreenPageOTAMode
 void ui_ScreenPageOTAMode_screen_init(void);
 extern lv_obj_t * ui_ScreenPageOTAMode;
-extern lv_obj_t * ui_LabelOTAModeStatus;
 extern lv_obj_t * ui_LabelOTAModeVersion;
-void ui_ota_mode_refresh(void);  // called from timer to update OTA status
 
 // SCREEN: ui_ScreenPageTemp
 void ui_ScreenPageTemp_screen_init(void);
@@ -195,10 +164,6 @@ extern lv_obj_t * ui_ScreenPageSettings;
 void ui_event_settings_background(lv_event_t * e);
 // CUSTOM VARIABLES
 
-// SCREEN: ui_ScreenPageOilWarn
-void ui_ScreenPageOilWarn_screen_init(void);
-extern lv_obj_t * ui_ScreenPageOilWarn;
-void ui_event_oil_warn_background(lv_event_t * e);
 
 // SCREEN: ui_ScreenPageRpmWarn (RPM warning settings)
 void ui_ScreenPageRpmWarn_screen_init(void);
@@ -227,10 +192,20 @@ void ui_ScreenPageMultiGauge_screen_init(void);
 extern lv_obj_t * ui_ScreenPageMultiGauge;
 void ui_event_multi_gauge_background(lv_event_t * e);
 
+// SCREEN: ui_ScreenPageVehicle (Vehicle button on the settings page: select a built-in / imported vehicle profile)
+void ui_ScreenPageVehicle_screen_init(void);
+extern lv_obj_t * ui_ScreenPageVehicle;
+void ui_event_vehicle_background(lv_event_t * e);
+
+// SCREEN: ui_ScreenPageStorage (swipe up on the settings page: SD state / scan / eject / export)
+void ui_ScreenPageStorage_screen_init(void);
+extern lv_obj_t * ui_ScreenPageStorage;
+void ui_event_storage_background(lv_event_t * e);
+
 // Needle page runtime interface (implemented in ui.c, reuses the disp_item system)
 void ui_needle_page_update(float sweep_ratio, int16_t clt, int16_t iat, int16_t oil,
                            int16_t load_pct, int16_t tps, int32_t bat_mv,
-                           int16_t oilp_x10, int16_t brake_x10,
+                           int16_t oilp_x10,
                            uint16_t rpm, uint16_t speed, int16_t boost_x10,
                            int16_t afr_x100);
 void ui_needle_apply_source(void);  // rebuild range/name/unit after the data source changes
@@ -239,24 +214,7 @@ int  ui_sweep_get_step(void);       // get the current sweep progress (master br
 
 // EVENTS
 
-extern lv_obj_t * ui____initial_actions0;
-LV_IMG_DECLARE(gifBlueLightLogo);    
-LV_IMG_DECLARE(gifSnake400);  
-LV_IMG_DECLARE(gifKaBiBaLaZip);    // assets/pngBlueLightLogo.png
-LV_IMG_DECLARE(gifCuteCatZip);
-LV_IMG_DECLARE(gifBlackLeopard);
 // IMAGES AND IMAGE SETS
-LV_IMG_DECLARE(ui_img_pngmainback_png);    // assets/pngMainBack.png
-LV_IMG_DECLARE(pngLogoMITSUBISHI);    // assets/pngLogoMITSUBISHI.png
-LV_IMG_DECLARE(pngLogoSkyGarage);     // assets/sklogo.png (280x280)
-#if USE_CUSTOM_BOOT_LOGO == 1
-LV_IMG_DECLARE(imgBootLogoCustom);    // customer custom boot image (convert it yourself and place in images/)
-#endif
-#if USE_CUSTOM_RPM_FLASH == 1
-LV_IMG_DECLARE(imgRpmFlash1);
-LV_IMG_DECLARE(imgRpmFlash2);
-LV_IMG_DECLARE(imgRpmFlash3);
-#endif
 
 // RPM warning test: when set >0 the flash is force-triggered, self-decrements each tick, stops at zero
 extern volatile int s_rpm_flash_test_ticks;
@@ -269,37 +227,19 @@ void ui_showroom_set_active(bool en);
 void ui_showroom_set_page_from_sync(int sweep_step);
 LV_IMG_DECLARE(ui_img_pngblackear_png);    // assets/pngBlackEar.png
 // FONTS
-LV_FONT_DECLARE(ui_font_FontBabyGearNumSize48);
-LV_FONT_DECLARE(ui_font_FontBabySize108);
-LV_FONT_DECLARE(ui_font_FontBabySize156);
-LV_FONT_DECLARE(ui_font_FontBabySize180);
-LV_FONT_DECLARE(ui_font_FontBabySize200);
-LV_FONT_DECLARE(ui_font_FontBabySize56);
-LV_FONT_DECLARE(ui_font_FontTaikongSize108);
-LV_FONT_DECLARE(ui_font_FontTaikongSize128);
-LV_FONT_DECLARE(ui_font_FontTaikongSize32);
-LV_FONT_DECLARE(ui_font_FontTaikongSize40);
-LV_FONT_DECLARE(ui_font_FontTaikongSize48);
-LV_FONT_DECLARE(ui_font_FontTaikongSize56);
-LV_FONT_DECLARE(ui_font_FontTaikongSize64);
-LV_FONT_DECLARE(ui_font_FontTaikongSize72);
 LV_FONT_DECLARE(ui_font_FontTypoderSize16);
 LV_FONT_DECLARE(ui_font_FontTypoderSize20);
 LV_FONT_DECLARE(ui_font_FontTypoderSize24);
-LV_FONT_DECLARE(ui_font_FontTypoderSize28);
-LV_FONT_DECLARE(ui_font_FontTypoderSize32);
 LV_FONT_DECLARE(ui_font_FontTypoderSize36);
 LV_FONT_DECLARE(ui_font_FontTypoderSize40);
 LV_FONT_DECLARE(ui_font_FontTypoderSize44);
 LV_FONT_DECLARE(ui_font_FontTypoderSize56);
-LV_FONT_DECLARE(ui_font_FontTypoderSize100);
 LV_FONT_DECLARE(ui_font_FontTypoderSize140);
 
 
 // UI INIT
 void ui_init(void);
 void ui_event_logo_background(lv_event_t * e);
-void ui_event_main_background(lv_event_t * e);
 void ui_event_gear_background(lv_event_t * e);
 void ui_event_rpm_background(lv_event_t * e);
 void ui_event_speed_background(lv_event_t * e);

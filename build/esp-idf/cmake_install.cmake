@@ -569,6 +569,11 @@ endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for the subdirectory.
+  include("/Users/parklu/personProject/obd_brz_gauge/build/esp-idf/joltwallet__littlefs/cmake_install.cmake")
+endif()
+
+if(NOT CMAKE_INSTALL_LOCAL_ONLY)
+  # Include the install script for the subdirectory.
   include("/Users/parklu/personProject/obd_brz_gauge/build/esp-idf/espressif__esp_lcd_touch/cmake_install.cmake")
 endif()
 
@@ -579,17 +584,7 @@ endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for the subdirectory.
-  include("/Users/parklu/personProject/obd_brz_gauge/build/esp-idf/espressif__cmake_utilities/cmake_install.cmake")
-endif()
-
-if(NOT CMAKE_INSTALL_LOCAL_ONLY)
-  # Include the install script for the subdirectory.
-  include("/Users/parklu/personProject/obd_brz_gauge/build/esp-idf/espressif__button/cmake_install.cmake")
-endif()
-
-if(NOT CMAKE_INSTALL_LOCAL_ONLY)
-  # Include the install script for the subdirectory.
-  include("/Users/parklu/personProject/obd_brz_gauge/build/esp-idf/espressif__knob/cmake_install.cmake")
+  include("/Users/parklu/personProject/obd_brz_gauge/build/esp-idf/espressif__esp_new_jpeg/cmake_install.cmake")
 endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)

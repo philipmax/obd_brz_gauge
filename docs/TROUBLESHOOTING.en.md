@@ -3,8 +3,7 @@
 English | [简体中文](TROUBLESHOOTING.md)
 
 When the gauge won't connect or shows no data, work through the layers in
-order: **BLE link first, then protocol, then data, then the standalone
-peripherals.** With USB attached, watch logs via `idf.py monitor` — key tags
+order: **BLE link first, then protocol, then data.** With USB attached, watch logs via `idf.py monitor` — key tags
 in [log keywords](#log-keywords).
 
 ```
@@ -14,9 +13,7 @@ Protocol handshake OK, RPM readable? ──no──→ Step 2
         │ yes
 Every channel you need has data? ──no──→ Step 3
         │ yes
-RS485 brake temperature OK? ──no──→ Step 4
-        │ yes
-Still misbehaving ──→ Step 5, last resorts
+Still misbehaving ──→ Step 4, last resorts
 ```
 
 ## Step 1: the BLE link
@@ -64,10 +61,15 @@ all failed → fall back to protocol 6, log
 
 ### Selecting a protocol manually
 
-If you know the car's protocol, lock it directly (the built-in profiles' lock
-values are in the [profile table](VEHICLES.en.md#built-in-profile-table);
-most post-2010 cars are 6 or 7). Entry point: **double-tap the logo page**
-→ protocol roller → choose → **long-press 2 s to save and reboot**.
+The firmware only builds in one generic profile, `Generic OBD2`; a
+car-specific profile has to be installed from the vehicle catalog
+(`vehicles/catalog/*.vehicle.json`) via the SD card's `/OBD/IMPORT` or the
+phone app. Once installed, the protocol is already locked for that car and
+you don't need to pick it here (most post-2010 cars are 6 or 7; the catalog's
+exact lock values are in [VEHICLES.en.md](VEHICLES.en.md)). If you haven't
+installed the matching profile yet and want to try protocols by hand, entry
+point: **double-tap the logo page** → protocol roller → choose →
+**long-press 2 s to save and reboot**.
 
 Standard ELM327 protocol numbers (`ATSP`):
 
@@ -126,44 +128,27 @@ elm327_ble: RAW[...]: ?               ← broken: wrong protocol / no bus reply
 elm327_ble: PARSE_FAIL / TIMEOUT_AGAIN
 ```
 
-## Step 4: RS485 brake temperature (independent link)
-
-RS485 goes over UART, not Bluetooth — troubleshoot it separately:
-
-1. **Wiring**: GPIO13 (TX) / GPIO12 (RX), fixed 9600 baud, Modbus RTU. The
-   DE/RE direction pin is disabled by default (`-1`, auto-direction
-   modules); pins are changeable under
-   `idf.py menuconfig → OBD DSP Configuration`
-2. **Quick check**: attach a USB-TTL adapter to the PC and run
-
-```bash
-python3 main/python_quick_rs485_check.py --port /dev/cu.usbserial-XXXX --baud 9600 --tries 5
-```
-
-The script sends a standard Modbus read (addr=1, func=03, reg=0x0000) and
-prints the sensor's reply. PC reads fine but the gauge doesn't → check wiring
-and common ground; PC can't read either → sensor power / wiring.
-
-Note: there is no brake-temperature status page in the UI — the values feed
-the **CHART page**; the log tag is `brake_temp`.
-
-## Step 5: last resorts
+## Step 4: last resorts
 
 1. Power-cycle the whole chain: gauge → OBD adapter → ignition, then reconnect
 2. Re-check settings: right vehicle profile? (protocol lock and oil-temp
    path follow the profile) Is the BLE device name the intended adapter?
 3. Repeated init failures or NVS errors in the log: reflash over USB (a full
    first flash erases NVS anyway); for WiFi OOM crashes in master/slave mode,
-   run `python3 fix_nvs.py` to reset the role to standalone
+   set Settings → MULTI-GAUGE back to standalone (takes effect after reboot)
 
 ## Log keywords
 
 | Tag / keyword | Meaning |
 |---------------|---------|
 | `elm327_ble` | BLE connection, init, polling, protocol detection (`[DETECT]` prefix) |
-| `brake_temp` | RS485 brake temperature (500 ms per-read timeout) |
-| `vehicle_profile` | profile switching, gear-range rebuild |
+| `vp_manager` | vehicle switching, verification period, safe mode, auto rollback |
+| `sd_import` | processing results for SD card `/OBD/IMPORT` |
+| `ui_storage` / `storage` | storage-page button jobs / background storage service (mirroring, resume, periodic scans) |
+| `theme_lib` / `theme_mount` | theme-library write progress / resuming a theme write at boot or card insert |
 | `theme_engine` | theme partition loading / fallback |
+| `coredump` | core dump storage (paired with `GET /ota/coredump`) |
+| `ota_wifi` | OTA WiFi hotspot mode and firmware / theme / boot-animation pushes |
 | `ERROR` / `WARN` | any module |
 
 To debug-log: `idf.py menuconfig → Component config → Log output → Default
@@ -185,21 +170,76 @@ adapter. Try another protocol and reconnect.
 
 **Q: RPM/speed fine but oil temp / load missing?**
 The oil-temp path is per-vehicle (standard 5C is only supported on some cars;
-Toyota/Mazda/BMW use private modes) — confirm the vehicle profile matches.
-If it still fails, that car needs a new oil formula ([VEHICLES.en.md](VEHICLES.en.md)).
+Toyota/Mazda/BMW use private modes) — confirm you have the right catalog
+profile installed and activated (the firmware only builds in `Generic OBD2`;
+a car-specific profile has to be installed from the catalog, see the next
+entry). If it still fails, that car needs a new oil formula
+([VEHICLES.en.md](VEHICLES.en.md)).
 
 **Q: how do I tell a dead adapter apart?**
 Install Car Scanner / Torque Pro on a phone and connect to the same adapter.
 Phone can't read either → adapter or car problem; phone fine but gauge not →
 open an issue with the log attached.
 
-**Q: which protocol does the BRZ ZD8 (Gen2) use?**
-Protocol 6. The built-in `ZD8 OBD` / `ZD8` profiles already lock protocol 6
-and read oil temp via standard PID 5C — just pick the profile, no manual
-trial needed.
+**Q: which protocol does the BRZ ZD8 (Gen2) use? How do I install the profile?**
+Protocol 6. The firmware only builds in the generic `Generic OBD2`; the
+`subaru.zd8.obd` and `subaru.zd8.pid` profiles both live in the vehicle
+catalog (`vehicles/catalog/`) and have to be installed first: drop the
+matching `*.vehicle.json` into the SD card's `/OBD/IMPORT` (or push it via
+the phone app), then select it on the vehicle page and tap USE — or drop an
+`ACTIVATE.TXT` with the profile id into `/OBD/IMPORT` at the same time to do
+it in one step. Both profiles already lock protocol 6 and read oil temp via
+standard PID `01 5C`.
 
 **Q: do multiple gauges interfere over protocols?**
 No. Each gauge stores its protocol in its own NVS.
+
+**Q: card inserted but the gauge shows `NO CARD` or `CARD ERROR`?**
+The storage page (swipe up from Settings) only supports **FAT16 / FAT32** —
+an exFAT or unformatted card shows `CARD ERROR` with the hint "Use FAT32";
+the device never formats the card automatically, so reformat it to FAT32 on
+a computer. Seeing `NO SD SLOT` is normal — only the V1 Waveshare board has
+a card slot, V2/V3 boards do not.
+
+**Q: an SD import (vehicle profile / theme) didn't take effect?**
+After tapping SCAN on the storage page (or waiting for the automatic scan at
+boot / card insert), check the results in `/OBD/IMPORT`: successful files are
+renamed to `<filename>.ok`, failed ones to `<filename>.err` with a matching
+`<filename>.err.txt` — first line is the failure reason, followed by one
+line per validator issue. You can also check the summary in
+`/OBD/IMPORT.LOG`, or the "Import log" panel on the OTA mode web page.
+Note that installing a `*.vehicle.json` **never auto-activates it** — you
+also need an `ACTIVATE.TXT` or to tap USE on the vehicle page manually.
+
+**Q: storage page says "Theme write failed" or "Busy, try again" / "theme library busy"?**
+"Busy, try again": another SD / theme job is already running (an import, a
+config mirror, another theme write) — wait for it to finish and retry.
+"Theme write failed: <reason>": something is wrong with the theme package
+itself (corrupt, larger than the theme_0 partition, unsupported schema
+version); a failed write automatically restores the previous theme, so
+normal use is unaffected. "theme library busy" also shows up when pushing a
+theme or boot animation from the OTA web page — that path shares the same
+lock with the storage page's theme write, so wait for the SD-side write to
+finish before pushing from the app.
+
+**Q: the VEHICLE button on the vehicle page shows `SAFE`, or the gauge keeps running Generic and won't switch vehicles?**
+That's **safe mode**: after 3 abnormal resets in a row (crash / watchdog),
+the next boot is forced to run only `Generic OBD2`, no pending vehicle
+switch is promoted, and the SD card only processes `RESET.TXT`. Running
+normally for 60 seconds clears the crash counter and recovers
+automatically. To get out immediately: tap **GENERIC** on the vehicle page,
+or drop a `RESET.TXT` file into `/OBD/IMPORT` on the SD card. If the vehicle
+page instead shows `FAIL`, that's a different thing — a vehicle failed
+verification on 3 boots in a row and was auto rolled back; it is not safe
+mode, and the reason is in the vehicle page's error area.
+
+**Q: how do I retrieve a core dump?**
+Enter OTA mode, join the `OBD-Gauge-OTA-XXXX` hotspot with a phone, open
+`http://192.168.4.1/` in a browser, and click Download in the "Core dump"
+panel — or call `GET /ota/coredump` directly (needs the `X-OTA-Token` from
+`GET /ota/discover` first). With no core dump stored it returns
+**204 No Content** (the web page shows "No core dump stored."), not 404.
+Clear it afterwards with Erase or `POST /ota/coredump/erase`.
 
 ---
 

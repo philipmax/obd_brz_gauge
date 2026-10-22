@@ -1,0 +1,7 @@
+case,iterations,floating_ns,integer_ns,ratio,checksum
+oil_pressure,1000000,3.26,2.73,1.193,144378948
+battery_voltage,1000000,2.60,2.29,1.133,133241436
+rpm_identity,1000000,1.68,1.44,1.161,8998533008
+veh_identity,1000000,0.96,1.29,0.746,8998533008
+oil_pressure_negative,1000000,1.59,1.88,0.848,-144535201
+battery_voltage_negative,1000000,1.88,1.57,1.196,-134241436

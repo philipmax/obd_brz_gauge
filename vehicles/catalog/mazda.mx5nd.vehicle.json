@@ -1,0 +1,142 @@
+{
+  "schema": "skygauge.vehicle/1",
+  "id": "mazda.mx5nd",
+  "rev": 1,
+  "name": "MX-5 ND",
+  "origin": {
+    "from": "legacy 4b056c0",
+    "legacy_idx": 5,
+    "legacy_name": "MX-5 ND"
+  },
+  "bus": {
+    "atst": 10,
+    "gap_ms": 1
+  },
+  "drivetrain": {
+    "fd": 2.866,
+    "tire_m": 0.3,
+    "gears": [5.087, 2.991, 2.035, 1.594, 1.286, 1],
+    "tol": 0.15
+  },
+  "signals": [
+    {
+      "id": "obd.rpm",
+      "rate": "every",
+      "src": [
+        {
+          "req": "010C",
+          "len": 2,
+          "expr": "(A*256+B)/4",
+          "rpn": [["A", 0], ["k", 256], "*", ["A", 1], "+", ["k", 4], "/"]
+        }
+      ]
+    },
+    {
+      "id": "obd.intake_temp",
+      "src": [
+        {
+          "req": "010F",
+          "len": 1,
+          "expr": "A-40",
+          "rpn": [["A", 0], ["k", 40], "-"]
+        }
+      ]
+    },
+    {
+      "id": "obd.speed",
+      "post": {
+        "zero_le": 2
+      },
+      "src": [
+        {
+          "req": "010D",
+          "len": 1,
+          "expr": "A",
+          "rpn": [["A", 0]]
+        }
+      ]
+    },
+    {
+      "id": "obd.coolant_temp",
+      "src": [
+        {
+          "req": "0105",
+          "len": 1,
+          "expr": "A-40",
+          "rpn": [["A", 0], ["k", 40], "-"]
+        }
+      ]
+    },
+    {
+      "id": "obd.load",
+      "src": [
+        {
+          "req": "0104",
+          "len": 1,
+          "expr": "A*100/255",
+          "rpn": [["A", 0], ["k", 100], "*", ["k", 255], "/"]
+        }
+      ]
+    },
+    {
+      "id": "obd.throttle",
+      "src": [
+        {
+          "req": "0111",
+          "len": 1,
+          "expr": "A*100/255",
+          "rpn": [["A", 0], ["k", 100], "*", ["k", 255], "/"]
+        }
+      ]
+    },
+    {
+      "id": "obd.oil_temp",
+      "valid": [-20, 150],
+      "filter": "temp_hyst",
+      "src": [
+        {
+          "req": "221310",
+          "len": 2,
+          "valid": [-40, 215],
+          "expr": "(A*256+B)*0.01-40",
+          "rpn": [["A", 0], ["k", 256], "*", ["A", 1], "+", ["k", 0.01], "*", ["k", 40], "-"]
+        },
+        {
+          "req": "22111F",
+          "len": 1,
+          "valid": [-40, 215],
+          "expr": "A-50",
+          "rpn": [["A", 0], ["k", 50], "-"]
+        }
+      ]
+    },
+    {
+      "id": "obd.battery_voltage",
+      "unit": "mV",
+      "src": [
+        {
+          "req": "0142",
+          "len": 2,
+          "expr": "A*256+B",
+          "rpn": [["R", 0, 16, "be"]]
+        }
+      ]
+    },
+    {
+      "id": "obd.afr",
+      "src": [
+        {
+          "req": "0144",
+          "len": 2,
+          "valid": [8, 22],
+          "expr": "(A*256+B)*14.7/32768",
+          "rpn": [["R", 0, 16, "be"], ["k", 14.7], "*", ["k", 32768], "/"]
+        }
+      ]
+    },
+    {
+      "id": "obd.gear",
+      "derive": "ratio"
+    }
+  ]
+}

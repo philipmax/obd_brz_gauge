@@ -19,8 +19,9 @@
 |------|------|
 | [docs/USER_GUIDE.md](docs/USER_GUIDE.md) | **使用指南** —— 页面导航、设置、三连表配对、开机动画、App 升级 |
 | [docs/FLASH.md](docs/FLASH.md) | **烧录与升级** —— 分区表、USB 烧录、App OTA 与回滚 |
-| [docs/APP_PROTOCOL.md](docs/APP_PROTOCOL.md) | **App 对接协议** —— BLE 服务与 WiFi HTTP API |
-| [docs/VEHICLES.md](docs/VEHICLES.md) | **车型适配** —— 17 个内置车型、新增车型教程 |
+| [docs/APP_PROTOCOL.md](docs/APP_PROTOCOL.md) | **App 对接协议** —— OTA 模式的 WiFi HTTP API |
+| [docs/VEHICLES.md](docs/VEHICLES.md) | **车型适配** —— JSON 车型档案（17 个，固件仅内置 1 个）、安装/激活、新增车型教程 |
+| [docs/PID_GUIDE.md](docs/PID_GUIDE.md) | **PID / 信号定义指南** —— 怎么把挖到的 PID/CAN 位写成 RPN 公式，含真实例子 |
 | [docs/THEMES.md](docs/THEMES.md) | **主题制作** —— 两套主题系统、素材规格、主题商店 |
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | **故障排查** —— 连不上 / 没数据、协议自动检测 |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | **开发指南** —— 代码架构、编译配置、工具脚本 |
@@ -34,12 +35,14 @@
 | 软件栈 | ESP-IDF 5.5.3，LVGL 8 |
 | 通信 | BLE 连接 ELM327 兼容 OBD 适配器（标准 PID + 各厂商私有 Mode 21/22）|
 | 三连表 | 一块主表读 OBD，其余从表通过 ESP-NOW 零负载同步显示 |
-| 传感器 | RS485 刹车温度（Modbus RTU）、ADS1115 油压 ADC（V1 板，部分车型可用 OBD 直读油压替代）|
+| 传感器 | ADS1115 油压 ADC（V1 板，部分车型可用 OBD 直读油压替代）|
 
-## 内置车型（17 个）
+## 车型适配（17 个档案，固件仅内置 1 个）
 
-在**设置页 → VEHICLE** 滚轮里选择你的车型（立即生效，不用重启）。
-各车型的协议锁定、油温读取、挡位来源等完整对比见
+固件只内置 `OBD2 Generic`（标准 OBD2）。其余 16 个车型是 JSON 档案，
+从 SD 卡（`/OBD/IMPORT`）、配套 App（经 `/api/v1/vehicles` 接口）或车机
+**Vehicle 页**安装后，激活并
+重启生效。完整的目录表格、安装步骤、行为变化见
 [docs/VEHICLES.md](docs/VEHICLES.md)：
 
 `OBD2 Generic` · `ZN/C6 CAN` · `ZN/C6 PID` · `ZD8 OBD` · `ZD8` · `MX-5 ND` ·
@@ -48,15 +51,23 @@
 
 当前仅在 Subaru BRZ ZN/C6 上完整验证；其余车型已配置，部分仍需上车验证。
 
+可编辑配置另见 [vehicles/import/](vehicles/import/README.md)：**18 份独立导入模板**
+（现有 17 份的 `custom.*` 副本 + BMW G 直接挡位），明确请求头、位解码和轮询间隔。
+将选中的 JSON 放进 SD 卡 `OBD/IMPORT/`，安装后激活并重启。
+
+新增车型可以只写特有信号，未声明的 9 个标准信号默认走 OBD2；支持单项
+`disabled: true` 和根字段 `defaults: "none"`。最小配置与 BMW G 精简挡位示例见
+[vehicles/examples/](vehicles/examples/README.md)。
+
 ## 核心特性
 
-- **17 个车型配置**：各车型独立的传动比（最高 8 挡）、油温读取策略、协议锁定、功能寻址；挡位优先用 CAN/DID 直读，无效时按传动比估算
+- **JSON 车型档案系统**：17 个档案，固件仅内置 `OBD2 Generic`，其余经 SD/App/Vehicle 页安装+激活+重启启用；各车型独立传动比（最高 8 挡）、油温读取策略、协议锁定、功能寻址；挡位优先用 CAN/DID 直读，无效时按传动比估算
 - **CAN 广播帧监听**：仅 `ZN/C6 CAN` 走 ATMA 高速通道（0x140 节气门、0x360 油温水温）；其余车型保持单线程 OBD 轮询，避免适配器抢占
 - **厂商油温路径**：丰田/斯巴鲁 Mode 21、马自达 / MINI / BMW Mode 22、FCA UDS 扩展寻址等，主策略失败自动回退
 - **三连表（ESP-NOW）**：主表广播、从表零额外 OBD 负载，走真蓝牙配对（主表广播 `SkyGauge-XXYY`），断电记忆
 - **转速报警（含联动模式）**：超阈值全屏红色闪烁；三连表模式按表位依次亮起
-- **两套主题系统**：编译期 TOML 主题（改颜色/素材）与运行时主题分区（自定义表盘页面布局），见 [docs/THEMES.md](docs/THEMES.md)
-- **双路 OTA**：配套手机 App 走 BLE 或 WiFi 热点传输，SHA256 校验 + 15 秒开机自检失败自动回滚
+- **两套主题系统**：编译期 TOML 主题（改颜色/素材）与 SD 运行时主题（自定义表盘页面布局），见 [docs/THEMES.md](docs/THEMES.md)
+- **App OTA**：配套手机 App 走 WiFi 热点传输，SHA256 校验 + 15 秒开机自检失败自动回滚
 - **开机动画**：OFF / RACE / VIDEO 三模式，VIDEO 模式可从手机 App 上传自制动画（360×360 圆形安全区）
 - **RaceChrono BLE 输出**：可作为 RaceChrono DIY 设备向手机 App 提供数据
 - **自愈连接**：数据中断自动重初始化重连，上车通电无需手动操作
@@ -73,13 +84,12 @@ esptool.py --chip esp32s3 -p PORT -b 460800 --before default_reset --after hard_
   0x0     firmware/release/bootloader/bootloader.bin \
   0x8000  firmware/release/partition_table/partition-table.bin \
   0xf000  firmware/release/ota_data_initial.bin \
-  0x20000 firmware/release/obd_brz_gauge.bin \
-  0xA20000 firmware/release/bootmedia.bin
+  0x20000 firmware/release/obd_brz_gauge.bin
 ```
 
 - `PORT` 换成你的串口（Windows `COM3`，Linux `/dev/ttyUSB0`，macOS `/dev/cu.usbserial-*`）
-- 首次烧录会擦除全部数据（含 NVS 设置）
-- `bootmedia.bin`（开机动画）和可选的主题分区 `0x620000` 不烧也能正常开机
+- 这条命令不会动 NVS 用户设置和蓝牙绑定；首次开机的一次性迁移细节见 [docs/FLASH.md](docs/FLASH.md)
+- 自定义图片、字体、主题视频和独立开机动画均存 SD；主题包放 `/OBD/THEMES/<key>/theme.bin`，开机动画由网页上传到公共 `/OBD/BOOT/`，旧 `bootmedia.bin` 可复制为 `/OBD/BOOT/bootmedia.raw`，无卡使用内置界面
 - 完整分区布局见 [docs/FLASH.md](docs/FLASH.md)，烧录地址以 [partitions.csv](partitions.csv) 为准
 
 ### 方式二：源码编译
@@ -102,13 +112,15 @@ idf.py -p PORT flash monitor
 ```
 main/
 ├── app_main.c          # 入口：硬件、LVGL、BLE 与任务启动
-├── app_obd_dsp/        # 应用层：OBD 缓存、车型配置、OTA、开机动画、设备身份
-├── bsp_obd_dsp/        # 板级：ELM327 BLE 客户端、ESP-NOW、LCD/触摸/IO 扩展、NVS、RS485
+├── app_obd_dsp/        # 应用层：OBD 缓存、SD 导入/激活、OTA、开机动画、设备身份
+├── bsp_obd_dsp/        # 板级：ELM327 BLE 客户端、ESP-NOW、LCD/触摸/IO 扩展、NVS
 ├── export_path/        # LVGL UI（SquareLine 导出）：20+ 页面、字体、图片
-└── theme_engine/       # 运行时主题加载器（theme_0 分区）
+├── theme_engine/       # 运行时主题加载器（SD theme.bin）
+└── vehicle/            # 车型档案管理（vp_manager，JSON 校验/编译/生命周期）
 themes/                 # 编译期主题源文件（TOML 清单 + 素材）
-theme_store/            # 打包好的主题二进制与目录索引（分发用）
 bootmedia/              # 开机动画源文件
+vehicles/catalog/       # 车型档案目录（JSON，不编译进固件，见 docs/VEHICLES.md）
+vehicles/import/        # 可编辑 SD 导入包（18 份 custom.* JSON 模板）
 tools/                  # 工具脚本（主题生成、打包、PID 挖掘、发布）
 firmware/release/       # 预编译固件
 android_app/            # 配套手机 App（APK）
@@ -129,7 +141,7 @@ partitions.csv          # Flash 分区表（16MB）
 ## 已知限制
 
 - 仅 Subaru BRZ ZN/C6 完整验证过数据读取；不保证所有 ELM327 兼容设备稳定工作，不保证各车型 PID 返回格式一致
-- 刹车温度 / 油压报警限制为 30 秒提示一次
+- 油压报警限制为 30 秒提示一次
 - 里程 / 行程统计只在运行时内存累计，每次开机清零
 - 主题切换需重启生效（所有页面仅在开机时创建一次）
 

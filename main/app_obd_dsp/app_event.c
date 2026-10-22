@@ -26,8 +26,9 @@ bool app_event_send(app_event_type_t type, uint32_t data)
     // Can be called from an ISR or a normal task
     if (xPortInIsrContext()) {
         BaseType_t woken = pdFALSE;
-        xQueueSendFromISR(s_queue, &evt, &woken);
-        return woken == pdTRUE;
+        BaseType_t sent = xQueueSendFromISR(s_queue, &evt, &woken);
+        (void)woken;  // Consumers poll from LVGL/poll tasks; no ISR wakeup is required.
+        return sent == pdTRUE;
     }
     return xQueueSend(s_queue, &evt, 0) == pdTRUE;  // non-blocking
 }
@@ -36,9 +37,4 @@ bool app_event_recv(app_event_t *out)
 {
     if (!s_queue || !out) return false;
     return xQueueReceive(s_queue, out, 0) == pdTRUE;  // non-blocking
-}
-
-QueueHandle_t app_event_queue(void)
-{
-    return s_queue;
 }

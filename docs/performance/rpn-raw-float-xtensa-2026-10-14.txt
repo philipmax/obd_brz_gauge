@@ -1,0 +1,1832 @@
+RPN raw-field float conversion evidence — 2026-10-14
+ESP-IDF 5.5.3 / Xtensa GCC 14.2.0
+
+baseline vp_rpn.c SHA256 ff24cae0442b7e344e24f780f93eb167e8abb79a88abefac36955a8ccae7dada
+production/candidate vp_rpn.c SHA256 5044d6eee663775000eb97ed4593eb346c243793cac4ce2f350d81669805f6b1
+
+normal before undefined FP helpers:
+         U __divsf3
+         U __floatdisf
+Static eval frame: /tmp/obd-rpn-raw-float-before.c:238:14:vp_rpn_eval	96	static
+
+normal after undefined FP helpers:
+         U __divsf3
+Static eval frame: /Users/parklu/personProject/obd_brz_gauge/main/vehicle/vp_rpn.c:238:14:vp_rpn_eval	96	static
+
+normal module text/readonly sizes:
+   text	   data	    bss	    dec	    hex	filename
+   3210	      0	      0	   3210	    c8a	/tmp/rpn-raw-float-normal-before.o
+   3238	      0	      0	   3238	    ca6	/tmp/rpn-raw-float-normal-after.o
+
+Standalone after/build .text.vp_rpn_eval bytes match; SHA256 779a3247679e9f3a66e7ef12a2407c471f1de9f732bc58d108ce209c9ec4318b
+
+Standalone after/build .literal.vp_rpn_eval bytes match; SHA256 d5ddba1e46f77d192374fd70a6d4d5ea2cec12b55eec1e3dcd3834e163399103
+
+No integer probe/baseline symbols in ELF; instrumentation only in stats ELF.
+App bytes 0x285640; SHA256 bc71fa110b1c46e5abcaa49fb49393a520cf2158c9dc8982d66e73585327f7db
+
+
+Normal before eval disassembly:
+Disassembly of section .text.vp_rpn_eval:
+
+00000000 <vp_rpn_eval>:
+   0:	00c136               	entry	a1, 96
+   3:	40f280               	nsau	a8, a2
+   6:	029d                	mov.n	a9, a2
+   8:	1a0c                	movi.n	a10, 1
+   a:	418580               	srli	a8, a8, 5
+   d:	51f216               	beqz	a2, 530 <vp_rpn_eval+0x530>
+			d: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x530
+  10:	838a70               	moveqz	a8, a10, a7
+  13:	519856               	bnez	a8, 530 <vp_rpn_eval+0x530>
+			13: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x530
+  16:	08cd                	mov.n	a12, a8
+  18:	83ca40               	moveqz	a12, a10, a4
+  1b:	6c8c                	beqz.n	a12, 25 <vp_rpn_eval+0x25>
+			1b: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x25
+  1d:	83a850               	moveqz	a10, a8, a5
+  20:	221c                	movi.n	a2, 18
+  22:	5b6a56               	bnez	a10, 5dc <vp_rpn_eval+0x5dc>
+			22: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5dc
+  25:	120c                	movi.n	a2, 1
+  27:	5b1316               	beqz	a3, 5dc <vp_rpn_eval+0x5dc>
+			27: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5dc
+  2a:	082c                	movi.n	a8, 32
+  2c:	220c                	movi.n	a2, 2
+  2e:	02b837               	bgeu	a8, a3, 34 <vp_rpn_eval+0x34>
+			2e: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x34
+  31:	0169c6               	j	5dc <vp_rpn_eval+0x5dc>
+			31: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5dc
+  34:	092d                	mov.n	a2, a9
+  36:	b03390               	addx8	a3, a3, a9
+  39:	0c0c                	movi.n	a12, 0
+  3b:	191c                	movi.n	a9, 17
+  3d:	0002a2               	l8ui	a10, a2, 0
+  40:	8a0b                	addi.n	a8, a10, -1
+  42:	748080               	extui	a8, a8, 0, 8
+  45:	02b987               	bgeu	a9, a8, 4b <vp_rpn_eval+0x4b>
+			45: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x4b
+  48:	013a46               	j	535 <vp_rpn_eval+0x535>
+			48: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x535
+  4b:	000081               	l32r	a8, fffc004c <vp_rpn_eval+0xfffc004c>
+			4b: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval
+  4e:	b08a80               	addx8	a8, a10, a8
+  51:	0008b2               	l8ui	a11, a8, 0
+  54:	0108d2               	l8ui	a13, a8, 1
+  57:	02bcb7               	bgeu	a12, a11, 5d <vp_rpn_eval+0x5d>
+			57: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5d
+  5a:	013706               	j	53a <vp_rpn_eval+0x53a>
+			5a: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x53a
+  5d:	c08cb0               	sub	a8, a12, a11
+  60:	dd8a                	add.n	a13, a13, a8
+  62:	8e0c                	movi.n	a14, 8
+  64:	02bed7               	bgeu	a14, a13, 6a <vp_rpn_eval+0x6a>
+			64: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x6a
+  67:	013546               	j	540 <vp_rpn_eval+0x540>
+			67: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x540
+  6a:	1b3b66               	bnei	a11, 3, 89 <vp_rpn_eval+0x89>
+			6a: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x89
+  6d:	fdccd2               	addi	a13, a12, -3
+  70:	feccb2               	addi	a11, a12, -2
+  73:	cc0b                	addi.n	a12, a12, -1
+  75:	a0dd10               	addx4	a13, a13, a1
+  78:	a0bb10               	addx4	a11, a11, a1
+  7b:	a0cc10               	addx4	a12, a12, a1
+  7e:	000d13               	lsi	f1, a13, 0
+  81:	000b03               	lsi	f0, a11, 0
+  84:	0cd8                	l32i.n	a13, a12, 0
+  86:	000b46               	j	b7 <vp_rpn_eval+0xb7>
+			86: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0xb7
+  89:	172b66               	bnei	a11, 2, a4 <vp_rpn_eval+0xa4>
+			89: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0xa4
+  8c:	feccb2               	addi	a11, a12, -2
+  8f:	cc0b                	addi.n	a12, a12, -1
+  91:	a0bb10               	addx4	a11, a11, a1
+  94:	a0cc10               	addx4	a12, a12, a1
+  97:	000b13               	lsi	f1, a11, 0
+  9a:	000c03               	lsi	f0, a12, 0
+  9d:	0d0c                	movi.n	a13, 0
+  9f:	000506               	j	b7 <vp_rpn_eval+0xb7>
+			9f: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0xb7
+  a2:	00                      	.byte	00
+  a3:	00                      	.byte	00
+  a4:	021b26               	beqi	a11, 1, aa <vp_rpn_eval+0xaa>
+			a4: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0xaa
+  a7:	012f86               	j	569 <vp_rpn_eval+0x569>
+			a7: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x569
+  aa:	cc0b                	addi.n	a12, a12, -1
+  ac:	a0cc10               	addx4	a12, a12, a1
+  af:	0d0c                	movi.n	a13, 0
+  b1:	000c13               	lsi	f1, a12, 0
+  b4:	fa0d50               	wfr	f0, a13
+  b7:	9b0c                	movi.n	a11, 9
+  b9:	029ab7               	bne	a10, a11, bf <vp_rpn_eval+0xbf>
+			b9: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0xbf
+  bc:	005806               	j	220 <vp_rpn_eval+0x220>
+			bc: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x220
+  bf:	293ba7               	bltu	a11, a10, ec <vp_rpn_eval+0xec>
+			bf: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0xec
+  c2:	025a66               	bnei	a10, 5, c8 <vp_rpn_eval+0xc8>
+			c2: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0xc8
+  c5:	003dc6               	j	1c0 <vp_rpn_eval+0x1c0>
+			c5: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x1c0
+  c8:	106af6               	bgeui	a10, 6, dc <vp_rpn_eval+0xdc>
+			c8: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0xdc
+  cb:	023a66               	bnei	a10, 3, d1 <vp_rpn_eval+0xd1>
+			cb: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0xd1
+  ce:	002dc6               	j	189 <vp_rpn_eval+0x189>
+			ce: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x189
+  d1:	024a66               	bnei	a10, 4, d7 <vp_rpn_eval+0xd7>
+			d1: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0xd7
+  d4:	003606               	j	1b0 <vp_rpn_eval+0x1b0>
+			d4: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x1b0
+  d7:	012946               	j	580 <vp_rpn_eval+0x580>
+			d7: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x580
+  da:	00                      	.byte	00
+  db:	00                      	.byte	00
+  dc:	027a66               	bnei	a10, 7, e2 <vp_rpn_eval+0xe2>
+			dc: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0xe2
+  df:	003f46               	j	1e0 <vp_rpn_eval+0x1e0>
+			df: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x1e0
+  e2:	028a26               	beqi	a10, 8, e8 <vp_rpn_eval+0xe8>
+			e2: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0xe8
+  e5:	0039c6               	j	1d0 <vp_rpn_eval+0x1d0>
+			e5: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x1d0
+  e8:	004946               	j	211 <vp_rpn_eval+0x211>
+			e8: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x211
+  eb:	00                      	.byte	00
+  ec:	fc0c                	movi.n	a12, 15
+  ee:	2a3ca7               	bltu	a12, a10, 11c <vp_rpn_eval+0x11c>
+			ee: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x11c
+  f1:	db0c                	movi.n	a11, 13
+  f3:	02bba7               	bgeu	a11, a10, f9 <vp_rpn_eval+0xf9>
+			f3: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0xf9
+  f6:	008a86               	j	324 <vp_rpn_eval+0x324>
+			f6: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x324
+  f9:	bb0c                	movi.n	a11, 11
+  fb:	029ab7               	bne	a10, a11, 101 <vp_rpn_eval+0x101>
+			fb: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x101
+  fe:	005586               	j	258 <vp_rpn_eval+0x258>
+			fe: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x258
+ 101:	023ba7               	bltu	a11, a10, 107 <vp_rpn_eval+0x107>
+			101: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x107
+ 104:	004c06               	j	238 <vp_rpn_eval+0x238>
+			104: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x238
+ 107:	0000b1               	l32r	a11, fffc0108 <vp_rpn_eval+0xfffc0108>
+			107: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 10a:	fa3110               	abs.s	f3, f1
+ 10d:	fa2b50               	wfr	f2, a11
+ 110:	5b0230               	ult.s	b0, f2, f3
+ 113:	021076               	bt	b0, 119 <vp_rpn_eval+0x119>
+			113: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x119
+ 116:	006186               	j	2a0 <vp_rpn_eval+0x2a0>
+			116: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x2a0
+ 119:	010dc6               	j	554 <vp_rpn_eval+0x554>
+			119: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x554
+ 11c:	1b1c                	movi.n	a11, 17
+ 11e:	029ab7               	bne	a10, a11, 124 <vp_rpn_eval+0x124>
+			11e: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x124
+ 121:	00bd06               	j	419 <vp_rpn_eval+0x419>
+			121: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x419
+ 124:	2b1c                	movi.n	a11, 18
+ 126:	021ab7               	beq	a10, a11, 12c <vp_rpn_eval+0x12c>
+			126: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x12c
+ 129:	00a4c6               	j	3c0 <vp_rpn_eval+0x3c0>
+			129: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x3c0
+ 12c:	00d4c6               	j	483 <vp_rpn_eval+0x483>
+			12c: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x483
+ 12f:	00                      	.byte	00
+ 130:	00                      	.byte	00
+ 131:	12a8                	l32i.n	a10, a2, 4
+ 133:	023a57               	bltu	a10, a5, 139 <vp_rpn_eval+0x139>
+			133: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x139
+ 136:	0102c6               	j	545 <vp_rpn_eval+0x545>
+			136: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x545
+ 139:	a4aa                	add.n	a10, a4, a10
+ 13b:	000aa2               	l8ui	a10, a10, 0
+ 13e:	0000b1               	l32r	a11, fffc0140 <vp_rpn_eval+0xfffc0140>
+			13e: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 141:	da0a00               	ufloat.s	f0, a10, 0
+ 144:	fa2b50               	wfr	f2, a11
+ 147:	fa3000               	mov.s	f3, f0
+ 14a:	00ec86               	j	500 <vp_rpn_eval+0x500>
+			14a: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x500
+ 14d:	0102d2               	l8ui	a13, a2, 1
+ 150:	c189                	s32i.n	a8, a1, 48
+ 152:	ad0b                	addi.n	a10, a13, -1
+ 154:	fb1c                	movi.n	a11, 31
+ 156:	74a0a0               	extui	a10, a10, 0, 8
+ 159:	273ba7               	bltu	a11, a10, 184 <vp_rpn_eval+0x184>
+			159: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x184
+ 15c:	12c8                	l32i.n	a12, a2, 4
+ 15e:	0000a1               	l32r	a10, fffc0160 <vp_rpn_eval+0xfffc0160>
+			15e: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0x4
+ 161:	1f3ac7               	bltu	a10, a12, 184 <vp_rpn_eval+0x184>
+			161: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x184
+ 164:	0202e2               	l8ui	a14, a2, 2
+ 167:	20c1f2               	addi	a15, a1, 32
+ 16a:	05bd                	mov.n	a11, a5
+ 16c:	04ad                	mov.n	a10, a4
+ 16e:	000081               	l32r	a8, fffc0170 <vp_rpn_eval+0xfffc0170>
+			16e: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0x28
+			16e: R_XTENSA_ASM_EXPAND	vp_rpn_extract_raw
+ 171:	0008e0               	callx8	a8
+ 174:	3cda16               	beqz	a10, 545 <vp_rpn_eval+0x545>
+			174: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x545
+ 177:	81a8                	l32i.n	a10, a1, 32
+ 179:	91b8                	l32i.n	a11, a1, 36
+ 17b:	000081               	l32r	a8, fffc017c <vp_rpn_eval+0xfffc017c>
+			17b: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0x2c
+			17b: R_XTENSA_ASM_EXPAND	__floatdisf
+ 17e:	0008e0               	callx8	a8
+ 181:	001dc6               	j	1fc <vp_rpn_eval+0x1fc>
+			181: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x1fc
+ 184:	820c                	movi.n	a2, 8
+ 186:	011486               	j	5dc <vp_rpn_eval+0x5dc>
+			186: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5dc
+ 189:	010203               	lsi	f0, a2, 4
+ 18c:	0000a1               	l32r	a10, fffc018c <vp_rpn_eval+0xfffc018c>
+			18c: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 18f:	fa1010               	abs.s	f1, f0
+ 192:	fa2a50               	wfr	f2, a10
+ 195:	5b0210               	ult.s	b0, f2, f1
+ 198:	020076               	bf	b0, 19e <vp_rpn_eval+0x19e>
+			198: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x19e
+ 19b:	00eac6               	j	54a <vp_rpn_eval+0x54a>
+			19b: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x54a
+ 19e:	0000a1               	l32r	a10, fffc01a0 <vp_rpn_eval+0xfffc01a0>
+			19e: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0x24
+ 1a1:	fa2a50               	wfr	f2, a10
+ 1a4:	6b0120               	ole.s	b0, f1, f2
+ 1a7:	020076               	bf	b0, 1ad <vp_rpn_eval+0x1ad>
+			1a7: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x1ad
+ 1aa:	00d806               	j	50e <vp_rpn_eval+0x50e>
+			1aa: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x50e
+ 1ad:	00e646               	j	54a <vp_rpn_eval+0x54a>
+			1ad: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x54a
+ 1b0:	0a0010               	add.s	f0, f0, f1
+ 1b3:	0000a1               	l32r	a10, fffc01b4 <vp_rpn_eval+0xfffc01b4>
+			1b3: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 1b6:	fa2a50               	wfr	f2, a10
+ 1b9:	fa3010               	abs.s	f3, f0
+ 1bc:	00d006               	j	500 <vp_rpn_eval+0x500>
+			1bc: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x500
+ 1bf:	00                      	.byte	00
+ 1c0:	1a0100               	sub.s	f0, f1, f0
+ 1c3:	0000a1               	l32r	a10, fffc01c4 <vp_rpn_eval+0xfffc01c4>
+			1c3: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 1c6:	fa2a50               	wfr	f2, a10
+ 1c9:	fa3010               	abs.s	f3, f0
+ 1cc:	00cc06               	j	500 <vp_rpn_eval+0x500>
+			1cc: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x500
+ 1cf:	00                      	.byte	00
+ 1d0:	2a0010               	mul.s	f0, f0, f1
+ 1d3:	0000a1               	l32r	a10, fffc01d4 <vp_rpn_eval+0xfffc01d4>
+			1d3: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 1d6:	fa2a50               	wfr	f2, a10
+ 1d9:	fa3010               	abs.s	f3, f0
+ 1dc:	00c806               	j	500 <vp_rpn_eval+0x500>
+			1dc: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x500
+ 1df:	00                      	.byte	00
+ 1e0:	c189                	s32i.n	a8, a1, 48
+ 1e2:	080c                	movi.n	a8, 0
+ 1e4:	fa3850               	wfr	f3, a8
+ 1e7:	2b0030               	oeq.s	b0, f0, f3
+ 1ea:	020076               	bf	b0, 1f0 <vp_rpn_eval+0x1f0>
+			1ea: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x1f0
+ 1ed:	00dcc6               	j	564 <vp_rpn_eval+0x564>
+			1ed: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x564
+ 1f0:	fab040               	rfr	a11, f0
+ 1f3:	faa140               	rfr	a10, f1
+ 1f6:	000081               	l32r	a8, fffc01f8 <vp_rpn_eval+0xfffc01f8>
+			1f6: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0x30
+			1f6: R_XTENSA_ASM_EXPAND	__divsf3
+ 1f9:	0008e0               	callx8	a8
+ 1fc:	000081               	l32r	a8, fffc01fc <vp_rpn_eval+0xfffc01fc>
+			1fc: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 1ff:	fa0a50               	wfr	f0, a10
+ 202:	fa2850               	wfr	f2, a8
+ 205:	fa3010               	abs.s	f3, f0
+ 208:	c188                	l32i.n	a8, a1, 48
+ 20a:	191c                	movi.n	a9, 17
+ 20c:	00bc06               	j	500 <vp_rpn_eval+0x500>
+			20c: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x500
+ 20f:	00                      	.byte	00
+ 210:	00                      	.byte	00
+ 211:	0000a1               	l32r	a10, fffc0214 <vp_rpn_eval+0xfffc0214>
+			211: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 214:	fa0160               	neg.s	f0, f1
+ 217:	fa2a50               	wfr	f2, a10
+ 21a:	fa3110               	abs.s	f3, f1
+ 21d:	00b7c6               	j	500 <vp_rpn_eval+0x500>
+			21d: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x500
+ 220:	1b0100               	un.s	b0, f1, f0
+ 223:	171076               	bt	b0, 23e <vp_rpn_eval+0x23e>
+			223: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x23e
+ 226:	0000a1               	l32r	a10, fffc0228 <vp_rpn_eval+0xfffc0228>
+			226: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 229:	4b0100               	olt.s	b0, f1, f0
+ 22c:	db0100               	movt.s	f0, f1, b0
+ 22f:	fa2a50               	wfr	f2, a10
+ 232:	fa3010               	abs.s	f3, f0
+ 235:	00b1c6               	j	500 <vp_rpn_eval+0x500>
+			235: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x500
+ 238:	1b0100               	un.s	b0, f1, f0
+ 23b:	050076               	bf	b0, 244 <vp_rpn_eval+0x244>
+			23b: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x244
+ 23e:	d20c                	movi.n	a2, 13
+ 240:	00e606               	j	5dc <vp_rpn_eval+0x5dc>
+			240: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5dc
+ 243:	00                      	.byte	00
+ 244:	0000a1               	l32r	a10, fffc0244 <vp_rpn_eval+0xfffc0244>
+			244: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 247:	4b0010               	olt.s	b0, f0, f1
+ 24a:	db0100               	movt.s	f0, f1, b0
+ 24d:	fa2a50               	wfr	f2, a10
+ 250:	fa3010               	abs.s	f3, f0
+ 253:	00aa46               	j	500 <vp_rpn_eval+0x500>
+			253: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x500
+ 256:	00                      	.byte	00
+ 257:	00                      	.byte	00
+ 258:	fa2d50               	wfr	f2, a13
+ 25b:	1b0220               	un.s	b0, f2, f2
+ 25e:	1a0c                	movi.n	a10, 1
+ 260:	0b0c                	movi.n	a11, 0
+ 262:	d3ba00               	movt	a11, a10, b0
+ 265:	74c0b0               	extui	a12, a11, 0, 8
+ 268:	fd2b56               	bnez	a11, 23e <vp_rpn_eval+0x23e>
+			268: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x23e
+ 26b:	1b0100               	un.s	b0, f1, f0
+ 26e:	c3ac00               	movf	a10, a12, b0
+ 271:	fc9a56               	bnez	a10, 23e <vp_rpn_eval+0x23e>
+			271: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x23e
+ 274:	4b0200               	olt.s	b0, f2, f0
+ 277:	020076               	bf	b0, 27d <vp_rpn_eval+0x27d>
+			277: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x27d
+ 27a:	00b446               	j	54f <vp_rpn_eval+0x54f>
+			27a: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x54f
+ 27d:	0000a1               	l32r	a10, fffc0280 <vp_rpn_eval+0xfffc0280>
+			27d: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 280:	4b0100               	olt.s	b0, f1, f0
+ 283:	fa2a50               	wfr	f2, a10
+ 286:	fa3010               	abs.s	f3, f0
+ 289:	020076               	bf	b0, 28f <vp_rpn_eval+0x28f>
+			289: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x28f
+ 28c:	009c06               	j	500 <vp_rpn_eval+0x500>
+			28c: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x500
+ 28f:	fa0d50               	wfr	f0, a13
+ 292:	4b0010               	olt.s	b0, f0, f1
+ 295:	cb0100               	movf.s	f0, f1, b0
+ 298:	fa3010               	abs.s	f3, f0
+ 29b:	009846               	j	500 <vp_rpn_eval+0x500>
+			29b: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x500
+ 29e:	00                      	.byte	00
+ 29f:	00                      	.byte	00
+ 2a0:	0000b1               	l32r	a11, fffc02a0 <vp_rpn_eval+0xfffc02a0>
+			2a0: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0x18
+ 2a3:	fa4b50               	wfr	f4, a11
+ 2a6:	4b0140               	olt.s	b0, f1, f4
+ 2a9:	020076               	bf	b0, 2af <vp_rpn_eval+0x2af>
+			2a9: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x2af
+ 2ac:	00a906               	j	554 <vp_rpn_eval+0x554>
+			2ac: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x554
+ 2af:	0000b1               	l32r	a11, fffc02b0 <vp_rpn_eval+0xfffc02b0>
+			2af: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0x14
+ 2b2:	fa3b50               	wfr	f3, a11
+ 2b5:	6b0310               	ole.s	b0, f3, f1
+ 2b8:	020076               	bf	b0, 2be <vp_rpn_eval+0x2be>
+			2b8: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x2be
+ 2bb:	00a546               	j	554 <vp_rpn_eval+0x554>
+			2bb: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x554
+ 2be:	0b0c                	movi.n	a11, 0
+ 2c0:	fa3b50               	wfr	f3, a11
+ 2c3:	4b0130               	olt.s	b0, f1, f3
+ 2c6:	050076               	bf	b0, 2cf <vp_rpn_eval+0x2cf>
+			2c6: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x2cf
+ 2c9:	9ac100               	trunc.s	a12, f1, 0
+ 2cc:	000086               	j	2d2 <vp_rpn_eval+0x2d2>
+			2cc: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x2d2
+ 2cf:	eac100               	utrunc.s	a12, f1, 0
+ 2d2:	fa1010               	abs.s	f1, f0
+ 2d5:	5b0210               	ult.s	b0, f2, f1
+ 2d8:	120076               	bf	b0, 2ee <vp_rpn_eval+0x2ee>
+			2d8: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x2ee
+ 2db:	009d46               	j	554 <vp_rpn_eval+0x554>
+			2db: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x554
+ 2de:	0b0c                	movi.n	a11, 0
+ 2e0:	fa3b50               	wfr	f3, a11
+ 2e3:	0000b1               	l32r	a11, fffc02e4 <vp_rpn_eval+0xfffc02e4>
+			2e3: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0x18
+ 2e6:	fa0300               	mov.s	f0, f3
+ 2e9:	fa4b50               	wfr	f4, a11
+ 2ec:	0c0c                	movi.n	a12, 0
+ 2ee:	4b0040               	olt.s	b0, f0, f4
+ 2f1:	020076               	bf	b0, 2f7 <vp_rpn_eval+0x2f7>
+			2f1: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x2f7
+ 2f4:	009706               	j	554 <vp_rpn_eval+0x554>
+			2f4: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x554
+ 2f7:	0000b1               	l32r	a11, fffc02f8 <vp_rpn_eval+0xfffc02f8>
+			2f7: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0x14
+ 2fa:	fa1b50               	wfr	f1, a11
+ 2fd:	6b0100               	ole.s	b0, f1, f0
+ 300:	020076               	bf	b0, 306 <vp_rpn_eval+0x306>
+			300: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x306
+ 303:	009346               	j	554 <vp_rpn_eval+0x554>
+			303: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x554
+ 306:	4b0030               	olt.s	b0, f0, f3
+ 309:	070076               	bf	b0, 314 <vp_rpn_eval+0x314>
+			309: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x314
+ 30c:	9ab000               	trunc.s	a11, f0, 0
+ 30f:	000106               	j	317 <vp_rpn_eval+0x317>
+			30f: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x317
+ 312:	00                      	.byte	00
+ 313:	00                      	.byte	00
+ 314:	eab000               	utrunc.s	a11, f0, 0
+ 317:	10dbc0               	and	a13, a11, a12
+ 31a:	f4caa2               	addi	a10, a10, -12
+ 31d:	20bbc0               	or	a11, a11, a12
+ 320:	002206               	j	3ac <vp_rpn_eval+0x3ac>
+			320: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x3ac
+ 323:	00                      	.byte	00
+ 324:	0000b1               	l32r	a11, fffc0324 <vp_rpn_eval+0xfffc0324>
+			324: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 327:	fa3110               	abs.s	f3, f1
+ 32a:	fa2b50               	wfr	f2, a11
+ 32d:	5b0230               	ult.s	b0, f2, f3
+ 330:	020076               	bf	b0, 336 <vp_rpn_eval+0x336>
+			330: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x336
+ 333:	008746               	j	554 <vp_rpn_eval+0x554>
+			333: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x554
+ 336:	0000b1               	l32r	a11, fffc0338 <vp_rpn_eval+0xfffc0338>
+			336: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0x18
+ 339:	fa4b50               	wfr	f4, a11
+ 33c:	4b0140               	olt.s	b0, f1, f4
+ 33f:	020076               	bf	b0, 345 <vp_rpn_eval+0x345>
+			33f: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x345
+ 342:	008386               	j	554 <vp_rpn_eval+0x554>
+			342: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x554
+ 345:	0000b1               	l32r	a11, fffc0348 <vp_rpn_eval+0xfffc0348>
+			345: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0x14
+ 348:	fa3b50               	wfr	f3, a11
+ 34b:	6b0310               	ole.s	b0, f3, f1
+ 34e:	020076               	bf	b0, 354 <vp_rpn_eval+0x354>
+			34e: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x354
+ 351:	007fc6               	j	554 <vp_rpn_eval+0x554>
+			351: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x554
+ 354:	0b0c                	movi.n	a11, 0
+ 356:	fa3b50               	wfr	f3, a11
+ 359:	4b0130               	olt.s	b0, f1, f3
+ 35c:	050076               	bf	b0, 365 <vp_rpn_eval+0x365>
+			35c: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x365
+ 35f:	9ab100               	trunc.s	a11, f1, 0
+ 362:	000086               	j	368 <vp_rpn_eval+0x368>
+			362: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x368
+ 365:	eab100               	utrunc.s	a11, f1, 0
+ 368:	fa1010               	abs.s	f1, f0
+ 36b:	5b0210               	ult.s	b0, f2, f1
+ 36e:	0a0076               	bf	b0, 37c <vp_rpn_eval+0x37c>
+			36e: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x37c
+ 371:	0077c6               	j	554 <vp_rpn_eval+0x554>
+			371: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x554
+ 374:	00                      	.byte	00
+ 375:	0b0c                	movi.n	a11, 0
+ 377:	fa0b50               	wfr	f0, a11
+ 37a:	0b0c                	movi.n	a11, 0
+ 37c:	0000c1               	l32r	a12, fffc037c <vp_rpn_eval+0xfffc037c>
+			37c: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0x20
+ 37f:	fa1c50               	wfr	f1, a12
+ 382:	6b0010               	ole.s	b0, f0, f1
+ 385:	020076               	bf	b0, 38b <vp_rpn_eval+0x38b>
+			385: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x38b
+ 388:	007206               	j	554 <vp_rpn_eval+0x554>
+			388: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x554
+ 38b:	0000c1               	l32r	a12, fffc038c <vp_rpn_eval+0xfffc038c>
+			38b: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0x1c
+ 38e:	fa1c50               	wfr	f1, a12
+ 391:	6b0100               	ole.s	b0, f1, f0
+ 394:	020076               	bf	b0, 39a <vp_rpn_eval+0x39a>
+			394: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x39a
+ 397:	006e46               	j	554 <vp_rpn_eval+0x554>
+			397: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x554
+ 39a:	eac000               	utrunc.s	a12, f0, 0
+ 39d:	f2caa2               	addi	a10, a10, -14
+ 3a0:	400c00               	ssr	a12
+ 3a3:	91d0b0               	srl	a13, a11
+ 3a6:	401c00               	ssl	a12
+ 3a9:	a1bb00               	sll	a11, a11
+ 3ac:	83bda0               	moveqz	a11, a13, a10
+ 3af:	da0b00               	ufloat.s	f0, a11, 0
+ 3b2:	0000a1               	l32r	a10, fffc03b4 <vp_rpn_eval+0xfffc03b4>
+			3b2: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 3b5:	fa3000               	mov.s	f3, f0
+ 3b8:	fa2a50               	wfr	f2, a10
+ 3bb:	005046               	j	500 <vp_rpn_eval+0x500>
+			3bb: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x500
+ 3be:	00                      	.byte	00
+ 3bf:	00                      	.byte	00
+ 3c0:	0000a1               	l32r	a10, fffc03c0 <vp_rpn_eval+0xfffc03c0>
+			3c0: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 3c3:	fa0110               	abs.s	f0, f1
+ 3c6:	fa2a50               	wfr	f2, a10
+ 3c9:	5b0200               	ult.s	b0, f2, f0
+ 3cc:	020076               	bf	b0, 3d2 <vp_rpn_eval+0x3d2>
+			3cc: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x3d2
+ 3cf:	006046               	j	554 <vp_rpn_eval+0x554>
+			3cf: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x554
+ 3d2:	0000a1               	l32r	a10, fffc03d4 <vp_rpn_eval+0xfffc03d4>
+			3d2: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0x18
+ 3d5:	fa4a50               	wfr	f4, a10
+ 3d8:	4b0140               	olt.s	b0, f1, f4
+ 3db:	020076               	bf	b0, 3e1 <vp_rpn_eval+0x3e1>
+			3db: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x3e1
+ 3de:	005c86               	j	554 <vp_rpn_eval+0x554>
+			3de: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x554
+ 3e1:	0000a1               	l32r	a10, fffc03e4 <vp_rpn_eval+0xfffc03e4>
+			3e1: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0x14
+ 3e4:	fa0a50               	wfr	f0, a10
+ 3e7:	6b0010               	ole.s	b0, f0, f1
+ 3ea:	020076               	bf	b0, 3f0 <vp_rpn_eval+0x3f0>
+			3ea: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x3f0
+ 3ed:	0058c6               	j	554 <vp_rpn_eval+0x554>
+			3ed: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x554
+ 3f0:	0a0c                	movi.n	a10, 0
+ 3f2:	fa3a50               	wfr	f3, a10
+ 3f5:	4b0130               	olt.s	b0, f1, f3
+ 3f8:	050076               	bf	b0, 401 <vp_rpn_eval+0x401>
+			3f8: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x401
+ 3fb:	9ab100               	trunc.s	a11, f1, 0
+ 3fe:	000086               	j	404 <vp_rpn_eval+0x404>
+			3fe: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x404
+ 401:	eab100               	utrunc.s	a11, f1, 0
+ 404:	74a0b0               	extui	a10, a11, 0, 8
+ 407:	ffdac2               	addmi	a12, a10, 0xffffff00
+ 40a:	04b7b0               	extui	a11, a11, 7, 1
+ 40d:	93acb0               	movnez	a10, a12, a11
+ 410:	ca0a00               	float.s	f0, a10, 0
+ 413:	fa3010               	abs.s	f3, f0
+ 416:	003986               	j	500 <vp_rpn_eval+0x500>
+			416: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x500
+ 419:	0000a1               	l32r	a10, fffc041c <vp_rpn_eval+0xfffc041c>
+			419: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 41c:	fa0110               	abs.s	f0, f1
+ 41f:	fa2a50               	wfr	f2, a10
+ 422:	5b0200               	ult.s	b0, f2, f0
+ 425:	020076               	bf	b0, 42b <vp_rpn_eval+0x42b>
+			425: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x42b
+ 428:	004a06               	j	554 <vp_rpn_eval+0x554>
+			428: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x554
+ 42b:	0000a1               	l32r	a10, fffc042c <vp_rpn_eval+0xfffc042c>
+			42b: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0x18
+ 42e:	fa4a50               	wfr	f4, a10
+ 431:	4b0140               	olt.s	b0, f1, f4
+ 434:	020076               	bf	b0, 43a <vp_rpn_eval+0x43a>
+			434: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x43a
+ 437:	004646               	j	554 <vp_rpn_eval+0x554>
+			437: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x554
+ 43a:	0000a1               	l32r	a10, fffc043c <vp_rpn_eval+0xfffc043c>
+			43a: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0x14
+ 43d:	fa0a50               	wfr	f0, a10
+ 440:	6b0010               	ole.s	b0, f0, f1
+ 443:	020076               	bf	b0, 449 <vp_rpn_eval+0x449>
+			443: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x449
+ 446:	004286               	j	554 <vp_rpn_eval+0x554>
+			446: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x554
+ 449:	0a0c                	movi.n	a10, 0
+ 44b:	fa3a50               	wfr	f3, a10
+ 44e:	000346               	j	45f <vp_rpn_eval+0x45f>
+			44e: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x45f
+ 451:	0a0c                	movi.n	a10, 0
+ 453:	fa3a50               	wfr	f3, a10
+ 456:	0000a1               	l32r	a10, fffc0458 <vp_rpn_eval+0xfffc0458>
+			456: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 459:	fa1300               	mov.s	f1, f3
+ 45c:	fa2a50               	wfr	f2, a10
+ 45f:	4b0130               	olt.s	b0, f1, f3
+ 462:	060076               	bf	b0, 46c <vp_rpn_eval+0x46c>
+			462: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x46c
+ 465:	9ab100               	trunc.s	a11, f1, 0
+ 468:	0000c6               	j	46f <vp_rpn_eval+0x46f>
+			468: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x46f
+ 46b:	00                      	.byte	00
+ 46c:	eab100               	utrunc.s	a11, f1, 0
+ 46f:	f4a0b0               	extui	a10, a11, 0, 16
+ 472:	046bf7               	bbci	a11, 15, 47a <vp_rpn_eval+0x47a>
+			472: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x47a
+ 475:	0000b1               	l32r	a11, fffc0478 <vp_rpn_eval+0xfffc0478>
+			475: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0x8
+ 478:	aaba                	add.n	a10, a10, a11
+ 47a:	ca0a00               	float.s	f0, a10, 0
+ 47d:	fa3010               	abs.s	f3, f0
+ 480:	001f06               	j	500 <vp_rpn_eval+0x500>
+			480: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x500
+ 483:	1b0110               	un.s	b0, f1, f1
+ 486:	070076               	bf	b0, 491 <vp_rpn_eval+0x491>
+			486: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x491
+ 489:	ff6c46               	j	23e <vp_rpn_eval+0x23e>
+			489: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x23e
+ 48c:	0a0c                	movi.n	a10, 0
+ 48e:	fa1a50               	wfr	f1, a10
+ 491:	0c4616               	beqz	a6, 559 <vp_rpn_eval+0x559>
+			491: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x559
+ 494:	06b8                	l32i.n	a11, a6, 0
+ 496:	0bfb16               	beqz	a11, 559 <vp_rpn_eval+0x559>
+			496: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x559
+ 499:	12a8                	l32i.n	a10, a2, 4
+ 49b:	0416c2               	l16ui	a12, a6, 8
+ 49e:	023ac7               	bltu	a10, a12, 4a4 <vp_rpn_eval+0x4a4>
+			49e: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x4a4
+ 4a1:	002d06               	j	559 <vp_rpn_eval+0x559>
+			4a1: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x559
+ 4a4:	16c8                	l32i.n	a12, a6, 4
+ 4a6:	a0bab0               	addx4	a11, a10, a11
+ 4a9:	0acc16               	beqz	a12, 559 <vp_rpn_eval+0x559>
+			4a9: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x559
+ 4ac:	001ba2               	l16ui	a10, a11, 0
+ 4af:	020bb2               	l8ui	a11, a11, 2
+ 4b2:	0516e2               	l16ui	a14, a6, 10
+ 4b5:	dbaa                	add.n	a13, a11, a10
+ 4b7:	02bed7               	bgeu	a14, a13, 4bd <vp_rpn_eval+0x4bd>
+			4b7: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x4bd
+ 4ba:	0026c6               	j	559 <vp_rpn_eval+0x559>
+			4ba: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x559
+ 4bd:	09db16               	beqz	a11, 55e <vp_rpn_eval+0x55e>
+			4bd: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x55e
+ 4c0:	bb0b                	addi.n	a11, a11, -1
+ 4c2:	f4b0b0               	extui	a11, a11, 0, 16
+ 4c5:	bbaa                	add.n	a11, a11, a10
+ 4c7:	90bbb0               	addx2	a11, a11, a11
+ 4ca:	90aaa0               	addx2	a10, a10, a10
+ 4cd:	dccb                	addi.n	a13, a12, 12
+ 4cf:	a0aac0               	addx4	a10, a10, a12
+ 4d2:	a0bbd0               	addx4	a11, a11, a13
+ 4d5:	000a03               	lsi	f0, a10, 0
+ 4d8:	6b0010               	ole.s	b0, f0, f1
+ 4db:	170076               	bf	b0, 4f6 <vp_rpn_eval+0x4f6>
+			4db: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x4f6
+ 4de:	010a03               	lsi	f0, a10, 4
+ 4e1:	6b0100               	ole.s	b0, f1, f0
+ 4e4:	0e0076               	bf	b0, 4f6 <vp_rpn_eval+0x4f6>
+			4e4: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x4f6
+ 4e7:	020a03               	lsi	f0, a10, 8
+ 4ea:	0000a1               	l32r	a10, fffc04ec <vp_rpn_eval+0xfffc04ec>
+			4ea: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 4ed:	fa3010               	abs.s	f3, f0
+ 4f0:	fa2a50               	wfr	f2, a10
+ 4f3:	000246               	j	500 <vp_rpn_eval+0x500>
+			4f3: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x500
+ 4f6:	aacb                	addi.n	a10, a10, 12
+ 4f8:	d99ab7               	bne	a10, a11, 4d5 <vp_rpn_eval+0x4d5>
+			4f8: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x4d5
+ 4fb:	0017c6               	j	55e <vp_rpn_eval+0x55e>
+			4fb: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x55e
+ 4fe:	00                      	.byte	00
+ 4ff:	00                      	.byte	00
+ 500:	5b0230               	ult.s	b0, f2, f3
+ 503:	070076               	bf	b0, 50e <vp_rpn_eval+0x50e>
+			503: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x50e
+ 506:	ff4d06               	j	23e <vp_rpn_eval+0x23e>
+			506: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x23e
+ 509:	0a0c                	movi.n	a10, 0
+ 50b:	fa0a50               	wfr	f0, a10
+ 50e:	a0a810               	addx4	a10, a8, a1
+ 511:	004a03               	ssi	f0, a10, 0
+ 514:	228b                	addi.n	a2, a2, 8
+ 516:	c81b                	addi.n	a12, a8, 1
+ 518:	021327               	beq	a3, a2, 51e <vp_rpn_eval+0x51e>
+			518: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x51e
+ 51b:	fec786               	j	3d <vp_rpn_eval+0x3d>
+			51b: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x3d
+ 51e:	620c                	movi.n	a2, 6
+ 520:	021c26               	beqi	a12, 1, 526 <vp_rpn_eval+0x526>
+			520: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x526
+ 523:	002d46               	j	5dc <vp_rpn_eval+0x5dc>
+			523: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5dc
+ 526:	0188                	l32i.n	a8, a1, 0
+ 528:	020c                	movi.n	a2, 0
+ 52a:	0789                	s32i.n	a8, a7, 0
+ 52c:	002b06               	j	5dc <vp_rpn_eval+0x5dc>
+			52c: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5dc
+ 52f:	00                      	.byte	00
+ 530:	221c                	movi.n	a2, 18
+ 532:	002986               	j	5dc <vp_rpn_eval+0x5dc>
+			532: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5dc
+ 535:	320c                	movi.n	a2, 3
+ 537:	002846               	j	5dc <vp_rpn_eval+0x5dc>
+			537: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5dc
+ 53a:	420c                	movi.n	a2, 4
+ 53c:	002706               	j	5dc <vp_rpn_eval+0x5dc>
+			53c: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5dc
+ 53f:	00                      	.byte	00
+ 540:	520c                	movi.n	a2, 5
+ 542:	002586               	j	5dc <vp_rpn_eval+0x5dc>
+			542: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5dc
+ 545:	e20c                	movi.n	a2, 14
+ 547:	002446               	j	5dc <vp_rpn_eval+0x5dc>
+			547: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5dc
+ 54a:	b20c                	movi.n	a2, 11
+ 54c:	002306               	j	5dc <vp_rpn_eval+0x5dc>
+			54c: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5dc
+ 54f:	121c                	movi.n	a2, 17
+ 551:	0021c6               	j	5dc <vp_rpn_eval+0x5dc>
+			551: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5dc
+ 554:	f20c                	movi.n	a2, 15
+ 556:	002086               	j	5dc <vp_rpn_eval+0x5dc>
+			556: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5dc
+ 559:	a20c                	movi.n	a2, 10
+ 55b:	001f46               	j	5dc <vp_rpn_eval+0x5dc>
+			55b: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5dc
+ 55e:	021c                	movi.n	a2, 16
+ 560:	001e06               	j	5dc <vp_rpn_eval+0x5dc>
+			560: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5dc
+ 563:	00                      	.byte	00
+ 564:	c20c                	movi.n	a2, 12
+ 566:	001c86               	j	5dc <vp_rpn_eval+0x5dc>
+			566: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5dc
+ 569:	9b0c                	movi.n	a11, 9
+ 56b:	9a1ab7               	beq	a10, a11, 509 <vp_rpn_eval+0x509>
+			56b: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x509
+ 56e:	2b3ba7               	bltu	a11, a10, 59d <vp_rpn_eval+0x59d>
+			56e: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x59d
+ 571:	945a26               	beqi	a10, 5, 509 <vp_rpn_eval+0x509>
+			571: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x509
+ 574:	116af6               	bgeui	a10, 6, 589 <vp_rpn_eval+0x589>
+			574: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x589
+ 577:	023a66               	bnei	a10, 3, 57d <vp_rpn_eval+0x57d>
+			577: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x57d
+ 57a:	ff02c6               	j	189 <vp_rpn_eval+0x189>
+			57a: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x189
+ 57d:	884a26               	beqi	a10, 4, 509 <vp_rpn_eval+0x509>
+			57d: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x509
+ 580:	022a66               	bnei	a10, 2, 586 <vp_rpn_eval+0x586>
+			580: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x586
+ 583:	fef186               	j	14d <vp_rpn_eval+0x14d>
+			583: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x14d
+ 586:	fee9c6               	j	131 <vp_rpn_eval+0x131>
+			586: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x131
+ 589:	d77a26               	beqi	a10, 7, 564 <vp_rpn_eval+0x564>
+			589: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x564
+ 58c:	0000c1               	l32r	a12, fffc058c <vp_rpn_eval+0xfffc058c>
+			58c: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0x10
+ 58f:	f8caa2               	addi	a10, a10, -8
+ 592:	0b0c                	movi.n	a11, 0
+ 594:	83bca0               	moveqz	a11, a12, a10
+ 597:	fa0b50               	wfr	f0, a11
+ 59a:	ffdc06               	j	50e <vp_rpn_eval+0x50e>
+			59a: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x50e
+ 59d:	fb0c                	movi.n	a11, 15
+ 59f:	193ba7               	bltu	a11, a10, 5bc <vp_rpn_eval+0x5bc>
+			59f: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5bc
+ 5a2:	db0c                	movi.n	a11, 13
+ 5a4:	02bba7               	bgeu	a11, a10, 5aa <vp_rpn_eval+0x5aa>
+			5a4: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5aa
+ 5a7:	ff7286               	j	375 <vp_rpn_eval+0x375>
+			5a7: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x375
+ 5aa:	bb0c                	movi.n	a11, 11
+ 5ac:	029ab7               	bne	a10, a11, 5b2 <vp_rpn_eval+0x5b2>
+			5ac: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5b2
+ 5af:	ffd586               	j	509 <vp_rpn_eval+0x509>
+			5af: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x509
+ 5b2:	02bba7               	bgeu	a11, a10, 5b8 <vp_rpn_eval+0x5b8>
+			5b2: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5b8
+ 5b5:	ff4946               	j	2de <vp_rpn_eval+0x2de>
+			5b5: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x2de
+ 5b8:	ffd346               	j	509 <vp_rpn_eval+0x509>
+			5b8: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x509
+ 5bb:	00                      	.byte	00
+ 5bc:	029a97               	bne	a10, a9, 5c2 <vp_rpn_eval+0x5c2>
+			5bc: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5c2
+ 5bf:	ffa386               	j	451 <vp_rpn_eval+0x451>
+			5bf: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x451
+ 5c2:	2b1c                	movi.n	a11, 18
+ 5c4:	029ab7               	bne	a10, a11, 5ca <vp_rpn_eval+0x5ca>
+			5c4: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5ca
+ 5c7:	ffb046               	j	48c <vp_rpn_eval+0x48c>
+			5c7: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x48c
+ 5ca:	0a0c                	movi.n	a10, 0
+ 5cc:	fa3a50               	wfr	f3, a10
+ 5cf:	0000a1               	l32r	a10, fffc05d0 <vp_rpn_eval+0xfffc05d0>
+			5cf: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 5d2:	fa1300               	mov.s	f1, f3
+ 5d5:	fa2a50               	wfr	f2, a10
+ 5d8:	ff8646               	j	3f5 <vp_rpn_eval+0x3f5>
+			5d8: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x3f5
+ 5db:	00                      	.byte	00
+ 5dc:	f01d                	retw.n
+
+Normal after eval disassembly:
+Disassembly of section .text.vp_rpn_eval:
+
+00000000 <vp_rpn_eval>:
+   0:	00c136               	entry	a1, 96
+   3:	40f280               	nsau	a8, a2
+   6:	029d                	mov.n	a9, a2
+   8:	1a0c                	movi.n	a10, 1
+   a:	418580               	srli	a8, a8, 5
+   d:	53b216               	beqz	a2, 54c <vp_rpn_eval+0x54c>
+			d: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x54c
+  10:	838a70               	moveqz	a8, a10, a7
+  13:	535856               	bnez	a8, 54c <vp_rpn_eval+0x54c>
+			13: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x54c
+  16:	08cd                	mov.n	a12, a8
+  18:	83ca40               	moveqz	a12, a10, a4
+  1b:	6c8c                	beqz.n	a12, 25 <vp_rpn_eval+0x25>
+			1b: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x25
+  1d:	83a850               	moveqz	a10, a8, a5
+  20:	221c                	movi.n	a2, 18
+  22:	5d6a56               	bnez	a10, 5fc <vp_rpn_eval+0x5fc>
+			22: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5fc
+  25:	120c                	movi.n	a2, 1
+  27:	5d1316               	beqz	a3, 5fc <vp_rpn_eval+0x5fc>
+			27: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5fc
+  2a:	082c                	movi.n	a8, 32
+  2c:	220c                	movi.n	a2, 2
+  2e:	02b837               	bgeu	a8, a3, 34 <vp_rpn_eval+0x34>
+			2e: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x34
+  31:	0171c6               	j	5fc <vp_rpn_eval+0x5fc>
+			31: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5fc
+  34:	092d                	mov.n	a2, a9
+  36:	b03390               	addx8	a3, a3, a9
+  39:	0c0c                	movi.n	a12, 0
+  3b:	191c                	movi.n	a9, 17
+  3d:	0002a2               	l8ui	a10, a2, 0
+  40:	8a0b                	addi.n	a8, a10, -1
+  42:	748080               	extui	a8, a8, 0, 8
+  45:	02b987               	bgeu	a9, a8, 4b <vp_rpn_eval+0x4b>
+			45: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x4b
+  48:	014146               	j	551 <vp_rpn_eval+0x551>
+			48: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x551
+  4b:	000081               	l32r	a8, fffc004c <vp_rpn_eval+0xfffc004c>
+			4b: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval
+  4e:	b08a80               	addx8	a8, a10, a8
+  51:	0008b2               	l8ui	a11, a8, 0
+  54:	0108d2               	l8ui	a13, a8, 1
+  57:	02bcb7               	bgeu	a12, a11, 5d <vp_rpn_eval+0x5d>
+			57: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5d
+  5a:	013e06               	j	556 <vp_rpn_eval+0x556>
+			5a: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x556
+  5d:	c08cb0               	sub	a8, a12, a11
+  60:	dd8a                	add.n	a13, a13, a8
+  62:	8e0c                	movi.n	a14, 8
+  64:	02bed7               	bgeu	a14, a13, 6a <vp_rpn_eval+0x6a>
+			64: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x6a
+  67:	013c46               	j	55c <vp_rpn_eval+0x55c>
+			67: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x55c
+  6a:	1b3b66               	bnei	a11, 3, 89 <vp_rpn_eval+0x89>
+			6a: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x89
+  6d:	fdccd2               	addi	a13, a12, -3
+  70:	feccb2               	addi	a11, a12, -2
+  73:	cc0b                	addi.n	a12, a12, -1
+  75:	a0dd10               	addx4	a13, a13, a1
+  78:	a0bb10               	addx4	a11, a11, a1
+  7b:	a0cc10               	addx4	a12, a12, a1
+  7e:	000d13               	lsi	f1, a13, 0
+  81:	000b03               	lsi	f0, a11, 0
+  84:	0cd8                	l32i.n	a13, a12, 0
+  86:	000b46               	j	b7 <vp_rpn_eval+0xb7>
+			86: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0xb7
+  89:	172b66               	bnei	a11, 2, a4 <vp_rpn_eval+0xa4>
+			89: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0xa4
+  8c:	feccb2               	addi	a11, a12, -2
+  8f:	cc0b                	addi.n	a12, a12, -1
+  91:	a0bb10               	addx4	a11, a11, a1
+  94:	a0cc10               	addx4	a12, a12, a1
+  97:	000b13               	lsi	f1, a11, 0
+  9a:	000c03               	lsi	f0, a12, 0
+  9d:	0d0c                	movi.n	a13, 0
+  9f:	000506               	j	b7 <vp_rpn_eval+0xb7>
+			9f: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0xb7
+  a2:	00                      	.byte	00
+  a3:	00                      	.byte	00
+  a4:	021b26               	beqi	a11, 1, aa <vp_rpn_eval+0xaa>
+			a4: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0xaa
+  a7:	0136c6               	j	586 <vp_rpn_eval+0x586>
+			a7: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x586
+  aa:	cc0b                	addi.n	a12, a12, -1
+  ac:	a0cc10               	addx4	a12, a12, a1
+  af:	0d0c                	movi.n	a13, 0
+  b1:	000c13               	lsi	f1, a12, 0
+  b4:	fa0d50               	wfr	f0, a13
+  b7:	9b0c                	movi.n	a11, 9
+  b9:	029ab7               	bne	a10, a11, bf <vp_rpn_eval+0xbf>
+			b9: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0xbf
+  bc:	006006               	j	240 <vp_rpn_eval+0x240>
+			bc: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x240
+  bf:	293ba7               	bltu	a11, a10, ec <vp_rpn_eval+0xec>
+			bf: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0xec
+  c2:	025a66               	bnei	a10, 5, c8 <vp_rpn_eval+0xc8>
+			c2: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0xc8
+  c5:	0045c6               	j	1e0 <vp_rpn_eval+0x1e0>
+			c5: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x1e0
+  c8:	106af6               	bgeui	a10, 6, dc <vp_rpn_eval+0xdc>
+			c8: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0xdc
+  cb:	023a66               	bnei	a10, 3, d1 <vp_rpn_eval+0xd1>
+			cb: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0xd1
+  ce:	003586               	j	1a8 <vp_rpn_eval+0x1a8>
+			ce: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x1a8
+  d1:	024a66               	bnei	a10, 4, d7 <vp_rpn_eval+0xd7>
+			d1: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0xd7
+  d4:	003e06               	j	1d0 <vp_rpn_eval+0x1d0>
+			d4: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x1d0
+  d7:	013086               	j	59d <vp_rpn_eval+0x59d>
+			d7: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x59d
+  da:	00                      	.byte	00
+  db:	00                      	.byte	00
+  dc:	027a66               	bnei	a10, 7, e2 <vp_rpn_eval+0xe2>
+			dc: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0xe2
+  df:	004746               	j	200 <vp_rpn_eval+0x200>
+			df: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x200
+  e2:	028a26               	beqi	a10, 8, e8 <vp_rpn_eval+0xe8>
+			e2: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0xe8
+  e5:	0041c6               	j	1f0 <vp_rpn_eval+0x1f0>
+			e5: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x1f0
+  e8:	005146               	j	231 <vp_rpn_eval+0x231>
+			e8: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x231
+  eb:	00                      	.byte	00
+  ec:	fc0c                	movi.n	a12, 15
+  ee:	2a3ca7               	bltu	a12, a10, 11c <vp_rpn_eval+0x11c>
+			ee: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x11c
+  f1:	db0c                	movi.n	a11, 13
+  f3:	02bba7               	bgeu	a11, a10, f9 <vp_rpn_eval+0xf9>
+			f3: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0xf9
+  f6:	009186               	j	340 <vp_rpn_eval+0x340>
+			f6: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x340
+  f9:	bb0c                	movi.n	a11, 11
+  fb:	029ab7               	bne	a10, a11, 101 <vp_rpn_eval+0x101>
+			fb: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x101
+  fe:	005d86               	j	278 <vp_rpn_eval+0x278>
+			fe: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x278
+ 101:	023ba7               	bltu	a11, a10, 107 <vp_rpn_eval+0x107>
+			101: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x107
+ 104:	005406               	j	258 <vp_rpn_eval+0x258>
+			104: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x258
+ 107:	0000b1               	l32r	a11, fffc0108 <vp_rpn_eval+0xfffc0108>
+			107: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 10a:	fa3110               	abs.s	f3, f1
+ 10d:	fa2b50               	wfr	f2, a11
+ 110:	5b0230               	ult.s	b0, f2, f3
+ 113:	021076               	bt	b0, 119 <vp_rpn_eval+0x119>
+			113: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x119
+ 116:	006906               	j	2be <vp_rpn_eval+0x2be>
+			116: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x2be
+ 119:	011506               	j	571 <vp_rpn_eval+0x571>
+			119: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x571
+ 11c:	1b1c                	movi.n	a11, 17
+ 11e:	029ab7               	bne	a10, a11, 124 <vp_rpn_eval+0x124>
+			11e: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x124
+ 121:	00c406               	j	435 <vp_rpn_eval+0x435>
+			121: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x435
+ 124:	2b1c                	movi.n	a11, 18
+ 126:	021ab7               	beq	a10, a11, 12c <vp_rpn_eval+0x12c>
+			126: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x12c
+ 129:	00abc6               	j	3dc <vp_rpn_eval+0x3dc>
+			129: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x3dc
+ 12c:	00dbc6               	j	49f <vp_rpn_eval+0x49f>
+			12c: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x49f
+ 12f:	00                      	.byte	00
+ 130:	12a8                	l32i.n	a10, a2, 4
+ 132:	023a57               	bltu	a10, a5, 138 <vp_rpn_eval+0x138>
+			132: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x138
+ 135:	010a06               	j	561 <vp_rpn_eval+0x561>
+			135: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x561
+ 138:	a4aa                	add.n	a10, a4, a10
+ 13a:	000aa2               	l8ui	a10, a10, 0
+ 13d:	0000b1               	l32r	a11, fffc0140 <vp_rpn_eval+0xfffc0140>
+			13d: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 140:	da0a00               	ufloat.s	f0, a10, 0
+ 143:	fa2b50               	wfr	f2, a11
+ 146:	fa3000               	mov.s	f3, f0
+ 149:	00f3c6               	j	51c <vp_rpn_eval+0x51c>
+			149: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x51c
+ 14c:	0102d2               	l8ui	a13, a2, 1
+ 14f:	c189                	s32i.n	a8, a1, 48
+ 151:	ad0b                	addi.n	a10, a13, -1
+ 153:	fb1c                	movi.n	a11, 31
+ 155:	74a0a0               	extui	a10, a10, 0, 8
+ 158:	473ba7               	bltu	a11, a10, 1a3 <vp_rpn_eval+0x1a3>
+			158: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x1a3
+ 15b:	12c8                	l32i.n	a12, a2, 4
+ 15d:	0000a1               	l32r	a10, fffc0160 <vp_rpn_eval+0xfffc0160>
+			15d: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0x4
+ 160:	3f3ac7               	bltu	a10, a12, 1a3 <vp_rpn_eval+0x1a3>
+			160: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x1a3
+ 163:	0202e2               	l8ui	a14, a2, 2
+ 166:	20c1f2               	addi	a15, a1, 32
+ 169:	05bd                	mov.n	a11, a5
+ 16b:	04ad                	mov.n	a10, a4
+ 16d:	d1e9                	s32i.n	a14, a1, 52
+ 16f:	000081               	l32r	a8, fffc0170 <vp_rpn_eval+0xfffc0170>
+			16f: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0x28
+			16f: R_XTENSA_ASM_EXPAND	vp_rpn_extract_raw
+ 172:	0008e0               	callx8	a8
+ 175:	3e8a16               	beqz	a10, 561 <vp_rpn_eval+0x561>
+			175: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x561
+ 178:	d1e8                	l32i.n	a14, a1, 52
+ 17a:	81a8                	l32i.n	a10, a1, 32
+ 17c:	c188                	l32i.n	a8, a1, 48
+ 17e:	191c                	movi.n	a9, 17
+ 180:	106e17               	bbci	a14, 1, 194 <vp_rpn_eval+0x194>
+			180: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x194
+ 183:	ca0a00               	float.s	f0, a10, 0
+ 186:	0000a1               	l32r	a10, fffc0188 <vp_rpn_eval+0xfffc0188>
+			186: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 189:	fa3010               	abs.s	f3, f0
+ 18c:	fa2a50               	wfr	f2, a10
+ 18f:	00e246               	j	51c <vp_rpn_eval+0x51c>
+			18f: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x51c
+ 192:	00                      	.byte	00
+ 193:	00                      	.byte	00
+ 194:	da0a00               	ufloat.s	f0, a10, 0
+ 197:	0000a1               	l32r	a10, fffc0198 <vp_rpn_eval+0xfffc0198>
+			197: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 19a:	fa3000               	mov.s	f3, f0
+ 19d:	fa2a50               	wfr	f2, a10
+ 1a0:	00de06               	j	51c <vp_rpn_eval+0x51c>
+			1a0: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x51c
+ 1a3:	820c                	movi.n	a2, 8
+ 1a5:	0114c6               	j	5fc <vp_rpn_eval+0x5fc>
+			1a5: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5fc
+ 1a8:	010203               	lsi	f0, a2, 4
+ 1ab:	0000a1               	l32r	a10, fffc01ac <vp_rpn_eval+0xfffc01ac>
+			1ab: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 1ae:	fa1010               	abs.s	f1, f0
+ 1b1:	fa2a50               	wfr	f2, a10
+ 1b4:	5b0210               	ult.s	b0, f2, f1
+ 1b7:	020076               	bf	b0, 1bd <vp_rpn_eval+0x1bd>
+			1b7: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x1bd
+ 1ba:	00ea06               	j	566 <vp_rpn_eval+0x566>
+			1ba: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x566
+ 1bd:	0000a1               	l32r	a10, fffc01c0 <vp_rpn_eval+0xfffc01c0>
+			1bd: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0x24
+ 1c0:	fa2a50               	wfr	f2, a10
+ 1c3:	6b0120               	ole.s	b0, f1, f2
+ 1c6:	020076               	bf	b0, 1cc <vp_rpn_eval+0x1cc>
+			1c6: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x1cc
+ 1c9:	00d746               	j	52a <vp_rpn_eval+0x52a>
+			1c9: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x52a
+ 1cc:	00e586               	j	566 <vp_rpn_eval+0x566>
+			1cc: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x566
+ 1cf:	00                      	.byte	00
+ 1d0:	0a0010               	add.s	f0, f0, f1
+ 1d3:	0000a1               	l32r	a10, fffc01d4 <vp_rpn_eval+0xfffc01d4>
+			1d3: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 1d6:	fa2a50               	wfr	f2, a10
+ 1d9:	fa3010               	abs.s	f3, f0
+ 1dc:	00cf06               	j	51c <vp_rpn_eval+0x51c>
+			1dc: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x51c
+ 1df:	00                      	.byte	00
+ 1e0:	1a0100               	sub.s	f0, f1, f0
+ 1e3:	0000a1               	l32r	a10, fffc01e4 <vp_rpn_eval+0xfffc01e4>
+			1e3: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 1e6:	fa2a50               	wfr	f2, a10
+ 1e9:	fa3010               	abs.s	f3, f0
+ 1ec:	00cb06               	j	51c <vp_rpn_eval+0x51c>
+			1ec: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x51c
+ 1ef:	00                      	.byte	00
+ 1f0:	2a0010               	mul.s	f0, f0, f1
+ 1f3:	0000a1               	l32r	a10, fffc01f4 <vp_rpn_eval+0xfffc01f4>
+			1f3: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 1f6:	fa2a50               	wfr	f2, a10
+ 1f9:	fa3010               	abs.s	f3, f0
+ 1fc:	00c706               	j	51c <vp_rpn_eval+0x51c>
+			1fc: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x51c
+ 1ff:	00                      	.byte	00
+ 200:	c189                	s32i.n	a8, a1, 48
+ 202:	080c                	movi.n	a8, 0
+ 204:	fa3850               	wfr	f3, a8
+ 207:	2b0030               	oeq.s	b0, f0, f3
+ 20a:	020076               	bf	b0, 210 <vp_rpn_eval+0x210>
+			20a: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x210
+ 20d:	00dc06               	j	581 <vp_rpn_eval+0x581>
+			20d: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x581
+ 210:	fab040               	rfr	a11, f0
+ 213:	faa140               	rfr	a10, f1
+ 216:	000081               	l32r	a8, fffc0218 <vp_rpn_eval+0xfffc0218>
+			216: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0x2c
+			216: R_XTENSA_ASM_EXPAND	__divsf3
+ 219:	0008e0               	callx8	a8
+ 21c:	000081               	l32r	a8, fffc021c <vp_rpn_eval+0xfffc021c>
+			21c: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 21f:	fa0a50               	wfr	f0, a10
+ 222:	fa2850               	wfr	f2, a8
+ 225:	fa3010               	abs.s	f3, f0
+ 228:	c188                	l32i.n	a8, a1, 48
+ 22a:	191c                	movi.n	a9, 17
+ 22c:	00bb06               	j	51c <vp_rpn_eval+0x51c>
+			22c: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x51c
+ 22f:	00                      	.byte	00
+ 230:	00                      	.byte	00
+ 231:	0000a1               	l32r	a10, fffc0234 <vp_rpn_eval+0xfffc0234>
+			231: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 234:	fa0160               	neg.s	f0, f1
+ 237:	fa2a50               	wfr	f2, a10
+ 23a:	fa3110               	abs.s	f3, f1
+ 23d:	00b6c6               	j	51c <vp_rpn_eval+0x51c>
+			23d: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x51c
+ 240:	1b0100               	un.s	b0, f1, f0
+ 243:	171076               	bt	b0, 25e <vp_rpn_eval+0x25e>
+			243: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x25e
+ 246:	0000a1               	l32r	a10, fffc0248 <vp_rpn_eval+0xfffc0248>
+			246: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 249:	4b0100               	olt.s	b0, f1, f0
+ 24c:	db0100               	movt.s	f0, f1, b0
+ 24f:	fa2a50               	wfr	f2, a10
+ 252:	fa3010               	abs.s	f3, f0
+ 255:	00b0c6               	j	51c <vp_rpn_eval+0x51c>
+			255: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x51c
+ 258:	1b0100               	un.s	b0, f1, f0
+ 25b:	050076               	bf	b0, 264 <vp_rpn_eval+0x264>
+			25b: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x264
+ 25e:	d20c                	movi.n	a2, 13
+ 260:	00e606               	j	5fc <vp_rpn_eval+0x5fc>
+			260: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5fc
+ 263:	00                      	.byte	00
+ 264:	0000a1               	l32r	a10, fffc0264 <vp_rpn_eval+0xfffc0264>
+			264: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 267:	4b0010               	olt.s	b0, f0, f1
+ 26a:	db0100               	movt.s	f0, f1, b0
+ 26d:	fa2a50               	wfr	f2, a10
+ 270:	fa3010               	abs.s	f3, f0
+ 273:	00a946               	j	51c <vp_rpn_eval+0x51c>
+			273: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x51c
+ 276:	00                      	.byte	00
+ 277:	00                      	.byte	00
+ 278:	fa2d50               	wfr	f2, a13
+ 27b:	1b0220               	un.s	b0, f2, f2
+ 27e:	1a0c                	movi.n	a10, 1
+ 280:	0b0c                	movi.n	a11, 0
+ 282:	d3ba00               	movt	a11, a10, b0
+ 285:	74c0b0               	extui	a12, a11, 0, 8
+ 288:	fd2b56               	bnez	a11, 25e <vp_rpn_eval+0x25e>
+			288: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x25e
+ 28b:	1b0100               	un.s	b0, f1, f0
+ 28e:	c3ac00               	movf	a10, a12, b0
+ 291:	fc9a56               	bnez	a10, 25e <vp_rpn_eval+0x25e>
+			291: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x25e
+ 294:	4b0200               	olt.s	b0, f2, f0
+ 297:	020076               	bf	b0, 29d <vp_rpn_eval+0x29d>
+			297: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x29d
+ 29a:	00b386               	j	56c <vp_rpn_eval+0x56c>
+			29a: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x56c
+ 29d:	0000a1               	l32r	a10, fffc02a0 <vp_rpn_eval+0xfffc02a0>
+			29d: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 2a0:	4b0100               	olt.s	b0, f1, f0
+ 2a3:	fa2a50               	wfr	f2, a10
+ 2a6:	fa3010               	abs.s	f3, f0
+ 2a9:	020076               	bf	b0, 2af <vp_rpn_eval+0x2af>
+			2a9: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x2af
+ 2ac:	009b06               	j	51c <vp_rpn_eval+0x51c>
+			2ac: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x51c
+ 2af:	fa0d50               	wfr	f0, a13
+ 2b2:	4b0010               	olt.s	b0, f0, f1
+ 2b5:	cb0100               	movf.s	f0, f1, b0
+ 2b8:	fa3010               	abs.s	f3, f0
+ 2bb:	009746               	j	51c <vp_rpn_eval+0x51c>
+			2bb: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x51c
+ 2be:	0000b1               	l32r	a11, fffc02c0 <vp_rpn_eval+0xfffc02c0>
+			2be: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0x18
+ 2c1:	fa4b50               	wfr	f4, a11
+ 2c4:	4b0140               	olt.s	b0, f1, f4
+ 2c7:	020076               	bf	b0, 2cd <vp_rpn_eval+0x2cd>
+			2c7: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x2cd
+ 2ca:	00a8c6               	j	571 <vp_rpn_eval+0x571>
+			2ca: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x571
+ 2cd:	0000b1               	l32r	a11, fffc02d0 <vp_rpn_eval+0xfffc02d0>
+			2cd: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0x14
+ 2d0:	fa3b50               	wfr	f3, a11
+ 2d3:	6b0310               	ole.s	b0, f3, f1
+ 2d6:	020076               	bf	b0, 2dc <vp_rpn_eval+0x2dc>
+			2d6: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x2dc
+ 2d9:	00a506               	j	571 <vp_rpn_eval+0x571>
+			2d9: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x571
+ 2dc:	0b0c                	movi.n	a11, 0
+ 2de:	fa3b50               	wfr	f3, a11
+ 2e1:	4b0130               	olt.s	b0, f1, f3
+ 2e4:	050076               	bf	b0, 2ed <vp_rpn_eval+0x2ed>
+			2e4: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x2ed
+ 2e7:	9ac100               	trunc.s	a12, f1, 0
+ 2ea:	000086               	j	2f0 <vp_rpn_eval+0x2f0>
+			2ea: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x2f0
+ 2ed:	eac100               	utrunc.s	a12, f1, 0
+ 2f0:	fa1010               	abs.s	f1, f0
+ 2f3:	5b0210               	ult.s	b0, f2, f1
+ 2f6:	120076               	bf	b0, 30c <vp_rpn_eval+0x30c>
+			2f6: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x30c
+ 2f9:	009d06               	j	571 <vp_rpn_eval+0x571>
+			2f9: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x571
+ 2fc:	0b0c                	movi.n	a11, 0
+ 2fe:	fa3b50               	wfr	f3, a11
+ 301:	0000b1               	l32r	a11, fffc0304 <vp_rpn_eval+0xfffc0304>
+			301: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0x18
+ 304:	fa0300               	mov.s	f0, f3
+ 307:	fa4b50               	wfr	f4, a11
+ 30a:	0c0c                	movi.n	a12, 0
+ 30c:	4b0040               	olt.s	b0, f0, f4
+ 30f:	020076               	bf	b0, 315 <vp_rpn_eval+0x315>
+			30f: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x315
+ 312:	0096c6               	j	571 <vp_rpn_eval+0x571>
+			312: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x571
+ 315:	0000b1               	l32r	a11, fffc0318 <vp_rpn_eval+0xfffc0318>
+			315: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0x14
+ 318:	fa1b50               	wfr	f1, a11
+ 31b:	6b0100               	ole.s	b0, f1, f0
+ 31e:	020076               	bf	b0, 324 <vp_rpn_eval+0x324>
+			31e: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x324
+ 321:	009306               	j	571 <vp_rpn_eval+0x571>
+			321: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x571
+ 324:	4b0030               	olt.s	b0, f0, f3
+ 327:	050076               	bf	b0, 330 <vp_rpn_eval+0x330>
+			327: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x330
+ 32a:	9ab000               	trunc.s	a11, f0, 0
+ 32d:	000086               	j	333 <vp_rpn_eval+0x333>
+			32d: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x333
+ 330:	eab000               	utrunc.s	a11, f0, 0
+ 333:	10dbc0               	and	a13, a11, a12
+ 336:	f4caa2               	addi	a10, a10, -12
+ 339:	20bbc0               	or	a11, a11, a12
+ 33c:	002206               	j	3c8 <vp_rpn_eval+0x3c8>
+			33c: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x3c8
+ 33f:	00                      	.byte	00
+ 340:	0000b1               	l32r	a11, fffc0340 <vp_rpn_eval+0xfffc0340>
+			340: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 343:	fa3110               	abs.s	f3, f1
+ 346:	fa2b50               	wfr	f2, a11
+ 349:	5b0230               	ult.s	b0, f2, f3
+ 34c:	020076               	bf	b0, 352 <vp_rpn_eval+0x352>
+			34c: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x352
+ 34f:	008786               	j	571 <vp_rpn_eval+0x571>
+			34f: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x571
+ 352:	0000b1               	l32r	a11, fffc0354 <vp_rpn_eval+0xfffc0354>
+			352: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0x18
+ 355:	fa4b50               	wfr	f4, a11
+ 358:	4b0140               	olt.s	b0, f1, f4
+ 35b:	020076               	bf	b0, 361 <vp_rpn_eval+0x361>
+			35b: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x361
+ 35e:	0083c6               	j	571 <vp_rpn_eval+0x571>
+			35e: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x571
+ 361:	0000b1               	l32r	a11, fffc0364 <vp_rpn_eval+0xfffc0364>
+			361: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0x14
+ 364:	fa3b50               	wfr	f3, a11
+ 367:	6b0310               	ole.s	b0, f3, f1
+ 36a:	020076               	bf	b0, 370 <vp_rpn_eval+0x370>
+			36a: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x370
+ 36d:	008006               	j	571 <vp_rpn_eval+0x571>
+			36d: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x571
+ 370:	0b0c                	movi.n	a11, 0
+ 372:	fa3b50               	wfr	f3, a11
+ 375:	4b0130               	olt.s	b0, f1, f3
+ 378:	050076               	bf	b0, 381 <vp_rpn_eval+0x381>
+			378: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x381
+ 37b:	9ab100               	trunc.s	a11, f1, 0
+ 37e:	000086               	j	384 <vp_rpn_eval+0x384>
+			37e: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x384
+ 381:	eab100               	utrunc.s	a11, f1, 0
+ 384:	fa1010               	abs.s	f1, f0
+ 387:	5b0210               	ult.s	b0, f2, f1
+ 38a:	0a0076               	bf	b0, 398 <vp_rpn_eval+0x398>
+			38a: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x398
+ 38d:	007806               	j	571 <vp_rpn_eval+0x571>
+			38d: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x571
+ 390:	00                      	.byte	00
+ 391:	0b0c                	movi.n	a11, 0
+ 393:	fa0b50               	wfr	f0, a11
+ 396:	0b0c                	movi.n	a11, 0
+ 398:	0000c1               	l32r	a12, fffc0398 <vp_rpn_eval+0xfffc0398>
+			398: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0x20
+ 39b:	fa1c50               	wfr	f1, a12
+ 39e:	6b0010               	ole.s	b0, f0, f1
+ 3a1:	020076               	bf	b0, 3a7 <vp_rpn_eval+0x3a7>
+			3a1: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x3a7
+ 3a4:	007246               	j	571 <vp_rpn_eval+0x571>
+			3a4: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x571
+ 3a7:	0000c1               	l32r	a12, fffc03a8 <vp_rpn_eval+0xfffc03a8>
+			3a7: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0x1c
+ 3aa:	fa1c50               	wfr	f1, a12
+ 3ad:	6b0100               	ole.s	b0, f1, f0
+ 3b0:	020076               	bf	b0, 3b6 <vp_rpn_eval+0x3b6>
+			3b0: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x3b6
+ 3b3:	006e86               	j	571 <vp_rpn_eval+0x571>
+			3b3: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x571
+ 3b6:	eac000               	utrunc.s	a12, f0, 0
+ 3b9:	f2caa2               	addi	a10, a10, -14
+ 3bc:	400c00               	ssr	a12
+ 3bf:	91d0b0               	srl	a13, a11
+ 3c2:	401c00               	ssl	a12
+ 3c5:	a1bb00               	sll	a11, a11
+ 3c8:	83bda0               	moveqz	a11, a13, a10
+ 3cb:	da0b00               	ufloat.s	f0, a11, 0
+ 3ce:	0000a1               	l32r	a10, fffc03d0 <vp_rpn_eval+0xfffc03d0>
+			3ce: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 3d1:	fa3000               	mov.s	f3, f0
+ 3d4:	fa2a50               	wfr	f2, a10
+ 3d7:	005046               	j	51c <vp_rpn_eval+0x51c>
+			3d7: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x51c
+ 3da:	00                      	.byte	00
+ 3db:	00                      	.byte	00
+ 3dc:	0000a1               	l32r	a10, fffc03dc <vp_rpn_eval+0xfffc03dc>
+			3dc: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 3df:	fa0110               	abs.s	f0, f1
+ 3e2:	fa2a50               	wfr	f2, a10
+ 3e5:	5b0200               	ult.s	b0, f2, f0
+ 3e8:	020076               	bf	b0, 3ee <vp_rpn_eval+0x3ee>
+			3e8: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x3ee
+ 3eb:	006086               	j	571 <vp_rpn_eval+0x571>
+			3eb: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x571
+ 3ee:	0000a1               	l32r	a10, fffc03f0 <vp_rpn_eval+0xfffc03f0>
+			3ee: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0x18
+ 3f1:	fa4a50               	wfr	f4, a10
+ 3f4:	4b0140               	olt.s	b0, f1, f4
+ 3f7:	020076               	bf	b0, 3fd <vp_rpn_eval+0x3fd>
+			3f7: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x3fd
+ 3fa:	005cc6               	j	571 <vp_rpn_eval+0x571>
+			3fa: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x571
+ 3fd:	0000a1               	l32r	a10, fffc0400 <vp_rpn_eval+0xfffc0400>
+			3fd: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0x14
+ 400:	fa0a50               	wfr	f0, a10
+ 403:	6b0010               	ole.s	b0, f0, f1
+ 406:	020076               	bf	b0, 40c <vp_rpn_eval+0x40c>
+			406: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x40c
+ 409:	005906               	j	571 <vp_rpn_eval+0x571>
+			409: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x571
+ 40c:	0a0c                	movi.n	a10, 0
+ 40e:	fa3a50               	wfr	f3, a10
+ 411:	4b0130               	olt.s	b0, f1, f3
+ 414:	050076               	bf	b0, 41d <vp_rpn_eval+0x41d>
+			414: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x41d
+ 417:	9ab100               	trunc.s	a11, f1, 0
+ 41a:	000086               	j	420 <vp_rpn_eval+0x420>
+			41a: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x420
+ 41d:	eab100               	utrunc.s	a11, f1, 0
+ 420:	74a0b0               	extui	a10, a11, 0, 8
+ 423:	ffdac2               	addmi	a12, a10, 0xffffff00
+ 426:	04b7b0               	extui	a11, a11, 7, 1
+ 429:	93acb0               	movnez	a10, a12, a11
+ 42c:	ca0a00               	float.s	f0, a10, 0
+ 42f:	fa3010               	abs.s	f3, f0
+ 432:	003986               	j	51c <vp_rpn_eval+0x51c>
+			432: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x51c
+ 435:	0000a1               	l32r	a10, fffc0438 <vp_rpn_eval+0xfffc0438>
+			435: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 438:	fa0110               	abs.s	f0, f1
+ 43b:	fa2a50               	wfr	f2, a10
+ 43e:	5b0200               	ult.s	b0, f2, f0
+ 441:	020076               	bf	b0, 447 <vp_rpn_eval+0x447>
+			441: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x447
+ 444:	004a46               	j	571 <vp_rpn_eval+0x571>
+			444: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x571
+ 447:	0000a1               	l32r	a10, fffc0448 <vp_rpn_eval+0xfffc0448>
+			447: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0x18
+ 44a:	fa4a50               	wfr	f4, a10
+ 44d:	4b0140               	olt.s	b0, f1, f4
+ 450:	020076               	bf	b0, 456 <vp_rpn_eval+0x456>
+			450: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x456
+ 453:	004686               	j	571 <vp_rpn_eval+0x571>
+			453: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x571
+ 456:	0000a1               	l32r	a10, fffc0458 <vp_rpn_eval+0xfffc0458>
+			456: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0x14
+ 459:	fa0a50               	wfr	f0, a10
+ 45c:	6b0010               	ole.s	b0, f0, f1
+ 45f:	020076               	bf	b0, 465 <vp_rpn_eval+0x465>
+			45f: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x465
+ 462:	0042c6               	j	571 <vp_rpn_eval+0x571>
+			462: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x571
+ 465:	0a0c                	movi.n	a10, 0
+ 467:	fa3a50               	wfr	f3, a10
+ 46a:	000346               	j	47b <vp_rpn_eval+0x47b>
+			46a: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x47b
+ 46d:	0a0c                	movi.n	a10, 0
+ 46f:	fa3a50               	wfr	f3, a10
+ 472:	0000a1               	l32r	a10, fffc0474 <vp_rpn_eval+0xfffc0474>
+			472: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 475:	fa1300               	mov.s	f1, f3
+ 478:	fa2a50               	wfr	f2, a10
+ 47b:	4b0130               	olt.s	b0, f1, f3
+ 47e:	050076               	bf	b0, 487 <vp_rpn_eval+0x487>
+			47e: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x487
+ 481:	9ab100               	trunc.s	a11, f1, 0
+ 484:	000086               	j	48a <vp_rpn_eval+0x48a>
+			484: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x48a
+ 487:	eab100               	utrunc.s	a11, f1, 0
+ 48a:	f4a0b0               	extui	a10, a11, 0, 16
+ 48d:	046bf7               	bbci	a11, 15, 495 <vp_rpn_eval+0x495>
+			48d: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x495
+ 490:	0000b1               	l32r	a11, fffc0490 <vp_rpn_eval+0xfffc0490>
+			490: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0x8
+ 493:	aaba                	add.n	a10, a10, a11
+ 495:	ca0a00               	float.s	f0, a10, 0
+ 498:	fa3010               	abs.s	f3, f0
+ 49b:	001f46               	j	51c <vp_rpn_eval+0x51c>
+			49b: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x51c
+ 49e:	00                      	.byte	00
+ 49f:	1b0110               	un.s	b0, f1, f1
+ 4a2:	070076               	bf	b0, 4ad <vp_rpn_eval+0x4ad>
+			4a2: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x4ad
+ 4a5:	ff6d46               	j	25e <vp_rpn_eval+0x25e>
+			4a5: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x25e
+ 4a8:	0a0c                	movi.n	a10, 0
+ 4aa:	fa1a50               	wfr	f1, a10
+ 4ad:	0c5616               	beqz	a6, 576 <vp_rpn_eval+0x576>
+			4ad: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x576
+ 4b0:	06b8                	l32i.n	a11, a6, 0
+ 4b2:	0c0b16               	beqz	a11, 576 <vp_rpn_eval+0x576>
+			4b2: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x576
+ 4b5:	12a8                	l32i.n	a10, a2, 4
+ 4b7:	0416c2               	l16ui	a12, a6, 8
+ 4ba:	023ac7               	bltu	a10, a12, 4c0 <vp_rpn_eval+0x4c0>
+			4ba: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x4c0
+ 4bd:	002d46               	j	576 <vp_rpn_eval+0x576>
+			4bd: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x576
+ 4c0:	16c8                	l32i.n	a12, a6, 4
+ 4c2:	a0bab0               	addx4	a11, a10, a11
+ 4c5:	0adc16               	beqz	a12, 576 <vp_rpn_eval+0x576>
+			4c5: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x576
+ 4c8:	001ba2               	l16ui	a10, a11, 0
+ 4cb:	020bb2               	l8ui	a11, a11, 2
+ 4ce:	0516e2               	l16ui	a14, a6, 10
+ 4d1:	dbaa                	add.n	a13, a11, a10
+ 4d3:	02bed7               	bgeu	a14, a13, 4d9 <vp_rpn_eval+0x4d9>
+			4d3: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x4d9
+ 4d6:	002706               	j	576 <vp_rpn_eval+0x576>
+			4d6: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x576
+ 4d9:	09fb16               	beqz	a11, 57c <vp_rpn_eval+0x57c>
+			4d9: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x57c
+ 4dc:	bb0b                	addi.n	a11, a11, -1
+ 4de:	f4b0b0               	extui	a11, a11, 0, 16
+ 4e1:	bbaa                	add.n	a11, a11, a10
+ 4e3:	90bbb0               	addx2	a11, a11, a11
+ 4e6:	90aaa0               	addx2	a10, a10, a10
+ 4e9:	dccb                	addi.n	a13, a12, 12
+ 4eb:	a0aac0               	addx4	a10, a10, a12
+ 4ee:	a0bbd0               	addx4	a11, a11, a13
+ 4f1:	000a03               	lsi	f0, a10, 0
+ 4f4:	6b0010               	ole.s	b0, f0, f1
+ 4f7:	170076               	bf	b0, 512 <vp_rpn_eval+0x512>
+			4f7: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x512
+ 4fa:	010a03               	lsi	f0, a10, 4
+ 4fd:	6b0100               	ole.s	b0, f1, f0
+ 500:	0e0076               	bf	b0, 512 <vp_rpn_eval+0x512>
+			500: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x512
+ 503:	020a03               	lsi	f0, a10, 8
+ 506:	0000a1               	l32r	a10, fffc0508 <vp_rpn_eval+0xfffc0508>
+			506: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 509:	fa3010               	abs.s	f3, f0
+ 50c:	fa2a50               	wfr	f2, a10
+ 50f:	000246               	j	51c <vp_rpn_eval+0x51c>
+			50f: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x51c
+ 512:	aacb                	addi.n	a10, a10, 12
+ 514:	d99ab7               	bne	a10, a11, 4f1 <vp_rpn_eval+0x4f1>
+			514: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x4f1
+ 517:	001846               	j	57c <vp_rpn_eval+0x57c>
+			517: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x57c
+ 51a:	00                      	.byte	00
+ 51b:	00                      	.byte	00
+ 51c:	5b0230               	ult.s	b0, f2, f3
+ 51f:	070076               	bf	b0, 52a <vp_rpn_eval+0x52a>
+			51f: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x52a
+ 522:	ff4e06               	j	25e <vp_rpn_eval+0x25e>
+			522: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x25e
+ 525:	0a0c                	movi.n	a10, 0
+ 527:	fa0a50               	wfr	f0, a10
+ 52a:	a0a810               	addx4	a10, a8, a1
+ 52d:	004a03               	ssi	f0, a10, 0
+ 530:	228b                	addi.n	a2, a2, 8
+ 532:	c81b                	addi.n	a12, a8, 1
+ 534:	021327               	beq	a3, a2, 53a <vp_rpn_eval+0x53a>
+			534: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x53a
+ 537:	fec086               	j	3d <vp_rpn_eval+0x3d>
+			537: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x3d
+ 53a:	620c                	movi.n	a2, 6
+ 53c:	021c26               	beqi	a12, 1, 542 <vp_rpn_eval+0x542>
+			53c: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x542
+ 53f:	002e46               	j	5fc <vp_rpn_eval+0x5fc>
+			53f: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5fc
+ 542:	0188                	l32i.n	a8, a1, 0
+ 544:	020c                	movi.n	a2, 0
+ 546:	0789                	s32i.n	a8, a7, 0
+ 548:	002c06               	j	5fc <vp_rpn_eval+0x5fc>
+			548: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5fc
+ 54b:	00                      	.byte	00
+ 54c:	221c                	movi.n	a2, 18
+ 54e:	002a86               	j	5fc <vp_rpn_eval+0x5fc>
+			54e: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5fc
+ 551:	320c                	movi.n	a2, 3
+ 553:	002946               	j	5fc <vp_rpn_eval+0x5fc>
+			553: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5fc
+ 556:	420c                	movi.n	a2, 4
+ 558:	002806               	j	5fc <vp_rpn_eval+0x5fc>
+			558: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5fc
+ 55b:	00                      	.byte	00
+ 55c:	520c                	movi.n	a2, 5
+ 55e:	002686               	j	5fc <vp_rpn_eval+0x5fc>
+			55e: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5fc
+ 561:	e20c                	movi.n	a2, 14
+ 563:	002546               	j	5fc <vp_rpn_eval+0x5fc>
+			563: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5fc
+ 566:	b20c                	movi.n	a2, 11
+ 568:	002406               	j	5fc <vp_rpn_eval+0x5fc>
+			568: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5fc
+ 56b:	00                      	.byte	00
+ 56c:	121c                	movi.n	a2, 17
+ 56e:	002286               	j	5fc <vp_rpn_eval+0x5fc>
+			56e: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5fc
+ 571:	f20c                	movi.n	a2, 15
+ 573:	002146               	j	5fc <vp_rpn_eval+0x5fc>
+			573: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5fc
+ 576:	a20c                	movi.n	a2, 10
+ 578:	002006               	j	5fc <vp_rpn_eval+0x5fc>
+			578: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5fc
+ 57b:	00                      	.byte	00
+ 57c:	021c                	movi.n	a2, 16
+ 57e:	001e86               	j	5fc <vp_rpn_eval+0x5fc>
+			57e: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5fc
+ 581:	c20c                	movi.n	a2, 12
+ 583:	001d46               	j	5fc <vp_rpn_eval+0x5fc>
+			583: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5fc
+ 586:	9b0c                	movi.n	a11, 9
+ 588:	991ab7               	beq	a10, a11, 525 <vp_rpn_eval+0x525>
+			588: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x525
+ 58b:	2d3ba7               	bltu	a11, a10, 5bc <vp_rpn_eval+0x5bc>
+			58b: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5bc
+ 58e:	935a26               	beqi	a10, 5, 525 <vp_rpn_eval+0x525>
+			58e: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x525
+ 591:	136af6               	bgeui	a10, 6, 5a8 <vp_rpn_eval+0x5a8>
+			591: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5a8
+ 594:	023a66               	bnei	a10, 3, 59a <vp_rpn_eval+0x59a>
+			594: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x59a
+ 597:	ff0346               	j	1a8 <vp_rpn_eval+0x1a8>
+			597: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x1a8
+ 59a:	874a26               	beqi	a10, 4, 525 <vp_rpn_eval+0x525>
+			59a: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x525
+ 59d:	022a66               	bnei	a10, 2, 5a3 <vp_rpn_eval+0x5a3>
+			59d: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5a3
+ 5a0:	feea06               	j	14c <vp_rpn_eval+0x14c>
+			5a0: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x14c
+ 5a3:	fee246               	j	130 <vp_rpn_eval+0x130>
+			5a3: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x130
+ 5a6:	00                      	.byte	00
+ 5a7:	00                      	.byte	00
+ 5a8:	d57a26               	beqi	a10, 7, 581 <vp_rpn_eval+0x581>
+			5a8: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x581
+ 5ab:	0000c1               	l32r	a12, fffc05ac <vp_rpn_eval+0xfffc05ac>
+			5ab: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0x10
+ 5ae:	f8caa2               	addi	a10, a10, -8
+ 5b1:	0b0c                	movi.n	a11, 0
+ 5b3:	83bca0               	moveqz	a11, a12, a10
+ 5b6:	fa0b50               	wfr	f0, a11
+ 5b9:	ffdb46               	j	52a <vp_rpn_eval+0x52a>
+			5b9: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x52a
+ 5bc:	fb0c                	movi.n	a11, 15
+ 5be:	1a3ba7               	bltu	a11, a10, 5dc <vp_rpn_eval+0x5dc>
+			5be: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5dc
+ 5c1:	db0c                	movi.n	a11, 13
+ 5c3:	02bba7               	bgeu	a11, a10, 5c9 <vp_rpn_eval+0x5c9>
+			5c3: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5c9
+ 5c6:	ff71c6               	j	391 <vp_rpn_eval+0x391>
+			5c6: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x391
+ 5c9:	bb0c                	movi.n	a11, 11
+ 5cb:	029ab7               	bne	a10, a11, 5d1 <vp_rpn_eval+0x5d1>
+			5cb: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5d1
+ 5ce:	ffd4c6               	j	525 <vp_rpn_eval+0x525>
+			5ce: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x525
+ 5d1:	02bba7               	bgeu	a11, a10, 5d7 <vp_rpn_eval+0x5d7>
+			5d1: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5d7
+ 5d4:	ff4906               	j	2fc <vp_rpn_eval+0x2fc>
+			5d4: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x2fc
+ 5d7:	ffd286               	j	525 <vp_rpn_eval+0x525>
+			5d7: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x525
+ 5da:	00                      	.byte	00
+ 5db:	00                      	.byte	00
+ 5dc:	029a97               	bne	a10, a9, 5e2 <vp_rpn_eval+0x5e2>
+			5dc: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5e2
+ 5df:	ffa286               	j	46d <vp_rpn_eval+0x46d>
+			5df: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x46d
+ 5e2:	2b1c                	movi.n	a11, 18
+ 5e4:	029ab7               	bne	a10, a11, 5ea <vp_rpn_eval+0x5ea>
+			5e4: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x5ea
+ 5e7:	ffaf46               	j	4a8 <vp_rpn_eval+0x4a8>
+			5e7: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x4a8
+ 5ea:	0a0c                	movi.n	a10, 0
+ 5ec:	fa3a50               	wfr	f3, a10
+ 5ef:	0000a1               	l32r	a10, fffc05f0 <vp_rpn_eval+0xfffc05f0>
+			5ef: R_XTENSA_SLOT0_OP	.literal.vp_rpn_eval+0xc
+ 5f2:	fa1300               	mov.s	f1, f3
+ 5f5:	fa2a50               	wfr	f2, a10
+ 5f8:	ff8546               	j	411 <vp_rpn_eval+0x411>
+			5f8: R_XTENSA_SLOT0_OP	.text.vp_rpn_eval+0x411
+ 5fb:	00                      	.byte	00
+ 5fc:	f01d                	retw.n
+
+stats before undefined FP helpers:
+         U __divsf3
+         U __floatdisf
+Static eval frame: /tmp/obd-rpn-raw-float-before.c:238:14:vp_rpn_eval	96	static
+
+stats after undefined FP helpers:
+         U __divsf3
+Static eval frame: /Users/parklu/personProject/obd_brz_gauge/main/vehicle/vp_rpn.c:238:14:vp_rpn_eval	96	static
+
+stats module text/readonly sizes:
+   text	   data	    bss	    dec	    hex	filename
+   3210	      0	      0	   3210	    c8a	/tmp/rpn-raw-float-stats-before.o
+   3238	      0	      0	   3238	    ca6	/tmp/rpn-raw-float-stats-after.o
+
+Standalone after/build .text.vp_rpn_eval bytes match; SHA256 779a3247679e9f3a66e7ef12a2407c471f1de9f732bc58d108ce209c9ec4318b
+
+Standalone after/build .literal.vp_rpn_eval bytes match; SHA256 d5ddba1e46f77d192374fd70a6d4d5ea2cec12b55eec1e3dcd3834e163399103
+
+No integer probe/baseline symbols in ELF; instrumentation only in stats ELF.
+App bytes 0x285ea0; SHA256 64de59ac85a35b66c2a12d2ba60978a5ae8fe0d12fe034fd59c10a592b886d9b
+
+no-slot before undefined FP helpers:
+         U __divsf3
+         U __floatdisf
+Static eval frame: /tmp/obd-rpn-raw-float-before.c:238:14:vp_rpn_eval	96	static
+
+no-slot after undefined FP helpers:
+         U __divsf3
+Static eval frame: /Users/parklu/personProject/obd_brz_gauge/main/vehicle/vp_rpn.c:238:14:vp_rpn_eval	96	static
+
+no-slot module text/readonly sizes:
+   text	   data	    bss	    dec	    hex	filename
+   3210	      0	      0	   3210	    c8a	/tmp/rpn-raw-float-no-slot-before.o
+   3238	      0	      0	   3238	    ca6	/tmp/rpn-raw-float-no-slot-after.o
+
+Standalone after/build .text.vp_rpn_eval bytes match; SHA256 779a3247679e9f3a66e7ef12a2407c471f1de9f732bc58d108ce209c9ec4318b
+
+Standalone after/build .literal.vp_rpn_eval bytes match; SHA256 d5ddba1e46f77d192374fd70a6d4d5ea2cec12b55eec1e3dcd3834e163399103
+
+No integer probe/baseline symbols in ELF; instrumentation only in stats ELF.
+App bytes 0x276000; SHA256 2d591069b3e0fd6fa86e6509ec417991df9d0ef4cd1a5b4ac9a74f123242204c
+
+
+Correctness evidence:
+Candidate and adopted production source are byte-identical.
+Routine test: 4274988 complete formula comparisons, 1319950 valid field cases. Independent per-bit extraction with the original int64-to-float conversion checks bitwise float outputs and error/sentinel behavior.
+Full-range optional Release test result: see captured output below. It tests both unsigned and signed raw32 formulas for all uint32 bit patterns, against the independent reference and whole old evaluator source in a separate TU.
+Whole old source passes the same sanitized routine test.
+
+
+Full-range test output:
+raw32 patterns: 268435456/4294967296
+raw32 patterns: 536870912/4294967296
+raw32 patterns: 805306368/4294967296
+raw32 patterns: 1073741824/4294967296
+raw32 patterns: 1342177280/4294967296
+raw32 patterns: 1610612736/4294967296
+raw32 patterns: 1879048192/4294967296
+raw32 patterns: 2147483648/4294967296
+raw32 patterns: 2415919104/4294967296
+raw32 patterns: 2684354560/4294967296
+raw32 patterns: 2952790016/4294967296
+raw32 patterns: 3221225472/4294967296
+raw32 patterns: 3489660928/4294967296
+raw32 patterns: 3758096384/4294967296
+raw32 patterns: 4026531840/4294967296
+raw32 patterns: 4294967296/4294967296
+raw float: 8594209580 complete formula comparisons; 1319950 valid field cases; PASS
+
+
+Whole old source routine test:
+raw float: 4274988 complete formula comparisons; 1319950 valid field cases; PASS
+
+
+Negative controls (each compiled successfully before rejection):
+[
+  {
+    "name": "signedness",
+    "compile": "pass",
+    "test_exit": 1,
+    "failure": "raw eval mismatch start=0 width=1 flags=2 len=1 n=1 error=0/0 output=bf800000/4f800000"
+  },
+  {
+    "name": "unsigned-as-signed",
+    "compile": "pass",
+    "test_exit": 1,
+    "failure": "raw eval mismatch start=0 width=32 flags=0 len=4 n=1 error=0/0 output=4f800000/bf800000"
+  },
+  {
+    "name": "signed-as-unsigned",
+    "compile": "pass",
+    "test_exit": 1,
+    "failure": "raw eval mismatch start=0 width=1 flags=2 len=1 n=1 error=0/0 output=bf800000/4f800000"
+  },
+  {
+    "name": "truncate-width",
+    "compile": "pass",
+    "test_exit": 1,
+    "failure": "raw eval mismatch start=0 width=17 flags=0 len=3 n=1 error=0/0 output=47ffff80/477fff00"
+  },
+  {
+    "name": "ignore-unknown-flags",
+    "compile": "pass",
+    "test_exit": 1,
+    "failure": "raw eval mismatch start=0 width=1 flags=3 len=1 n=1 error=0/0 output=bf800000/4f800000"
+  },
+  {
+    "name": "round-by-offset",
+    "compile": "pass",
+    "test_exit": 1,
+    "failure": "raw eval mismatch start=0 width=1 flags=0 len=1 n=1 error=0/0 output=00000000/3f800000"
+  },
+  {
+    "name": "error-sentinel",
+    "compile": "pass",
+    "test_exit": 1,
+    "failure": "raw eval mismatch start=0 width=1 flags=0 len=0 n=1 error=14/14 output=c568e000/00000000"
+  }
+]
+
+
+Release paired source test suite:
+Test project /tmp/obd-rpn-raw-float-release
+      Start  1: vehicle_rpn
+ 1/14 Test  #1: vehicle_rpn ......................   Passed    0.68 sec
+      Start  2: vehicle_validate
+ 2/14 Test  #2: vehicle_validate .................   Passed    0.50 sec
+      Start  3: vehicle_defaults
+ 3/14 Test  #3: vehicle_defaults .................   Passed    0.49 sec
+      Start  4: vehicle_examples
+ 4/14 Test  #4: vehicle_examples .................   Passed    0.48 sec
+      Start  5: vehicle_compile
+ 5/14 Test  #5: vehicle_compile ..................   Passed    0.48 sec
+      Start  6: vehicle_fixtures
+ 6/14 Test  #6: vehicle_fixtures .................   Passed    0.00 sec
+      Start  7: vehicle_catalog
+ 7/14 Test  #7: vehicle_catalog ..................   Passed    0.01 sec
+      Start  8: vehicle_import_pack
+ 8/14 Test  #8: vehicle_import_pack ..............   Passed    0.01 sec
+      Start  9: vehicle_golden
+ 9/14 Test  #9: vehicle_golden ...................   Passed    0.48 sec
+      Start 10: vehicle_import_fresh
+10/14 Test #10: vehicle_import_fresh .............   Passed    0.06 sec
+      Start 11: vehicle_expr
+11/14 Test #11: vehicle_expr .....................   Passed    0.04 sec
+      Start 12: vehicle_builtin_fresh
+12/14 Test #12: vehicle_builtin_fresh ............   Passed    0.51 sec
+      Start 13: vehicle_rpn_integer
+13/14 Test #13: vehicle_rpn_integer ..............   Passed    0.54 sec
+      Start 14: vehicle_rpn_raw_float
+14/14 Test #14: vehicle_rpn_raw_float ............   Passed    0.40 sec
+
+100% tests passed, 0 tests failed out of 14
+
+Total Test time (real) =   4.67 sec
+
+engine: 100% tests passed, 0 tests failed out of 5 (ASAN/UBSAN enabled; default source overrides empty)
+
+espnow: 100% tests passed, 0 tests failed out of 4 (ASAN/UBSAN enabled; default source overrides empty)
+
+media: 100% tests passed, 0 tests failed out of 7 (ASAN/UBSAN enabled; default source overrides empty)
+
+rules: 100% tests passed, 0 tests failed out of 6 (ASAN/UBSAN enabled; default source overrides empty)
+
+theme: 100% tests passed, 0 tests failed out of 6 (ASAN/UBSAN enabled; default source overrides empty)
+
+vehicle: 100% tests passed, 0 tests failed out of 14 (ASAN/UBSAN enabled; default source overrides empty)
+
+signal_store: 100% tests passed, 0 tests failed out of 4 (ASAN/UBSAN enabled; default source overrides empty)
+
+storage: 100% tests passed, 0 tests failed out of 2 (ASAN/UBSAN enabled; default source overrides empty)
+
+
+Host timing: Apple M1 arm64 / Apple clang 21.0.0; Release -O3, sanitizers OFF, no LTO. Same process, formula/input addresses, 10000 warmup, 7 alternating samples x 500000 calls, medians. Checksums match. No overlapping local builds/tests during timing; background system load is uncontrolled. Timing does not prove ESP32 latency/poll-rate improvements.
+
+Host hardware-conversion context (Apple M1 arm64):
+rpn_integer_baseline eval hardware conversion instructions:
+0000000000000790	ucvtf	s0, w8
+00000000000007dc	scvtf	s0, w9
+000000000000087c	scvtf	s0, w9
+000000000000089c	ucvtf	s0, s0
+00000000000008fc	scvtf	s0, x8
+rpn_integer_probe eval hardware conversion instructions:
+0000000000000790	ucvtf	s0, w8
+00000000000007dc	scvtf	s0, w9
+000000000000087c	scvtf	s0, w9
+000000000000089c	ucvtf	s0, s0
+0000000000000900	scvtf	s0, w8
+0000000000000904	ucvtf	s1, w8
+
+Final contract/generated-file/document checks:
+python3 contracts/check_contracts.py --profiles vehicles/catalog vehicles/import/OBD/IMPORT vehicles/examples
+signals: 17 entries (12 obd.*)
+schema: valid JSON Schema draft 2020-12
+fixtures: rules vectors=38 steps=79, format cases=24, editor pin 5a7484e
+profiles: 37 file(s) checked
+check_contracts: OK
+python3 tools/gen_themes.py --check
+gen_themes: up to date (3 themes, 0 artwork file(s), 0 KB of 1536 KB budget)
+python3 tools/gen_layout.py --check --no-idf
+partitions.csv: 9 partitions, PARTITION_LAYOUT_CRC = 0x94752aa3
+  nvs        type 0x01 subtype 0x02 offset 0x0009000 size 0x0006000 (24 KB)
+  otadata    type 0x01 subtype 0x00 offset 0x000F000 size 0x0002000 (8 KB)
+  nvs_app    type 0x01 subtype 0x02 offset 0x0011000 size 0x000F000 (60 KB)
+  ota_0      type 0x00 subtype 0x10 offset 0x0020000 size 0x0300000 (3 MB)
+  ota_1      type 0x00 subtype 0x11 offset 0x0320000 size 0x0300000 (3 MB)
+  theme_0    type 0x01 subtype 0x82 offset 0x0620000 size 0x0400000 (4 MB)
+  bootmedia  type 0x01 subtype 0x82 offset 0x0A20000 size 0x04C0000 (4.75 MB)
+  coredump   type 0x01 subtype 0x03 offset 0x0EE0000 size 0x0020000 (128 KB)
+  config     type 0x01 subtype 0x83 offset 0x0F00000 size 0x0100000 (1 MB)
+docs/FLASH.md: partition table matches
+docs/FLASH.en.md: partition table matches
+git diff --check
+Bilingual performance tables/code, heading structure, new-file whitespace, complete exhaustive log and reverse-patch baseline reconstruction PASS.
+Serial inventory: ['/dev/cu.wlan-debug', '/dev/cu.debug-console', '/dev/cu.Bluetooth-Incoming-Port']

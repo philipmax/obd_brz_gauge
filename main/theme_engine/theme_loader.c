@@ -1,1250 +1,676 @@
-#include "theme_interface.h"
-#include "esp_log.h"
-#include "esp_partition.h"
-#include "esp_heap_caps.h"
-#include "esp_err.h"
-#include "cJSON.h"
-#include <string.h>
-#include <stdlib.h>
-#include <ctype.h>
-#include "bsp_obd_dsp/nvs_storage.h"
-#include "export_path/ui_theme.h"
-#include "src/misc/lv_fs.h"
-
-#define TAG "theme_engine"
-#define THEME_MANIFEST_MAX_SIZE  (16 * 1024)  // 16KB for JSON manifest
-
-// Exact-match schema version this firmware's parser understands. No
-// range/semver comparison — the format has only ever been "1.0", and a
-// mismatch (older or newer) means this loader may not understand new
-// element types the manifest relies on, so it's safer to refuse and fall
-// back to the default theme than to silently misrender.
-#define THEME_SCHEMA_VERSION_SUPPORTED "1.0"
-
-// Widget kinds a layout.json element can bind live OBD data to. Kept as an
-// enum + shared params struct (instead of a per-widget-type function
-// pointer) because label/arc/bar need different LVGL setter calls and
-// different extra parameters (format string, divisor, range) — a single
-// void(*)(lv_obj_t*, int32_t) signature can't carry that.
-typedef enum {
-    BINDING_KIND_LABEL,   // lv_label_set_text_fmt with printf-style format + divisor
-    BINDING_KIND_ARC,     // lv_arc_set_value, raw value clamped to [range_min, range_max]
-    BINDING_KIND_BAR,     // lv_bar_set_value, raw value clamped to [range_min, range_max]
-} theme_binding_kind_t;
-
-typedef struct {
-    lv_obj_t *widget;
-    char data_source[24];      // "obd.boost" / "obd.rpm" / ...
-    theme_binding_kind_t kind;
-    int32_t range_min;
-    int32_t range_max;
-    int32_t divisor;           // label only: value/divisor is split into whole.fraction
-    char format[24];           // label only: printf-style, e.g. "%d.%02d" or "%d PSI"
-    int32_t anchor_x;          // label only: design x anchor, re-applied after every
-                                // text update since center/right alignment depends on
-                                // the newly rendered width, not the "--" placeholder's
-    uint8_t align;              // label only: 0=left, 1=center, 2=right
-} theme_binding_t;
-
-// A single named, memory-mapped image asset from the manifest's "assets"
-// object. dial_background/ring_overlay are also mapped into this table (in
-// addition to the dedicated dial_img/ring_img fields, which stay for
-// theme_get_asset()'s "dial"/"ring" back-compat lookup) so "image" layout
-// elements can address them the same way as any other imported image.
-#define THEME_MAX_NAMED_ASSETS 16
-typedef struct {
-    char name[32];
-    const void *data;
-    esp_partition_mmap_handle_t handle;
-    lv_img_dsc_t img;
-} theme_named_asset_t;
-
-// A compiled LVGL binary font ("lv_font_bin" asset), mmap'd from flash like
-// any other named asset. Kept separate from theme_named_asset_t because it's
-// read through lv_fs (see theme_font_fs_*) rather than handed to LVGL as a
-// raw lv_img_dsc_t pointer.
-#define THEME_MAX_NAMED_FONTS 16
-typedef struct {
-    char name[40];
-    const void *data;
-    esp_partition_mmap_handle_t handle;
-    size_t size;
-} theme_named_font_t;
-
-// A font actually loaded via lv_font_load(), cached by asset name so pages
-// with multiple labels sharing one custom font don't reload it per-label.
-typedef struct {
-    char name[40];
-    lv_font_t *font;
-} theme_loaded_font_t;
-
-// Internal theme context
-typedef struct {
-    bool loaded;
-    uint8_t slot;
-    const esp_partition_t *partition;
-    cJSON *manifest;
-
-    // Theme metadata
-    theme_info_t info;
-
-    // Memory-mapped assets
-    const void *dial_data;
-    esp_partition_mmap_handle_t dial_handle;
-    const void *ring_data;
-    esp_partition_mmap_handle_t ring_handle;
-
-    // LVGL image descriptors
-    lv_img_dsc_t dial_img;
-    lv_img_dsc_t ring_img;
-
-    // Generic named assets (superset of dial_background/ring_overlay above,
-    // keyed by whatever name pack_theme.py assigned in the manifest's
-    // "assets" object) -- lets layout.json "image" elements reference any
-    // imported image by name, not just the two built-in dial/ring slots.
-    theme_named_asset_t named_assets[THEME_MAX_NAMED_ASSETS];
-    uint8_t named_asset_count;
-
-    // Compiled LVGL binary fonts (format == "lv_font_bin" in the manifest's
-    // "assets" object), mmap'd the same way as named_assets above but kept
-    // in a separate table since lv_font_load() reads them through the "F:"
-    // lv_fs_drv_t (theme_font_fs_*) instead of being handed a raw pointer.
-    theme_named_font_t named_fonts[THEME_MAX_NAMED_FONTS];
-    uint8_t named_font_count;
-
-    // Fonts actually lv_font_load()'ed so far (lazy, keyed by asset name) --
-    // avoids reloading the same .bin once per label when several labels on
-    // a page share one custom font. Freed in theme_unload().
-    theme_loaded_font_t loaded_fonts[THEME_MAX_NAMED_FONTS];
-    uint8_t loaded_font_count;
-
-    // Color palette (8 themed colors)
-    uint32_t colors[UI_COLOR__COUNT];
-
-    // Page registry
-    theme_page_entry_t pages[32];
-    uint8_t page_count;
-
-    // Ordered list of theme-declared page ids (subset of `pages` with
-    // type == THEME_PAGE_TYPE_THEME, kept separately so UI navigation can
-    // walk "page N of the active theme" without caring about future system
-    // pages mixed into the same registry). Strings point into s_ctx.manifest,
-    // valid until the next theme_load()/theme_unload().
-    const char *theme_page_ids[32];
-    uint8_t theme_page_count;
-
-    // Data bindings (for theme_update_data), populated while building a
-    // custom page from layout.json
-    theme_binding_t bindings[32];
-    uint8_t binding_count;
-} theme_context_t;
-
-static theme_context_t s_ctx = {0};
-
-// Forward declarations
-static esp_err_t theme_load_default(void);
-static esp_err_t theme_parse_manifest(void);
-static esp_err_t theme_load_assets(void);
-static void theme_register_pages(void);
-static lv_obj_t* theme_create_custom_page(const char *page_id);
-static const char* theme_json_str(cJSON *obj, const char *key, const char *fallback);
-static void theme_font_fs_register(void);
-static const theme_named_font_t* theme_find_named_font(const char *name);
-static const lv_font_t* theme_load_custom_font(const char *font_asset);
-
 // ============================================================
-//  Memory-backed lv_fs_drv_t for lv_font_load()
-// ============================================================
+//  theme_loader.c — SD manifest, asset tables, fonts and
+//  the theme lifecycle (contracts/theme-editor-contract.md A1-A3).
 //
-// lv_font_load() reads its .bin through LVGL's virtual filesystem, not a
-// raw pointer -- unlike images, which theme_find_named_asset() hands to
-// LVGL directly as an lv_img_dsc_t. The bytes are already mmap'd flash
-// (same as image assets), so this driver is a thin adapter: open_cb looks
-// the path up in named_fonts[] and returns a small in-memory cursor,
-// read/seek/tell operate purely on that cursor, close_cb frees it. No real
-// file I/O and no sdkconfig change needed (lv_fs.c is unconditionally
-// compiled by LVGL's own CMakeLists).
-#define THEME_FONT_FS_LETTER 'F'
-
-typedef struct {
-    const uint8_t *data;
-    size_t size;
-    size_t pos;
-} theme_font_fs_file_t;
-
-static void* theme_font_fs_open(lv_fs_drv_t *drv, const char *path, lv_fs_mode_t mode) {
-    (void)drv;
-    if (mode != LV_FS_MODE_RD) {
-        return NULL;  // fonts are read-only assets
-    }
-    const theme_named_font_t *entry = theme_find_named_font(path);
-    if (!entry) {
-        ESP_LOGW(TAG, "Font fs: unknown font asset '%s'", path);
-        return NULL;
-    }
-    theme_font_fs_file_t *file = lv_mem_alloc(sizeof(theme_font_fs_file_t));
-    if (!file) {
-        return NULL;
-    }
-    file->data = (const uint8_t *)entry->data;
-    file->size = entry->size;
-    file->pos = 0;
-    return file;
-}
-
-static lv_fs_res_t theme_font_fs_close(lv_fs_drv_t *drv, void *file_p) {
-    (void)drv;
-    lv_mem_free(file_p);
-    return LV_FS_RES_OK;
-}
-
-static lv_fs_res_t theme_font_fs_read(lv_fs_drv_t *drv, void *file_p, void *buf, uint32_t btr, uint32_t *br) {
-    (void)drv;
-    theme_font_fs_file_t *file = (theme_font_fs_file_t *)file_p;
-    size_t remaining = file->size - file->pos;
-    size_t to_read = btr < remaining ? btr : remaining;
-    memcpy(buf, file->data + file->pos, to_read);
-    file->pos += to_read;
-    *br = (uint32_t)to_read;
-    return LV_FS_RES_OK;
-}
-
-static lv_fs_res_t theme_font_fs_seek(lv_fs_drv_t *drv, void *file_p, uint32_t pos, lv_fs_whence_t whence) {
-    (void)drv;
-    theme_font_fs_file_t *file = (theme_font_fs_file_t *)file_p;
-    size_t base;
-    switch (whence) {
-        case LV_FS_SEEK_CUR: base = file->pos; break;
-        case LV_FS_SEEK_END: base = file->size; break;
-        default: base = 0; break;
-    }
-    size_t new_pos = base + pos;
-    file->pos = new_pos > file->size ? file->size : new_pos;
-    return LV_FS_RES_OK;
-}
-
-static lv_fs_res_t theme_font_fs_tell(lv_fs_drv_t *drv, void *file_p, uint32_t *pos_p) {
-    (void)drv;
-    *pos_p = (uint32_t)((theme_font_fs_file_t *)file_p)->pos;
-    return LV_FS_RES_OK;
-}
-
-static void theme_font_fs_register(void) {
-    static lv_fs_drv_t drv;
-    lv_fs_drv_init(&drv);
-    drv.letter = THEME_FONT_FS_LETTER;
-    drv.open_cb = theme_font_fs_open;
-    drv.close_cb = theme_font_fs_close;
-    drv.read_cb = theme_font_fs_read;
-    drv.seek_cb = theme_font_fs_seek;
-    drv.tell_cb = theme_font_fs_tell;
-    lv_fs_drv_register(&drv);
-}
-
-// ============================================================
-//  Public API Implementation
+//  theme.bin = [0,16 KB) manifest JSON (0xFF padded, no NUL), then
+//  images, fonts and page layouts at the absolute offsets the manifest
+//  lists. Only [0, used_len) is valid: nothing is ever assumed about
+//  the rest of the file.
+//
+//  Everything the loader owns lives in PSRAM; the only static storage
+//  is g_te (one pointer).
 // ============================================================
 
-esp_err_t theme_engine_init(void) {
-    ESP_LOGI(TAG, "Initializing theme engine");
-    theme_font_fs_register();
+#include "theme_internal.h"
+#include "app_obd_dsp/theme_library.h"
+#include "app_obd_dsp/storage_util.h"
+#include "bsp_obd_dsp/sd_card.h"
 
-    // Only one theme partition exists (theme_0); there is nothing to select.
-    esp_err_t ret = theme_load(0);
-    if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "Failed to load theme from theme_0, using default");
-        return theme_load_default();
-    }
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
+#include "esp_log.h"
+#include "esp_rom_crc.h"
+#include "cJSON.h"
+#include "rules/tr_parse.h"
 
-    return ESP_OK;
+te_ctx_t *g_te;
+
+#define TE_FONT_LETTER  'F'
+
+static const char *const k_color_keys[UI_COLOR__COUNT] = {
+    "bg", "ring", "arc_track", "arc_indicator",
+    "text_primary", "text_secondary", "needle", "panel",
+};
+
+// ---------------- allocation / lock ----------------
+
+char *te_strdup(const char *s)
+{
+    if (!s) return NULL;
+    size_t n = strlen(s) + 1;
+    char *d = te_malloc(n);
+    if (d) memcpy(d, s, n);
+    return d;
 }
 
-esp_err_t theme_load(uint8_t slot) {
-    // Only slot 0 (partition "theme_0") exists. A bad/missing theme falls
-    // back to the built-in default (see theme_load_default()), so a second
-    // slot for A/B rollback was judged unnecessary.
-    if (slot != 0) {
-        ESP_LOGE(TAG, "Theme slot %d does not exist (only theme_0 is available)", slot);
-        return ESP_ERR_NOT_FOUND;
-    }
-    ESP_LOGI(TAG, "Loading theme from theme_0");
-
-    // Unload previous theme if any
-    if (s_ctx.loaded) {
-        theme_unload();
-    }
-
-    s_ctx.partition = esp_partition_find_first(
-        ESP_PARTITION_TYPE_DATA,
-        ESP_PARTITION_SUBTYPE_DATA_SPIFFS,
-        "theme_0"
-    );
-
-    if (!s_ctx.partition) {
-        ESP_LOGE(TAG, "Theme partition 'theme_0' not found");
-        return ESP_ERR_NOT_FOUND;
-    }
-
-    s_ctx.slot = slot;
-
-    // Read and parse manifest
-    esp_err_t ret = theme_parse_manifest();
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to parse theme manifest");
-        return ret;
-    }
-
-    // Load assets (dial/ring images)
-    ret = theme_load_assets();
-    if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "Failed to load some assets, continuing anyway");
-    }
-
-    // Register pages (system + theme)
-    theme_register_pages();
-
-    s_ctx.loaded = true;
-
-    ESP_LOGI(TAG, "Theme '%s' v%s loaded successfully", s_ctx.info.name, s_ctx.info.version);
-
-    return ESP_OK;
+void *te_alloc_cb(size_t size, void *ctx)
+{
+    (void)ctx;
+    return te_malloc(size);
 }
 
-esp_err_t theme_get_info(theme_info_t *info) {
-    if (!s_ctx.loaded || !info) {
-        return ESP_ERR_INVALID_STATE;
-    }
-
-    memcpy(info, &s_ctx.info, sizeof(theme_info_t));
-    return ESP_OK;
+void te_free_cb(void *ptr, void *ctx)
+{
+    (void)ctx;
+    if (ptr) te_free(ptr);
 }
 
-lv_obj_t* theme_create_page(const char *page_id) {
-    if (!s_ctx.loaded) {
-        ESP_LOGW(TAG, "Theme not loaded, cannot create page '%s'", page_id);
+void *te_calloc_cb(size_t n, size_t size, void *ctx)
+{
+    (void)ctx;
+    return te_calloc(n, size);
+}
+
+te_ctx_t *te_ctx_ensure(void)
+{
+    te_ctx_t *c = __atomic_load_n(&g_te, __ATOMIC_ACQUIRE);
+    if (c) return c;
+    te_ctx_t *n = te_calloc(1, sizeof(*n));
+    if (!n) return NULL;
+    n->lock = xSemaphoreCreateRecursiveMutex();
+    if (!n->lock) {
+        te_free(n);
         return NULL;
     }
-
-    // CRITICAL: Boot pages are NEVER themed, always use system implementation
-    // These ensure consistent Sky Gauge branding and boot experience
-    if (strcmp(page_id, "logo") == 0 ||
-        strcmp(page_id, "intro") == 0 ||
-        strcmp(page_id, "boot_video") == 0) {
-        ESP_LOGI(TAG, "Page '%s' is a protected boot page, using system implementation", page_id);
-        // Return NULL here - caller should use original ui_ScreenPageLogo_screen_init()
-        return NULL;
+    tic_init(&n->cache);
+    te_ctx_t *expected = NULL;
+    if (!__atomic_compare_exchange_n(&g_te, &expected, n, false, __ATOMIC_ACQ_REL,
+                                     __ATOMIC_ACQUIRE)) {
+        vSemaphoreDelete(n->lock);
+        te_free(n);
+        return expected;
     }
-
-    // Search page registry
-    for (int i = 0; i < s_ctx.page_count; i++) {
-        if (strcmp(s_ctx.pages[i].page_id, page_id) == 0) {
-            ESP_LOGI(TAG, "Creating page '%s' (type: %s)",
-                     page_id,
-                     s_ctx.pages[i].type == THEME_PAGE_TYPE_SYSTEM ? "system" : "theme");
-            if (s_ctx.pages[i].type == THEME_PAGE_TYPE_THEME) {
-                return theme_create_custom_page(page_id);
-            }
-            return s_ctx.pages[i].create_fn ? s_ctx.pages[i].create_fn() : NULL;
-        }
-    }
-
-    ESP_LOGW(TAG, "Page '%s' not found in registry", page_id);
-    return NULL;
+    return n;
 }
 
-// layout.json's "format" string is untrusted theme content, but gets handed
-// straight to lv_label_set_text_fmt (a vsnprintf wrapper) with only integer
-// arguments. A theme containing "%s" would make vsnprintf dereference an int
-// as a pointer -> crash or out-of-bounds read. Only allow conversions that
-// consume an int (d/i/u/x/X/o/c) plus literal '%%'; reject everything else
-// (a bad theme falls back to a safe literal instead of being trusted as-is).
-static bool theme_format_is_int_only(const char *fmt) {
-    for (const char *p = fmt; *p; p++) {
-        if (*p != '%') {
-            continue;
-        }
-        p++;
-        if (*p == '%') {
-            continue;  // literal '%%'
-        }
-        // skip flags/width/precision: digits, '.', '-', '+', '0', ' '
-        while (*p && (isdigit((unsigned char)*p) || *p == '.' || *p == '-' || *p == '+' || *p == ' ')) {
-            p++;
-        }
-        if (*p == '\0') {
-            return false;  // truncated conversion
-        }
-        switch (*p) {
-        case 'd': case 'i': case 'u': case 'x': case 'X': case 'o': case 'c':
-            break;  // safe: consumes one int
-        default:
-            return false;  // %s, %f, %p, %n, etc. — reject
-        }
+void te_lock(void)
+{
+    xSemaphoreTakeRecursive(g_te->lock, portMAX_DELAY);
+}
+
+void te_unlock(void)
+{
+    xSemaphoreGiveRecursive(g_te->lock);
+}
+
+bool te_trylock(void)
+{
+    return xSemaphoreTakeRecursive(g_te->lock, 0) == pdTRUE;
+}
+
+// ---------------- small helpers ----------------
+
+// Copy with truncation on a UTF-8 character boundary.
+static void te_copy_utf8(char *dst, size_t cap, const char *src)
+{
+    if (!dst || cap == 0) return;
+    size_t n = src ? strlen(src) : 0;
+    if (n >= cap) {
+        n = cap - 1;
+        while (n > 0 && ((unsigned char)src[n] & 0xC0u) == 0x80u) n--;
     }
+    if (n) memcpy(dst, src, n);
+    dst[n] = '\0';
+}
+
+static const char *te_jstr(const cJSON *o, const char *key)
+{
+    const cJSON *it = cJSON_GetObjectItemCaseSensitive(o, key);
+    return (cJSON_IsString(it) && it->valuestring) ? it->valuestring : NULL;
+}
+
+// Integral, non-negative number that fits in uint32_t.
+static bool te_ju32(const cJSON *o, const char *key, uint32_t *out)
+{
+    const cJSON *it = cJSON_GetObjectItemCaseSensitive(o, key);
+    if (!cJSON_IsNumber(it)) return false;
+    double v = it->valuedouble;
+    if (!(v >= 0.0) || v > 4294967295.0 || floor(v) != v) return false;
+    *out = (uint32_t)v;
     return true;
 }
 
-// Resolves a "obd.<field>" data_source string against a live snapshot.
-// Returns false if the source name is unrecognized (binding left untouched).
-static bool theme_resolve_data_source(const obd_snapshot_t *obd, const char *src, int32_t *out_value) {
-    if (strcmp(src, "obd.rpm") == 0) {
-        *out_value = obd->rpm;
-    } else if (strcmp(src, "obd.speed") == 0) {
-        *out_value = obd->speed;
-    } else if (strcmp(src, "obd.boost") == 0) {
-        *out_value = obd->boost;
-    } else if (strcmp(src, "obd.coolant_temp") == 0) {
-        *out_value = obd->coolant_temp;
-    } else if (strcmp(src, "obd.oil_pressure") == 0) {
-        *out_value = obd->oil_pressure;
-    } else if (strcmp(src, "obd.gear") == 0) {
-        *out_value = obd->gear;
-    } else if (strcmp(src, "obd.battery_voltage") == 0) {
-        *out_value = obd->battery_voltage;
-    } else if (strcmp(src, "obd.oil_temp") == 0) {
-        *out_value = obd->oil_temp;
-    } else if (strcmp(src, "obd.afr") == 0) {
-        *out_value = obd->afr;
-    } else if (strcmp(src, "obd.throttle") == 0) {
-        *out_value = obd->throttle;
-    } else if (strcmp(src, "obd.intake_temp") == 0) {
-        *out_value = obd->intake_temp;
-    } else {
-        return false;
-    }
-    return true;
+static void te_tables_free(te_ctx_t *c)
+{
+    for (uint8_t i = 0; i < c->n_images; i++) te_free(c->images[i].name);
+    for (uint8_t i = 0; i < c->n_fonts; i++) te_free(c->fonts[i].name);
+    for (uint8_t i = 0; i < c->n_pages; i++) te_free(c->pages[i].id);
+    memset(c->images, 0, sizeof(c->images));
+    memset(c->fonts, 0, sizeof(c->fonts));
+    memset(c->pages, 0, sizeof(c->pages));
+    c->n_images = c->n_fonts = c->n_pages = 0;
 }
 
-void theme_update_data(const obd_snapshot_t *obd) {
-    if (!s_ctx.loaded || !obd) {
-        return;
-    }
-
-    for (int i = 0; i < s_ctx.binding_count; i++) {
-        theme_binding_t *bind = &s_ctx.bindings[i];
-        if (!bind->widget) {
-            continue;
-        }
-
-        int32_t value = 0;
-        if (!theme_resolve_data_source(obd, bind->data_source, &value)) {
-            continue;
-        }
-
-        switch (bind->kind) {
-        case BINDING_KIND_ARC: {
-            int32_t clamped = value;
-            if (clamped < bind->range_min) clamped = bind->range_min;
-            if (clamped > bind->range_max) clamped = bind->range_max;
-            lv_arc_set_value(bind->widget, clamped);
-            break;
-        }
-        case BINDING_KIND_BAR: {
-            int32_t clamped = value;
-            if (clamped < bind->range_min) clamped = bind->range_min;
-            if (clamped > bind->range_max) clamped = bind->range_max;
-            lv_bar_set_value(bind->widget, clamped, LV_ANIM_OFF);
-            break;
-        }
-        case BINDING_KIND_LABEL: {
-            if (bind->divisor > 1) {
-                // Split e.g. 150/100 -> whole=1, frac=50, so "%d.%02d" -> "1.50"
-                int32_t whole = value / bind->divisor;
-                int32_t frac = value % bind->divisor;
-                if (frac < 0) frac = -frac;
-                lv_label_set_text_fmt(bind->widget, bind->format, whole, frac);
-            } else {
-                lv_label_set_text_fmt(bind->widget, bind->format, value);
-            }
-            if (bind->align != 0) {
-                // Center/right alignment is anchored to the rendered text
-                // width, which changes with every value (e.g. "5" vs "145")
-                // -- theme_build_label_element() only computes this once at
-                // page-build time against the "--" placeholder, so it has
-                // to be redone here or the label visibly drifts left/right
-                // as the OBD value's digit count changes.
-                lv_obj_update_layout(bind->widget);
-                int32_t w = lv_obj_get_width(bind->widget);
-                int32_t new_x = (bind->align == 1) ? (bind->anchor_x - w / 2) : (bind->anchor_x - w);
-                lv_obj_set_x(bind->widget, new_x);
-            }
-            break;
-        }
-        }
-    }
-}
-
-lv_color_t theme_get_color(uint8_t role) {
-    if (role >= UI_COLOR__COUNT) {
-        return lv_color_black();
-    }
-
-    uint32_t rgb = s_ctx.colors[role];
-    return lv_color_hex(rgb);
-}
-
-const lv_img_dsc_t* theme_get_asset(const char *asset_name) {
-    if (!s_ctx.loaded) {
-        return NULL;
-    }
-
-    if (strcmp(asset_name, "dial") == 0 && s_ctx.dial_data) {
-        return &s_ctx.dial_img;
-    } else if (strcmp(asset_name, "ring") == 0 && s_ctx.ring_data) {
-        return &s_ctx.ring_img;
-    }
-
-    return NULL;
-}
-
-// Looks up a named asset by its exact packer-assigned name (as opposed to
-// theme_get_asset()'s fixed "dial"/"ring" aliases). Used by layout.json
-// "image" elements, which reference arbitrary imported images by name.
-static const lv_img_dsc_t* theme_find_named_asset(const char *name) {
-    for (int i = 0; i < s_ctx.named_asset_count; i++) {
-        if (strcmp(s_ctx.named_assets[i].name, name) == 0) {
-            return &s_ctx.named_assets[i].img;
-        }
-    }
-    return NULL;
-}
-
-// Looks up a compiled font asset ("lv_font_bin") by its packer-assigned
-// name. Used by theme_font_fs_open() (via lv_font_load()'s "F:<name>" path)
-// and theme_load_custom_font() below.
-static const theme_named_font_t* theme_find_named_font(const char *name) {
-    for (int i = 0; i < s_ctx.named_font_count; i++) {
-        if (strcmp(s_ctx.named_fonts[i].name, name) == 0) {
-            return &s_ctx.named_fonts[i];
-        }
-    }
-    return NULL;
-}
-
-// Loads (or returns the cached) lv_font_t for a custom font asset name, so
-// a page with several labels sharing one custom font only pays
-// lv_font_load()'s cost once. Returns NULL if the asset doesn't exist or
-// fails to parse -- callers fall back to a built-in Montserrat size rather
-// than failing the whole label.
-static const lv_font_t* theme_load_custom_font(const char *font_asset) {
-    for (int i = 0; i < s_ctx.loaded_font_count; i++) {
-        if (strcmp(s_ctx.loaded_fonts[i].name, font_asset) == 0) {
-            return s_ctx.loaded_fonts[i].font;
-        }
-    }
-
-    if (!theme_find_named_font(font_asset)) {
-        ESP_LOGW(TAG, "Custom font: unknown font asset '%s'", font_asset);
-        return NULL;
-    }
-
-    char path[48];
-    snprintf(path, sizeof(path), "%c:%s", THEME_FONT_FS_LETTER, font_asset);
-    lv_font_t *font = lv_font_load(path);
-    if (!font) {
-        ESP_LOGW(TAG, "Custom font: failed to load '%s'", font_asset);
-        return NULL;
-    }
-
-    if (s_ctx.loaded_font_count >= THEME_MAX_NAMED_FONTS) {
-        ESP_LOGW(TAG, "Loaded-font cache full, not caching '%s' (still usable this call)", font_asset);
-        return font;
-    }
-    theme_loaded_font_t *slot = &s_ctx.loaded_fonts[s_ctx.loaded_font_count];
-    strncpy(slot->name, font_asset, sizeof(slot->name) - 1);
-    slot->name[sizeof(slot->name) - 1] = '\0';
-    slot->font = font;
-    s_ctx.loaded_font_count++;
-    return font;
-}
-
-bool theme_has_page(const char *page_id) {
-    for (int i = 0; i < s_ctx.page_count; i++) {
-        if (strcmp(s_ctx.pages[i].page_id, page_id) == 0) {
-            return s_ctx.pages[i].type == THEME_PAGE_TYPE_THEME;
-        }
+static bool te_name_taken_img(const te_ctx_t *c, const char *name)
+{
+    for (uint8_t i = 0; i < c->n_images; i++) {
+        if (strcmp(c->images[i].name, name) == 0) return true;
     }
     return false;
 }
 
-uint8_t theme_page_list_count(void) {
-    return s_ctx.theme_page_count;
+static bool te_name_taken_font(const te_ctx_t *c, const char *name)
+{
+    for (uint8_t i = 0; i < c->n_fonts; i++) {
+        if (strcmp(c->fonts[i].name, name) == 0) return true;
+    }
+    return false;
 }
 
-const char* theme_page_list_at(uint8_t index) {
-    if (index >= s_ctx.theme_page_count) {
-        return NULL;
+// ---------------- manifest ----------------
+
+// One "assets" entry. Returns the end offset (0 = skipped).
+static uint32_t te_add_asset(te_ctx_t *c, const cJSON *a, bool *nomem)
+{
+    const char *name = a->string;
+    const char *fmt = te_jstr(a, "format");
+    uint32_t off = 0, size = 0;
+    if (!cJSON_IsObject(a) || !name || !name[0]) return 0;
+    if (!te_ju32(a, "offset", &off) || !te_ju32(a, "size", &size) || size == 0 ||
+        off < TE_MANIFEST_SIZE || (uint64_t)off + size > c->file_size) {
+        ESP_LOGW(TE_TAG, "asset '%s': bad offset/size, skipped", name);
+        return 0;
     }
-    return s_ctx.theme_page_ids[index];
+    if (fmt && strcmp(fmt, "lv_font_bin") == 0) {
+        if (te_name_taken_font(c, name)) return 0;   // duplicate: first wins
+        if (c->n_fonts >= TE_MAX_FONTS) {
+            ESP_LOGW(TE_TAG, "font '%s': more than %d fonts, skipped", name, TE_MAX_FONTS);
+            return 0;
+        }
+        te_font_t *f = &c->fonts[c->n_fonts];
+        f->name = te_strdup(name);
+        if (!f->name) {
+            *nomem = true;
+            return 0;
+        }
+        f->offset = off;
+        f->size = size;
+        c->n_fonts++;
+        return off + size;
+    }
+    tpx_fmt_t pf;
+    if (fmt && strcmp(fmt, "rgb565") == 0) pf = TPX_FMT_RGB565;
+    else if (fmt && strcmp(fmt, "rgba8888") == 0) pf = TPX_FMT_RGBA8888;
+    else {
+        ESP_LOGW(TE_TAG, "asset '%s': unknown format '%s', skipped", name, fmt ? fmt : "(none)");
+        return 0;
+    }
+    uint32_t w = 0, h = 0;
+    if (!te_ju32(a, "width", &w) || !te_ju32(a, "height", &h) || !tpx_validate(pf, w, h, size)) {
+        ESP_LOGW(TE_TAG, "image '%s': size/width/height mismatch or > %d px, skipped", name,
+                 TPX_MAX_DIM);
+        return 0;
+    }
+    if (te_name_taken_img(c, name)) return 0;
+    if (c->n_images >= TE_MAX_IMAGES) {
+        ESP_LOGW(TE_TAG, "image '%s': more than %d images, skipped", name, TE_MAX_IMAGES);
+        return 0;
+    }
+    te_image_t *im = &c->images[c->n_images];
+    im->name = te_strdup(name);
+    if (!im->name) {
+        *nomem = true;
+        return 0;
+    }
+    im->offset = off;
+    im->size = size;
+    im->w = (uint16_t)w;
+    im->h = (uint16_t)h;
+    im->fmt = (uint8_t)pf;
+    c->n_images++;
+    return off + size;
 }
 
-void theme_unload(void) {
-    if (!s_ctx.loaded) {
-        return;
+static uint32_t te_add_page(te_ctx_t *c, const cJSON *p, bool *nomem)
+{
+    const char *id = te_jstr(p, "id");
+    uint32_t off = 0, size = 0;
+    if (!cJSON_IsObject(p) || !id || !id[0]) return 0;
+    if (strcmp(id, "logo") == 0 || strcmp(id, "intro") == 0 || strcmp(id, "boot_video") == 0) {
+        ESP_LOGW(TE_TAG, "page '%s': boot pages are never themed, skipped", id);
+        return 0;
     }
-
-    ESP_LOGI(TAG, "Unloading theme '%s'", s_ctx.info.name);
-
-    // Unmap every named asset. dial_handle/ring_handle (when set) are just
-    // copies of a named_assets[] entry's handle -- unmap only through this
-    // table so each mapping is torn down exactly once.
-    for (int i = 0; i < s_ctx.named_asset_count; i++) {
-        if (s_ctx.named_assets[i].handle) {
-            esp_partition_munmap(s_ctx.named_assets[i].handle);
-        }
+    if (te_page_find(id) >= 0) return 0;   // duplicate: first wins
+    if (!te_ju32(p, "layout_data_offset", &off) || !te_ju32(p, "layout_data_size", &size) ||
+        size == 0 || size > TE_LAYOUT_MAX || off < TE_MANIFEST_SIZE ||
+        (uint64_t)off + size > c->file_size) {
+        ESP_LOGW(TE_TAG, "page '%s': bad layout offset/size, skipped", id);
+        return 0;
     }
-    s_ctx.dial_handle = 0;
-    s_ctx.dial_data = NULL;
-    s_ctx.ring_handle = 0;
-    s_ctx.ring_data = NULL;
-
-    // Free every lv_font_load()'ed custom font, then unmap its backing
-    // memory -- same handle-per-slot lifecycle as named_assets above.
-    for (int i = 0; i < s_ctx.loaded_font_count; i++) {
-        if (s_ctx.loaded_fonts[i].font) {
-            lv_font_free(s_ctx.loaded_fonts[i].font);
-        }
+    if (c->n_pages >= TE_MAX_PAGES) {
+        ESP_LOGW(TE_TAG, "page '%s': more than %d pages, skipped", id, TE_MAX_PAGES);
+        return 0;
     }
-    for (int i = 0; i < s_ctx.named_font_count; i++) {
-        if (s_ctx.named_fonts[i].handle) {
-            esp_partition_munmap(s_ctx.named_fonts[i].handle);
-        }
+    te_page_t *pg = &c->pages[c->n_pages];
+    pg->id = te_strdup(id);
+    if (!pg->id) {
+        *nomem = true;
+        return 0;
     }
-
-    // Free manifest
-    if (s_ctx.manifest) {
-        cJSON_Delete(s_ctx.manifest);
-        s_ctx.manifest = NULL;
-    }
-
-    // Clear context
-    memset(&s_ctx, 0, sizeof(s_ctx));
+    pg->offset = off;
+    pg->size = size;
+    c->n_pages++;
+    return off + size;
 }
 
-// ============================================================
-//  Internal Helper Functions
-// ============================================================
+static esp_err_t te_parse_manifest(te_ctx_t *c, const char *json, size_t len)
+{
+    cJSON *root = cJSON_ParseWithLength(json, len);
+    if (!cJSON_IsObject(root)) {
+        cJSON_Delete(root);
+        ESP_LOGE(TE_TAG, "manifest: not a JSON object");
+        return ESP_FAIL;
+    }
+    esp_err_t err = ESP_OK;
+    const char *schema = te_jstr(root, "schema_version");
+    const cJSON *theme = cJSON_GetObjectItemCaseSensitive(root, "theme");
+    const char *id = te_jstr(theme, "id");
+    if (!schema || strcmp(schema, "1.0") != 0) {
+        ESP_LOGE(TE_TAG, "manifest: schema_version '%s' not supported (need \"1.0\")",
+                 schema ? schema : "(none)");
+        err = ESP_ERR_NOT_SUPPORTED;
+        goto out;
+    }
+    if (!id || !id[0] || strlen(id) > THEME_ID_LEN) {
+        ESP_LOGE(TE_TAG, "manifest: theme.id missing or longer than %d", THEME_ID_LEN);
+        err = ESP_FAIL;
+        goto out;
+    }
 
-static esp_err_t theme_load_default(void) {
-    ESP_LOGI(TAG, "Loading default theme");
+    memcpy(c->id, id, strlen(id) + 1);
+    memset(&c->info, 0, sizeof(c->info));
+    te_copy_utf8(c->info.id, sizeof(c->info.id), id);
+    const char *name = te_jstr(theme, "name");
+    te_copy_utf8(c->info.name, sizeof(c->info.name), (name && name[0]) ? name : id);
+    te_copy_utf8(c->info.version, sizeof(c->info.version), te_jstr(theme, "version"));
+    te_copy_utf8(c->info.author, sizeof(c->info.author), te_jstr(theme, "author"));
 
-    // Set default metadata
-    strcpy(s_ctx.info.id, "default");
-    strcpy(s_ctx.info.name, "DEFAULT");
-    strcpy(s_ctx.info.version, "1.0.0");
-    strcpy(s_ctx.info.author, "builtin");
-
-    // Use default colors from existing theme system
-    const ui_theme_t *default_theme = ui_theme_get(0);  // slot 0 = default
+    const ui_theme_t *def = ui_theme_get(0);
+    const cJSON *colors = cJSON_GetObjectItemCaseSensitive(root, "colors");
     for (int i = 0; i < UI_COLOR__COUNT; i++) {
-        s_ctx.colors[i] = default_theme->colors[i];
+        uint32_t rgb;
+        const char *s = te_jstr(colors, k_color_keys[i]);
+        c->colors[i] = (s && tr_parse_color(s, &rgb)) ? rgb : (def ? def->colors[i] : 0);
     }
 
-    // Register only system pages (no theme pages)
-    theme_register_pages();
+    bool nomem = false;
+    uint32_t used = TE_MANIFEST_SIZE;
+    const cJSON *assets = cJSON_GetObjectItemCaseSensitive(root, "assets");
+    for (const cJSON *a = cJSON_IsObject(assets) ? assets->child : NULL; a && !nomem; a = a->next) {
+        uint32_t end = te_add_asset(c, a, &nomem);
+        if (end > used) used = end;
+    }
+    const cJSON *pages = cJSON_GetObjectItemCaseSensitive(
+        cJSON_GetObjectItemCaseSensitive(root, "pages"), "theme_pages");
+    for (const cJSON *p = cJSON_IsArray(pages) ? pages->child : NULL; p && !nomem; p = p->next) {
+        uint32_t end = te_add_page(c, p, &nomem);
+        if (end > used) used = end;
+    }
+    if (nomem) {
+        err = ESP_ERR_NO_MEM;
+        goto out;
+    }
+    c->used_len = used;
 
-    s_ctx.loaded = true;
-
-    ESP_LOGI(TAG, "Default theme loaded");
-    return ESP_OK;
+out:
+    cJSON_Delete(root);
+    if (err != ESP_OK) te_tables_free(c);
+    return err;
 }
 
-static esp_err_t theme_parse_manifest(void) {
-    // Allocate buffer for manifest JSON
-    char *json_buf = heap_caps_malloc(THEME_MANIFEST_MAX_SIZE, MALLOC_CAP_SPIRAM);
-    if (!json_buf) {
-        ESP_LOGE(TAG, "Failed to allocate manifest buffer");
-        return ESP_ERR_NO_MEM;
-    }
-
-    // Read manifest from partition (first 16KB)
-    esp_err_t ret = esp_partition_read(s_ctx.partition, 0, json_buf, THEME_MANIFEST_MAX_SIZE);
-    if (ret != ESP_OK) {
-        free(json_buf);
-        return ret;
-    }
-
-    // Parse JSON
-    s_ctx.manifest = cJSON_Parse(json_buf);
-    free(json_buf);
-
-    if (!s_ctx.manifest) {
-        ESP_LOGE(TAG, "Failed to parse theme manifest JSON");
+static esp_err_t te_load_custom(te_ctx_t *c)
+{
+    char key[STORAGE_THEME_KEY_LEN];
+    theme_library_current_key(key, sizeof(key));
+    if (!key[0] || !sd_card_is_mounted()) return ESP_ERR_NOT_FOUND;
+    if (strchr(key, '/') || strchr(key, '\\') || !strcmp(key, ".") || !strcmp(key, ".."))
         return ESP_ERR_INVALID_ARG;
+    snprintf(c->sd_path, sizeof(c->sd_path), SD_DIR_THEMES "/%s/" STORAGE_THEME_FILE, key);
+    if (!storage_job_lock(pdMS_TO_TICKS(1000))) return ESP_ERR_TIMEOUT;
+    storage_theme_meta_t meta;
+    esp_err_t err = storage_theme_meta_from_file(c->sd_path, &meta);
+    int64_t size = storage_sd_file_size(c->sd_path);
+    if (err != ESP_OK || size < TE_MANIFEST_SIZE || size > UINT32_MAX) {
+        storage_job_unlock();
+        return err != ESP_OK ? err : ESP_ERR_INVALID_SIZE;
     }
-
-    // Reject a schema_version this loader doesn't understand rather than
-    // risk silently misrendering element types added by a newer packer
-    // (e.g. "image" elements on firmware that predates them). A missing
-    // field is treated the same as a mismatch -- fail closed.
-    cJSON *schema_version = cJSON_GetObjectItem(s_ctx.manifest, "schema_version");
-    if (!schema_version || !cJSON_IsString(schema_version) ||
-        strcmp(schema_version->valuestring, THEME_SCHEMA_VERSION_SUPPORTED) != 0) {
-        ESP_LOGE(TAG, "Unsupported theme schema_version '%s' (firmware supports '%s')",
-                 (schema_version && cJSON_IsString(schema_version)) ? schema_version->valuestring : "(missing)",
-                 THEME_SCHEMA_VERSION_SUPPORTED);
-        cJSON_Delete(s_ctx.manifest);
-        s_ctx.manifest = NULL;
-        return ESP_ERR_NOT_SUPPORTED;
+    c->file_size = (uint32_t)size;
+    uint8_t *buf = te_malloc(TE_MANIFEST_SIZE);
+    if (!buf) { storage_job_unlock(); return ESP_ERR_NO_MEM; }
+    err = te_read(0, buf, TE_MANIFEST_SIZE);
+    if (err == ESP_OK) {
+        size_t len = 0;
+        while (len < TE_MANIFEST_SIZE && buf[len] != 0xFF && buf[len] != 0) len++;
+        err = te_parse_manifest(c, (const char *)buf, len);
+        if (err == ESP_OK) c->manifest_crc = esp_rom_crc32_le(0, buf, TE_MANIFEST_SIZE);
     }
-
-    // Extract theme metadata
-    cJSON *theme_obj = cJSON_GetObjectItem(s_ctx.manifest, "theme");
-    if (theme_obj) {
-        cJSON *id = cJSON_GetObjectItem(theme_obj, "id");
-        cJSON *name = cJSON_GetObjectItem(theme_obj, "name");
-        cJSON *version = cJSON_GetObjectItem(theme_obj, "version");
-        cJSON *author = cJSON_GetObjectItem(theme_obj, "author");
-
-        if (id && cJSON_IsString(id)) {
-            strncpy(s_ctx.info.id, id->valuestring, sizeof(s_ctx.info.id) - 1);
-        }
-        if (name && cJSON_IsString(name)) {
-            strncpy(s_ctx.info.name, name->valuestring, sizeof(s_ctx.info.name) - 1);
-        }
-        if (version && cJSON_IsString(version)) {
-            strncpy(s_ctx.info.version, version->valuestring, sizeof(s_ctx.info.version) - 1);
-        }
-        if (author && cJSON_IsString(author)) {
-            strncpy(s_ctx.info.author, author->valuestring, sizeof(s_ctx.info.author) - 1);
-        }
-    }
-
-    // Extract color palette
-    cJSON *colors = cJSON_GetObjectItem(s_ctx.manifest, "colors");
-    if (colors) {
-        const char *color_names[] = {
-            "bg", "ring", "arc_track", "arc_indicator",
-            "text_primary", "text_secondary", "needle", "panel"
-        };
-
-        for (int i = 0; i < UI_COLOR__COUNT; i++) {
-            cJSON *color = cJSON_GetObjectItem(colors, color_names[i]);
-            if (color && cJSON_IsString(color)) {
-                // Parse hex string "0xRRGGBB"
-                s_ctx.colors[i] = strtoul(color->valuestring, NULL, 16);
-            }
-        }
-    }
-
-    ESP_LOGI(TAG, "Manifest parsed: id=%s, name=%s, version=%s",
-             s_ctx.info.id, s_ctx.info.name, s_ctx.info.version);
-
-    return ESP_OK;
+    te_free(buf);
+    storage_job_unlock();
+    return err;
 }
 
-// Maps a packer-assigned "format" string to the matching LVGL color format.
-// Defaults to true-color (no alpha) for anything unrecognized, matching the
-// original dial_background behavior.
-static lv_img_cf_t theme_asset_color_format(const char *format) {
-    if (format && strcmp(format, "rgba8888") == 0) {
-        return LV_IMG_CF_TRUE_COLOR_ALPHA;
-    }
-    return LV_IMG_CF_TRUE_COLOR;
+static void te_set_default(te_ctx_t *c)
+{
+    te_tables_free(c);
+    c->part = NULL;
+    c->sd_path[0] = 0;
+    c->file_size = 0;
+    c->used_len = 0;
+    c->custom = false;
+    c->manifest_crc = 0;
+    memset(&c->info, 0, sizeof(c->info));
+    strcpy(c->info.id, "default");
+    strcpy(c->info.name, "DEFAULT");
+    strcpy(c->info.version, "1.0.0");
+    strcpy(c->info.author, "builtin");
+    strcpy(c->id, "default");
+    for (int i = 0; i < UI_COLOR__COUNT; i++) c->colors[i] = ui_theme_color((ui_color_role_t)i);
+    c->loaded = true;
 }
 
-static esp_err_t theme_load_assets(void) {
-    cJSON *assets = cJSON_GetObjectItem(s_ctx.manifest, "assets");
-    if (!assets) {
-        ESP_LOGW(TAG, "No assets section in manifest");
-        return ESP_OK;  // Not an error, theme may have no assets
-    }
+// ---------------- SD reads / lookups ----------------
 
-    // Every entry in "assets" (not just the two original built-ins) gets
-    // mmap'd into the generic named-asset table, so layout.json "image"
-    // elements can reference any imported image by its packer-assigned
-    // name. dial_background/ring_overlay additionally get mirrored into
-    // the dedicated dial_img/ring_img fields for theme_get_asset()'s
-    // existing "dial"/"ring" lookup.
-    cJSON *asset = NULL;
-    cJSON_ArrayForEach(asset, assets) {
-        const char *name = asset->string;
-        if (!name) {
-            continue;
-        }
-
-        cJSON *offset_obj = cJSON_GetObjectItem(asset, "offset");
-        cJSON *size_obj = cJSON_GetObjectItem(asset, "size");
-        cJSON *width_obj = cJSON_GetObjectItem(asset, "width");
-        cJSON *height_obj = cJSON_GetObjectItem(asset, "height");
-        const char *format = theme_json_str(asset, "format", NULL);
-        if (!offset_obj || !size_obj) {
-            ESP_LOGW(TAG, "Asset '%s' missing offset/size, skipping", name);
-            continue;
-        }
-
-        size_t offset = (size_t)offset_obj->valueint;
-        size_t size = (size_t)size_obj->valueint;
-
-        // Compiled fonts go into named_fonts[] (read via lv_fs by
-        // theme_load_custom_font()), not the image asset table below.
-        if (format && strcmp(format, "lv_font_bin") == 0) {
-            if (s_ctx.named_font_count >= THEME_MAX_NAMED_FONTS) {
-                ESP_LOGW(TAG, "Named font table full, skipping '%s'", name);
-                continue;
-            }
-            theme_named_font_t *font_slot = &s_ctx.named_fonts[s_ctx.named_font_count];
-            esp_err_t font_ret = esp_partition_mmap(
-                s_ctx.partition, offset, size,
-                ESP_PARTITION_MMAP_DATA,
-                &font_slot->data, &font_slot->handle
-            );
-            if (font_ret != ESP_OK) {
-                ESP_LOGW(TAG, "Failed to mmap font asset '%s': %s", name, esp_err_to_name(font_ret));
-                continue;
-            }
-            strncpy(font_slot->name, name, sizeof(font_slot->name) - 1);
-            font_slot->name[sizeof(font_slot->name) - 1] = '\0';
-            font_slot->size = size;
-            s_ctx.named_font_count++;
-            ESP_LOGI(TAG, "Font asset '%s' loaded: %zu bytes @ 0x%zx", name, size, offset);
-            continue;
-        }
-
-        if (s_ctx.named_asset_count >= THEME_MAX_NAMED_ASSETS) {
-            ESP_LOGW(TAG, "Named asset table full, skipping '%s'", name);
-            continue;
-        }
-
-        theme_named_asset_t *slot = &s_ctx.named_assets[s_ctx.named_asset_count];
-        esp_err_t ret = esp_partition_mmap(
-            s_ctx.partition, offset, size,
-            ESP_PARTITION_MMAP_DATA,
-            &slot->data, &slot->handle
-        );
-        if (ret != ESP_OK) {
-            ESP_LOGW(TAG, "Failed to mmap asset '%s': %s", name, esp_err_to_name(ret));
-            continue;
-        }
-
-        strncpy(slot->name, name, sizeof(slot->name) - 1);
-        slot->name[sizeof(slot->name) - 1] = '\0';
-        slot->img.header.w = width_obj ? width_obj->valueint : 360;
-        slot->img.header.h = height_obj ? height_obj->valueint : 360;
-        slot->img.header.cf = theme_asset_color_format(format);
-        slot->img.data = (const uint8_t *)slot->data;
-        slot->img.data_size = size;
-        s_ctx.named_asset_count++;
-        ESP_LOGI(TAG, "Asset '%s' loaded: %zu bytes @ 0x%zx", name, size, offset);
-
-        // Back-compat mirror for theme_get_asset("dial"/"ring")
-        if (strcmp(name, "dial_background") == 0) {
-            s_ctx.dial_data = slot->data;
-            s_ctx.dial_handle = slot->handle;
-            s_ctx.dial_img = slot->img;
-        } else if (strcmp(name, "ring_overlay") == 0) {
-            s_ctx.ring_data = slot->data;
-            s_ctx.ring_handle = slot->handle;
-            s_ctx.ring_img = slot->img;
-        }
-    }
-
-    return ESP_OK;
+typedef struct { uint8_t *next; } te_read_ctx_t;
+static bool te_read_chunk(const uint8_t *data, size_t size, void *ctx)
+{
+    te_read_ctx_t *r = ctx;
+    memcpy(r->next, data, size);
+    r->next += size;
+    return true;
 }
 
-static void theme_register_pages(void) {
-    s_ctx.page_count = 0;
-    s_ctx.theme_page_count = 0;
+esp_err_t te_read(uint32_t offset, void *dst, uint32_t size)
+{
+    return te_read_from(g_te, offset, dst, size);
+}
 
-    // TODO: Register system pages (settings/OTA/bluetooth/etc.)
-    // This will be implemented when integrating with existing UI
+esp_err_t te_read_from(te_ctx_t *c, uint32_t offset, void *dst, uint32_t size)
+{
+    if (!c || !dst || !c->sd_path[0] || !sd_card_is_mounted()) return ESP_ERR_INVALID_STATE;
+    if ((uint64_t)offset + size > c->file_size) return ESP_ERR_INVALID_SIZE;
+    if (!size) return ESP_OK;
+    /* Bounded wait also avoids inversion with storage workers that acquire
+     * the theme lock while installing a sidecar. No open FAT file survives. */
+    if (!storage_job_lock(pdMS_TO_TICKS(1000))) return ESP_ERR_TIMEOUT;
+    te_read_ctx_t r = {dst};
+    esp_err_t err = storage_sd_file_foreach(c->sd_path, offset, size, te_read_chunk, &r);
+    storage_job_unlock();
+    return err;
+}
 
-    // Register theme pages declared in the manifest, in manifest order.
-    if (s_ctx.manifest) {
-        cJSON *pages = cJSON_GetObjectItem(s_ctx.manifest, "pages");
-        cJSON *theme_pages = pages ? cJSON_GetObjectItem(pages, "theme_pages") : NULL;
-        cJSON *page = NULL;
-        cJSON_ArrayForEach(page, theme_pages) {
-            if (s_ctx.page_count >= (int)(sizeof(s_ctx.pages) / sizeof(s_ctx.pages[0]))) {
-                ESP_LOGW(TAG, "Too many theme pages, ignoring the rest");
-                break;
-            }
-            cJSON *id = cJSON_GetObjectItem(page, "id");
-            if (!id || !cJSON_IsString(id)) {
-                continue;
-            }
-            // Protected boot pages can never be declared as theme pages
-            if (strcmp(id->valuestring, "logo") == 0 ||
-                strcmp(id->valuestring, "intro") == 0 ||
-                strcmp(id->valuestring, "boot_video") == 0) {
-                ESP_LOGW(TAG, "Theme tried to override protected page '%s', ignoring", id->valuestring);
-                continue;
-            }
-            theme_page_entry_t *entry = &s_ctx.pages[s_ctx.page_count++];
-            entry->page_id = id->valuestring;
-            entry->type = THEME_PAGE_TYPE_THEME;
-            entry->create_fn = NULL;  // custom pages are built by theme_create_page() directly
+int te_image_find(const char *name)
+{
+    te_ctx_t *c = g_te;
+    if (!c || !name) return -1;
+    for (uint8_t i = 0; i < c->n_images; i++) {
+        if (strcmp(c->images[i].name, name) == 0) return i;
+    }
+    return -1;
+}
 
-            if (s_ctx.theme_page_count < (int)(sizeof(s_ctx.theme_page_ids) / sizeof(s_ctx.theme_page_ids[0]))) {
-                s_ctx.theme_page_ids[s_ctx.theme_page_count++] = id->valuestring;
-            }
+int te_page_find(const char *id)
+{
+    te_ctx_t *c = g_te;
+    if (!c || !id) return -1;
+    for (uint8_t i = 0; i < c->n_pages; i++) {
+        if (strcmp(c->pages[i].id, id) == 0) return i;
+    }
+    return -1;
+}
+
+tl_defaults_t te_layout_defaults(void)
+{
+    const te_ctx_t *c = g_te;
+    tl_defaults_t d = {
+        c->colors[UI_COLOR_BG], c->colors[UI_COLOR_ARC_TRACK],
+        c->colors[UI_COLOR_ARC_INDICATOR], c->colors[UI_COLOR_TEXT_PRIMARY],
+    };
+    return d;
+}
+
+// ---------------- 'F' font driver (temporary SD segment during lv_font_load) ----------------
+
+typedef struct {
+    uint8_t *data;
+    uint32_t size, pos;
+} te_font_file_t;
+
+static void *te_fs_open(lv_fs_drv_t *drv, const char *path, lv_fs_mode_t mode)
+{
+    te_ctx_t *c = drv->user_data;
+    if (mode != LV_FS_MODE_RD || !c || !c->sd_path[0] || !path) return NULL;
+    for (uint8_t i = 0; i < c->n_fonts; i++) {
+        if (strcmp(c->fonts[i].name, path) != 0) continue;
+        te_font_file_t *f = te_malloc(sizeof(*f));
+        if (!f) return NULL;
+        f->data = te_malloc(c->fonts[i].size);
+        if (!f->data || te_read(c->fonts[i].offset, f->data, c->fonts[i].size) != ESP_OK) {
+            te_free(f->data);
+            te_free(f);
+            return NULL;
         }
+        f->size = c->fonts[i].size;
+        f->pos = 0;
+        return f;
     }
-
-    ESP_LOGI(TAG, "Registered %d pages (%d theme pages)", s_ctx.page_count, s_ctx.theme_page_count);
+    return NULL;
 }
 
-// Parses "0xRRGGBB" / "RRGGBB" into an lv_color_t; falls back to `fallback`
-// if the field is missing or not a string (keeps a malformed element from
-// crashing the whole page build).
-static lv_color_t theme_json_color(cJSON *obj, const char *key, lv_color_t fallback) {
-    cJSON *v = cJSON_GetObjectItem(obj, key);
-    if (!v || !cJSON_IsString(v)) {
-        return fallback;
-    }
-    return lv_color_hex(strtoul(v->valuestring, NULL, 16));
+static lv_fs_res_t te_fs_close(lv_fs_drv_t *drv, void *file)
+{
+    (void)drv;
+    te_free(((te_font_file_t *)file)->data);
+    te_free(file);
+    return LV_FS_RES_OK;
 }
 
-static int32_t theme_json_int(cJSON *obj, const char *key, int32_t fallback) {
-    cJSON *v = cJSON_GetObjectItem(obj, key);
-    if (!v || !cJSON_IsNumber(v)) {
-        return fallback;
-    }
-    // Use valuedouble and round to handle floating point coordinates from the designer
-    return (int32_t)(v->valuedouble + 0.5);
+static lv_fs_res_t te_fs_read(lv_fs_drv_t *drv, void *file, void *buf, uint32_t btr, uint32_t *br)
+{
+    (void)drv;
+    te_font_file_t *f = file;
+    uint32_t n = f->size - f->pos;
+    if (btr < n) n = btr;
+    if (n) memcpy(buf, f->data + f->pos, n);
+    f->pos += n;
+    if (br) *br = n;
+    return LV_FS_RES_OK;
 }
 
-static const char* theme_json_str(cJSON *obj, const char *key, const char *fallback) {
-    cJSON *v = cJSON_GetObjectItem(obj, key);
-    if (!v || !cJSON_IsString(v)) {
-        return fallback;
-    }
-    return v->valuestring;
+static lv_fs_res_t te_fs_seek(lv_fs_drv_t *drv, void *file, uint32_t pos, lv_fs_whence_t whence)
+{
+    (void)drv;
+    te_font_file_t *f = file;
+    uint64_t base = whence == LV_FS_SEEK_CUR ? f->pos : whence == LV_FS_SEEK_END ? f->size : 0;
+    uint64_t np = base + pos;
+    f->pos = np > f->size ? f->size : (uint32_t)np;
+    return LV_FS_RES_OK;
 }
 
-// Registers a binding so theme_update_data() drives this widget on every
-// OBD refresh. Silently drops the binding (widget stays static) if the
-// element didn't declare a data_source, or the binding table is full —
-// a full table means a theme's layout.json has more live elements than we
-// support per page; that's a theme-authoring problem, not a crash.
-static void theme_add_binding(cJSON *elem, lv_obj_t *widget, theme_binding_kind_t kind,
-                               int32_t range_min, int32_t range_max) {
-    const char *src = theme_json_str(elem, "data_source", NULL);
-    if (!src) {
-        return;
-    }
-    if (s_ctx.binding_count >= (int)(sizeof(s_ctx.bindings) / sizeof(s_ctx.bindings[0]))) {
-        ESP_LOGW(TAG, "Binding table full, '%s' will not update live", src);
-        return;
-    }
+static lv_fs_res_t te_fs_tell(lv_fs_drv_t *drv, void *file, uint32_t *pos)
+{
+    (void)drv;
+    *pos = ((te_font_file_t *)file)->pos;
+    return LV_FS_RES_OK;
+}
 
-    theme_binding_t *bind = &s_ctx.bindings[s_ctx.binding_count++];
-    bind->widget = widget;
-    bind->kind = kind;
-    bind->range_min = range_min;
-    bind->range_max = range_max;
-    strncpy(bind->data_source, src, sizeof(bind->data_source) - 1);
-    bind->data_source[sizeof(bind->data_source) - 1] = '\0';
+static void te_fs_register(te_ctx_t *c)
+{
+    if (c->fs_registered) return;
+    lv_fs_drv_init(&c->fs_drv);
+    c->fs_drv.letter = TE_FONT_LETTER;
+    c->fs_drv.open_cb = te_fs_open;
+    c->fs_drv.close_cb = te_fs_close;
+    c->fs_drv.read_cb = te_fs_read;
+    c->fs_drv.seek_cb = te_fs_seek;
+    c->fs_drv.tell_cb = te_fs_tell;
+    c->fs_drv.user_data = c;
+    lv_fs_drv_register(&c->fs_drv);   // the context is never freed
+    c->fs_registered = true;
+}
 
-    bind->divisor = theme_json_int(elem, "divisor", 1);
-    const char *fmt = theme_json_str(elem, "format", "%d");
-    if (theme_format_is_int_only(fmt)) {
-        strncpy(bind->format, fmt, sizeof(bind->format) - 1);
+lv_font_t *te_font_get(const char *name)
+{
+    te_ctx_t *c = g_te;
+    if (!c || !name || !c->fs_registered) return NULL;
+    for (uint8_t i = 0; i < c->n_fonts; i++) {
+        te_font_t *f = &c->fonts[i];
+        if (strcmp(f->name, name) != 0) continue;
+        if (f->font || f->failed) return f->font;
+        size_t n = strlen(name) + 3;
+        char *path = te_malloc(n);
+        if (!path) return NULL;
+        snprintf(path, n, "%c:%s", TE_FONT_LETTER, name);
+        f->font = lv_font_load(path);
+        te_free(path);
+        if (!f->font) {
+            f->failed = true;
+            ESP_LOGW(TE_TAG, "font '%s': lv_font_load failed, built-in font used", name);
+        }
+        return f->font;
+    }
+    return NULL;
+}
+
+// ---------------- release / unload ----------------
+
+void te_release_locked(void)
+{
+    te_ctx_t *c = g_te;
+    if (!c) return;
+    tic_clear(&c->cache);
+    for (uint8_t i = 0; i < c->n_fonts; i++) {
+        if (c->fonts[i].font) lv_font_free(c->fonts[i].font);
+        c->fonts[i].font = NULL;
+        c->fonts[i].failed = false;
+    }
+    c->release_pending = false;
+}
+
+static void te_unload_locked(te_ctx_t *c)
+{
+    c->load_generation++;
+    te_release_locked();
+    te_sidecar_drop();
+    te_tables_free(c);
+    c->part = NULL;
+    c->sd_path[0] = 0;
+    c->file_size = 0;
+    c->used_len = 0;
+    c->custom = false;
+    c->loaded = false;
+    c->manifest_crc = 0;
+    memset(&c->info, 0, sizeof(c->info));
+    c->id[0] = '\0';
+}
+
+// ---------------- public API ----------------
+
+esp_err_t theme_engine_init(void)
+{
+    te_ctx_t *c = te_ctx_ensure();
+    if (!c) return ESP_ERR_NO_MEM;
+    te_lock();
+    te_fs_register(c);
+    te_unlock();
+    return theme_load(0);
+}
+
+esp_err_t theme_load(uint8_t slot)
+{
+    if (slot != 0) return ESP_ERR_NOT_FOUND;   // slot 0 resolves the selected SD theme
+    te_ctx_t *c = te_ctx_ensure();
+    if (!c) return ESP_ERR_NO_MEM;
+    te_lock();
+    if (c->n_live || c->n_preparing) {
+        ESP_LOGE(TE_TAG, "theme_load: %u live page(s), %u preparing, current theme kept",
+                 (unsigned)c->n_live, (unsigned)c->n_preparing);
+        te_unlock();
+        return ESP_ERR_INVALID_STATE;
+    }
+    te_unload_locked(c);
+    esp_err_t err = te_load_custom(c);
+    if (err == ESP_OK) {
+        c->custom = true;
+        c->loaded = true;
+        te_sidecar_reload();
+        ESP_LOGI(TE_TAG, "theme '%s' v%s: %u pages, %u images, %u fonts, %u bytes used",
+                 c->id, c->info.version, (unsigned)c->n_pages, (unsigned)c->n_images,
+                 (unsigned)c->n_fonts, (unsigned)c->used_len);
     } else {
-        ESP_LOGW(TAG, "Rejecting unsafe format string '%s' for '%s', using \"%%d\"", fmt, src);
-        strncpy(bind->format, "%d", sizeof(bind->format) - 1);
+        te_set_default(c);
     }
-    bind->format[sizeof(bind->format) - 1] = '\0';
-
-    bind->anchor_x = theme_json_int(elem, "x", 0);
-    const char *align_str = theme_json_str(elem, "align", "left");
-    if (strcmp(align_str, "center") == 0) bind->align = 1;
-    else if (strcmp(align_str, "right") == 0) bind->align = 2;
-    else bind->align = 0;
+    te_unlock();
+    return err;
 }
 
-static void theme_build_arc_element(lv_obj_t *parent, cJSON *elem) {
-    lv_obj_t *arc = lv_arc_create(parent);
-
-    // Enable manual positioning - ignore parent's layout management
-    lv_obj_add_flag(arc, LV_OBJ_FLAG_IGNORE_LAYOUT);
-
-    int32_t x = theme_json_int(elem, "x", 0);
-    int32_t y = theme_json_int(elem, "y", 0);
-    int32_t width = theme_json_int(elem, "width", 100);
-    int32_t height = theme_json_int(elem, "height", 100);
-
-    lv_obj_set_size(arc, width, height);
-    lv_obj_clear_flag(arc, LV_OBJ_FLAG_CLICKABLE);
-
-    int32_t range_min = theme_json_int(elem, "range_min", 0);
-    int32_t range_max = theme_json_int(elem, "range_max", 100);
-    lv_arc_set_range(arc, range_min, range_max);
-    lv_arc_set_bg_angles(arc, theme_json_int(elem, "start_angle", 135), theme_json_int(elem, "end_angle", 45));
-    lv_arc_set_rotation(arc, theme_json_int(elem, "rotation", 0));
-    lv_arc_set_value(arc, range_min);
-
-    lv_color_t bg_color = theme_json_color(elem, "bg_color", theme_get_color(UI_COLOR_ARC_TRACK));
-    lv_color_t fg_color = theme_json_color(elem, "color", theme_get_color(UI_COLOR_ARC_INDICATOR));
-    int32_t line_width = theme_json_int(elem, "line_width", 10);
-
-    lv_obj_set_style_arc_color(arc, bg_color, LV_PART_MAIN);
-    lv_obj_set_style_arc_width(arc, line_width, LV_PART_MAIN);
-    lv_obj_set_style_arc_color(arc, fg_color, LV_PART_INDICATOR);
-    lv_obj_set_style_arc_width(arc, line_width, LV_PART_INDICATOR);
-    lv_obj_set_style_bg_opa(arc, LV_OPA_TRANSP, LV_PART_KNOB);
-    // LVGL's default theme rounds both arc ends (arc_rounded=true) the same
-    // way lv_bar defaults to a pill radius -- the designer renders square-cut
-    // ends, so this must be forced off here too (same fix as theme_build_bar_element's radius override below).
-    lv_obj_set_style_arc_rounded(arc, false, LV_PART_MAIN);
-    lv_obj_set_style_arc_rounded(arc, false, LV_PART_INDICATOR);
-
-    // Remove any padding on the Arc itself
-    lv_obj_set_style_pad_all(arc, 0, 0);
-
-    // Set position AFTER all Arc config functions (they can reset position like lv_img_set_zoom did)
-    lv_obj_set_pos(arc, x, y);
-
-    theme_add_binding(elem, arc, BINDING_KIND_ARC, range_min, range_max);
+esp_err_t theme_get_info(theme_info_t *info)
+{
+    te_ctx_t *c = g_te;
+    if (!c) return ESP_ERR_INVALID_STATE;
+    te_lock();
+    esp_err_t err = c->loaded ? ESP_OK : ESP_ERR_INVALID_STATE;
+    if (err == ESP_OK && info) *info = c->info;
+    te_unlock();
+    return err;
 }
 
-static void theme_build_bar_element(lv_obj_t *parent, cJSON *elem) {
-    lv_obj_t *bar = lv_bar_create(parent);
-
-    // Enable manual positioning - ignore parent's layout management
-    lv_obj_add_flag(bar, LV_OBJ_FLAG_IGNORE_LAYOUT);
-
-    lv_obj_set_pos(bar, theme_json_int(elem, "x", 0), theme_json_int(elem, "y", 0));
-    lv_obj_set_size(bar, theme_json_int(elem, "width", 100), theme_json_int(elem, "height", 20));
-
-    int32_t range_min = theme_json_int(elem, "range_min", 0);
-    int32_t range_max = theme_json_int(elem, "range_max", 100);
-    lv_bar_set_range(bar, range_min, range_max);
-    lv_bar_set_value(bar, range_min, LV_ANIM_OFF);
-
-    lv_color_t bg_color = theme_json_color(elem, "bg_color", theme_get_color(UI_COLOR_ARC_TRACK));
-    lv_color_t fg_color = theme_json_color(elem, "color", theme_get_color(UI_COLOR_ARC_INDICATOR));
-    lv_obj_set_style_bg_color(bar, bg_color, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(bar, fg_color, LV_PART_INDICATOR);
-
-    // LVGL's default theme gives lv_bar a pill-shaped radius on both parts;
-    // the designer's bars default to square corners, so this must be set
-    // explicitly (0 unless the layout requests one) or the two diverge.
-    int32_t radius = theme_json_int(elem, "radius", 0);
-    lv_obj_set_style_radius(bar, radius, LV_PART_MAIN);
-    lv_obj_set_style_radius(bar, radius, LV_PART_INDICATOR);
-
-    // "segments" (a stepped look, like the example theme's 10-block oil
-    // pressure meter) is a purely visual grouping of the same bar — LVGL's
-    // bar doesn't natively support discrete blocks, so this is intentionally
-    // approximated as a continuous bar for now. Faithful block rendering
-    // needs a custom draw event, left for a follow-up.
-
-    theme_add_binding(elem, bar, BINDING_KIND_BAR, range_min, range_max);
+uint8_t theme_page_list_count(void)
+{
+    te_ctx_t *c = g_te;
+    if (!c) return 0;
+    te_lock();
+    uint8_t n = c->custom ? c->n_pages : 0;
+    te_unlock();
+    return n;
 }
 
-static void theme_build_label_element(lv_obj_t *parent, cJSON *elem) {
-    lv_obj_t *label = lv_label_create(parent);
+const char *theme_page_list_at(uint8_t index)
+{
+    te_ctx_t *c = g_te;
+    if (!c) return NULL;
+    te_lock();
+    const char *id = (c->custom && index < c->n_pages) ? c->pages[index].id : NULL;
+    te_unlock();
+    return id;
+}
 
-    // Enable manual positioning - ignore parent's layout management
-    lv_obj_add_flag(label, LV_OBJ_FLAG_IGNORE_LAYOUT);
+uint8_t theme_page_default_index(void)
+{
+    te_ctx_t *c = g_te;
+    if (!c) return 0;
+    te_lock();
+    int i = c->custom ? te_page_find("main_gauge") : -1;
+    te_unlock();
+    return i > 0 ? (uint8_t)i : 0;
+}
 
-    lv_color_t color = theme_json_color(elem, "color", theme_get_color(UI_COLOR_TEXT_PRIMARY));
-    lv_obj_set_style_text_color(label, color, LV_PART_MAIN);
-
-    int32_t font_size = theme_json_int(elem, "font_size", 16);
-    const char *font_asset = theme_json_str(elem, "font_asset", NULL);
-    const lv_font_t *font = font_asset ? theme_load_custom_font(font_asset) : NULL;
-    if (!font) {
-        // Falls back here both when no font_asset was set, and when a
-        // font_asset was set but failed to load (missing/corrupt bin) --
-        // graceful degradation, same posture as theme_load_default().
-        if (font_size >= 48) font = &lv_font_montserrat_48;
-        else if (font_size >= 32) font = &lv_font_montserrat_32;
-        else if (font_size >= 26) font = &lv_font_montserrat_26;
-        else if (font_size >= 16) font = &lv_font_montserrat_16;
-        else if (font_size >= 14) font = &lv_font_montserrat_14;
-        else font = &lv_font_montserrat_12;
-    }
-    lv_obj_set_style_text_font(label, font, LV_PART_MAIN);
-
-    const char *data_source = theme_json_str(elem, "data_source", NULL);
-    if (data_source) {
-        // Live-bound label: initial text is just a placeholder until the
-        // first theme_update_data() tick fills in the real value.
-        theme_add_binding(elem, label, BINDING_KIND_LABEL, 0, 0);
-        lv_label_set_text(label, "--");
+void theme_release_resources(void)
+{
+    te_ctx_t *c = g_te;
+    if (!c) return;
+    te_lock();
+    c->load_generation++; // also discard any unpublished boot preparation
+    if (c->n_live || c->n_preparing) {
+        c->release_pending = true;
+        ESP_LOGW(TE_TAG, "release: %u live page(s), %u preparing, deferred",
+                 (unsigned)c->n_live, (unsigned)c->n_preparing);
     } else {
-        // Static label: fixed text from the manifest, never updated.
-        lv_label_set_text(label, theme_json_str(elem, "text", ""));
+        te_release_locked();
     }
+    te_unlock();
+}
 
-    // Position: x/y is the anchor point; "center"/"right" shift the label so
-    // that anchor is the label's horizontal center/right edge instead of its
-    // left edge. Needs the label's rendered width, so force a layout pass
-    // now rather than relying on lazy layout (which wouldn't be resolved
-    // yet at this point in page construction).
-    int32_t x = theme_json_int(elem, "x", 0);
-    int32_t y = theme_json_int(elem, "y", 0);
-    const char *align = theme_json_str(elem, "align", "left");
-
-    // Remove any padding on the Label itself
-    lv_obj_set_style_pad_all(label, 0, 0);
-
-    lv_obj_update_layout(label);
-    int32_t w = lv_obj_get_width(label);
-    if (strcmp(align, "center") == 0) {
-        lv_obj_set_pos(label, x - w / 2, y);
-    } else if (strcmp(align, "right") == 0) {
-        lv_obj_set_pos(label, x - w, y);
+void theme_unload(void)
+{
+    te_ctx_t *c = g_te;
+    if (!c) return;
+    te_lock();
+    if (c->n_live || c->n_preparing) {
+        ESP_LOGE(TE_TAG, "theme_unload: %u live page(s), %u preparing, refused",
+                 (unsigned)c->n_live, (unsigned)c->n_preparing);
     } else {
-        lv_obj_set_pos(label, x, y);
+        te_unload_locked(c);
     }
-}
-
-// "image" element: places a named, packer-imported asset at x/y sized to
-// width/height, with an optional rotation. Missing/unknown asset names are
-// logged and skipped rather than failing the whole page, consistent with
-// how a full binding table or an unknown element type is handled above.
-static void theme_build_image_element(lv_obj_t *parent, cJSON *elem) {
-    const char *asset_name = theme_json_str(elem, "asset", NULL);
-    if (!asset_name) {
-        ESP_LOGW(TAG, "Image element missing 'asset' field, skipping");
-        return;
-    }
-
-    const lv_img_dsc_t *img = theme_find_named_asset(asset_name);
-    if (!img) {
-        ESP_LOGW(TAG, "Image element references unknown asset '%s', skipping", asset_name);
-        return;
-    }
-
-    lv_obj_t *img_obj = lv_img_create(parent);
-    lv_img_set_src(img_obj, img);
-
-    // Enable manual positioning - ignore parent's layout management
-    lv_obj_add_flag(img_obj, LV_OBJ_FLAG_IGNORE_LAYOUT);
-
-    int32_t x = theme_json_int(elem, "x", 0);
-    int32_t y = theme_json_int(elem, "y", 0);
-    int32_t width = theme_json_int(elem, "width", img->header.w);
-    int32_t height = theme_json_int(elem, "height", img->header.h);
-    int32_t rotation = theme_json_int(elem, "rotation", 0);
-
-    // Set size and position directly - avoid lv_img_set_zoom which resets position
-    lv_obj_set_size(img_obj, width, height);
-    lv_obj_set_pos(img_obj, x, y);
-
-    // Apply rotation if needed
-    if (rotation != 0) {
-        lv_img_set_angle(img_obj, rotation * 10);
-    }
-
-    (void)height;  // zoom is uniform (single scale factor), height is derived from width's ratio
-}
-
-static lv_obj_t* theme_create_custom_page(const char *page_id) {
-    // Clear old bindings before creating new page to prevent use-after-free
-    // when theme_update_data() timer fires after the old page is deleted
-    s_ctx.binding_count = 0;
-    memset(s_ctx.bindings, 0, sizeof(s_ctx.bindings));
-
-    lv_obj_t *page = lv_obj_create(NULL);
-    lv_obj_set_size(page, 360, 360);
-    lv_obj_clear_flag(page, LV_OBJ_FLAG_SCROLLABLE);
-
-    // Apply theme background color
-    lv_obj_set_style_bg_color(page, theme_get_color(UI_COLOR_BG), 0);
-    lv_obj_set_style_bg_opa(page, LV_OPA_COVER, 0);
-
-    // Remove default padding - LVGL objects have default padding that offsets
-    // child positions. Without this, Arc and Label elements appear at wrong
-    // positions even though lv_obj_set_pos() is called with correct coordinates.
-    lv_obj_set_style_pad_all(page, 0, 0);
-
-    // Draw dial background if available
-    const lv_img_dsc_t *dial = theme_get_asset("dial");
-    if (dial) {
-        lv_obj_t *bg_img = lv_img_create(page);
-        lv_img_set_src(bg_img, dial);
-        // Don't use lv_obj_align - it activates alignment mode for the whole container
-        // Instead, manually center it: (360-360)/2 = 0, so just set to (0,0)
-        lv_obj_set_pos(bg_img, 0, 0);
-    }
-
-    // Find this page's layout data location in the manifest
-    cJSON *pages = s_ctx.manifest ? cJSON_GetObjectItem(s_ctx.manifest, "pages") : NULL;
-    cJSON *theme_pages = pages ? cJSON_GetObjectItem(pages, "theme_pages") : NULL;
-    cJSON *page_entry = NULL;
-    cJSON_ArrayForEach(page_entry, theme_pages) {
-        cJSON *id = cJSON_GetObjectItem(page_entry, "id");
-        if (id && cJSON_IsString(id) && strcmp(id->valuestring, page_id) == 0) {
-            break;
-        }
-    }
-
-    if (!page_entry) {
-        ESP_LOGW(TAG, "No manifest entry for theme page '%s', showing background only", page_id);
-        return page;
-    }
-
-    cJSON *offset_obj = cJSON_GetObjectItem(page_entry, "layout_data_offset");
-    cJSON *size_obj = cJSON_GetObjectItem(page_entry, "layout_data_size");
-    if (!offset_obj || !size_obj || !cJSON_IsNumber(offset_obj) || !cJSON_IsNumber(size_obj)) {
-        ESP_LOGW(TAG, "Theme page '%s' has no layout data, showing background only", page_id);
-        return page;
-    }
-
-    size_t offset = (size_t)offset_obj->valueint;
-    size_t size = (size_t)size_obj->valueint;
-    if (size == 0 || size > 64 * 1024) {
-        ESP_LOGW(TAG, "Theme page '%s' layout_data_size %zu out of bounds, skipping", page_id, size);
-        return page;
-    }
-
-    char *layout_buf = heap_caps_malloc(size + 1, MALLOC_CAP_SPIRAM);
-    if (!layout_buf) {
-        ESP_LOGE(TAG, "Failed to allocate %zu bytes for layout.json", size);
-        return page;
-    }
-
-    esp_err_t ret = esp_partition_read(s_ctx.partition, offset, layout_buf, size);
-    layout_buf[size] = '\0';
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to read layout data for '%s': %s", page_id, esp_err_to_name(ret));
-        free(layout_buf);
-        return page;
-    }
-
-    cJSON *layout = cJSON_Parse(layout_buf);
-    free(layout_buf);
-    if (!layout) {
-        ESP_LOGE(TAG, "Failed to parse layout.json for '%s'", page_id);
-        return page;
-    }
-
-    cJSON *bg_color = cJSON_GetObjectItem(layout, "background_color");
-    if (bg_color && cJSON_IsString(bg_color)) {
-        lv_obj_set_style_bg_color(page, lv_color_hex(strtoul(bg_color->valuestring, NULL, 16)), 0);
-    }
-
-    cJSON *elements = cJSON_GetObjectItem(layout, "elements");
-    cJSON *elem = NULL;
-    int elem_count = 0;
-    cJSON_ArrayForEach(elem, elements) {
-        const char *type = theme_json_str(elem, "type", NULL);
-        if (!type) {
-            continue;
-        }
-        if (strcmp(type, "arc") == 0) {
-            theme_build_arc_element(page, elem);
-        } else if (strcmp(type, "bar") == 0) {
-            theme_build_bar_element(page, elem);
-        } else if (strcmp(type, "label") == 0) {
-            theme_build_label_element(page, elem);
-        } else if (strcmp(type, "image") == 0) {
-            theme_build_image_element(page, elem);
-        } else {
-            ESP_LOGW(TAG, "Unknown layout element type '%s', skipping", type);
-            continue;
-        }
-        elem_count++;
-    }
-
-    cJSON_Delete(layout);
-
-    ESP_LOGI(TAG, "Created custom page '%s' with %d elements, %d live bindings",
-             page_id, elem_count, s_ctx.binding_count);
-
-    return page;
+    te_unlock();
 }

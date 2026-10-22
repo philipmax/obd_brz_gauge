@@ -1,0 +1,330 @@
+RX append length evidence — 2026-10-14
+ESP-IDF 5.5.3 / Xtensa GCC 14.2.0
+baseline vp_engine.c SHA256 0e83d063323b964abc0109ae233fe6facdaf15b18405244b1c4e45a40287c232
+production vp_engine.c SHA256 c04005376377fb3e695efb0344c4d54a93bd042f2a3261cc1df4761eb915b13b
+
+normal target object sizes:
+   text	   data	    bss	    dec	    hex	filename
+  12349	      0	      0	  12349	   303d	/tmp/rx-append-normal-before.o
+  12345	      0	      0	  12345	   3039	/tmp/rx-append-normal-after.o
+Static RX frames (not task high-water mark):
+/tmp/obd-rx-append-before.c:1797:6:vp_engine_on_rx	32	static
+/Users/parklu/personProject/obd_brz_gauge/main/vehicle/vp_engine.c:1797:6:vp_engine_on_rx	32	static
+vp_engine_on_rx .text bytes: [174, 170]
+Standalone after/build RX function bytes match; SHA256 e9d703d86c28682adf8cef735143b2e9f47da8203b3eb258a8b3a70dbac1465a
+Linked RX function present; no probe/baseline symbols; instrumentation only in stats ELF.
+App bytes 0x2857c0; SHA256 d514af6928cbf80250810e27740d2c0bf5ef0e762d49de1c097b616986e2a4c6
+
+Normal before RX disassembly:
+Disassembly of section .text.vp_engine_on_rx:
+
+00000000 <vp_engine_on_rx>:
+   0:	004136               	entry	a1, 32
+   3:	080c                	movi.n	a8, 0
+   5:	1e0c                	movi.n	a14, 1
+   7:	190c                	movi.n	a9, 1
+   9:	93e820               	movnez	a14, a8, a2
+   c:	838930               	moveqz	a8, a9, a3
+   f:	20ee80               	or	a14, a14, a8
+  12:	096e56               	bnez	a14, ac <vp_engine_on_rx+0xac>
+			12: R_XTENSA_SLOT0_OP	.text.vp_engine_on_rx+0xac
+  15:	0fd262               	addmi	a6, a2, 0xf00
+  18:	4816a2               	l16ui	a10, a6, 144
+  1b:	000071               	l32r	a7, fffc001c <vp_engine_on_rx+0xfffc001c>
+			1b: R_XTENSA_SLOT0_OP	.literal.vp_engine_on_rx
+  1e:	34cc                	bnez.n	a4, 25 <vp_engine_on_rx+0x25>
+			1e: R_XTENSA_SLOT0_OP	.text.vp_engine_on_rx+0x25
+  20:	001306               	j	70 <vp_engine_on_rx+0x70>
+			20: R_XTENSA_SLOT0_OP	.text.vp_engine_on_rx+0x70
+  23:	00                      	.byte	00
+  24:	00                      	.byte	00
+  25:	e53c                	movi.n	a5, 62
+  27:	ffa1f2               	movi	a15, 0x1ff
+  2a:	0ebd                	mov.n	a11, a14
+  2c:	000382               	l8ui	a8, a3, 0
+  2f:	190c                	movi.n	a9, 1
+  31:	f3c8c2               	addi	a12, a8, -13
+  34:	939bc0               	movnez	a9, a11, a12
+  37:	f6c8d2               	addi	a13, a8, -10
+  3a:	1c0c                	movi.n	a12, 1
+  3c:	93cbd0               	movnez	a12, a11, a13
+  3f:	2099c0               	or	a9, a9, a12
+  42:	38ac                	beqz.n	a8, 69 <vp_engine_on_rx+0x69>
+			42: R_XTENSA_SLOT0_OP	.text.vp_engine_on_rx+0x69
+  44:	20ee90               	or	a14, a14, a9
+  47:	0a9857               	bne	a8, a5, 55 <vp_engine_on_rx+0x55>
+			47: R_XTENSA_SLOT0_OP	.text.vp_engine_on_rx+0x55
+  4a:	190c                	movi.n	a9, 1
+  4c:	6f4292               	s8i	a9, a2, 111
+  4f:	1e0c                	movi.n	a14, 1
+  51:	000006               	j	55 <vp_engine_on_rx+0x55>
+			51: R_XTENSA_SLOT0_OP	.text.vp_engine_on_rx+0x55
+  54:	00                      	.byte	00
+  55:	9a1b                	addi.n	a9, a10, 1
+  57:	c2aa                	add.n	a12, a2, a10
+  59:	f49090               	extui	a9, a9, 0, 16
+  5c:	cc7a                	add.n	a12, a12, a7
+  5e:	073fa7               	bltu	a15, a10, 69 <vp_engine_on_rx+0x69>
+			5e: R_XTENSA_SLOT0_OP	.text.vp_engine_on_rx+0x69
+  61:	485692               	s16i	a9, a6, 144
+  64:	004c82               	s8i	a8, a12, 0
+  67:	09ad                	mov.n	a10, a9
+  69:	331b                	addi.n	a3, a3, 1
+  6b:	440b                	addi.n	a4, a4, -1
+  6d:	fbb456               	bnez	a4, 2c <vp_engine_on_rx+0x2c>
+			6d: R_XTENSA_SLOT0_OP	.text.vp_engine_on_rx+0x2c
+  70:	82aa                	add.n	a8, a2, a10
+  72:	887a                	add.n	a8, a8, a7
+  74:	090c                	movi.n	a9, 0
+  76:	004892               	s8i	a9, a8, 0
+  79:	6e0282               	l8ui	a8, a2, 110
+  7c:	c8ac                	beqz.n	a8, ac <vp_engine_on_rx+0xac>
+			7c: R_XTENSA_SLOT0_OP	.text.vp_engine_on_rx+0xac
+  7e:	840282               	l8ui	a8, a2, 132
+  81:	277866               	bnei	a8, 7, ac <vp_engine_on_rx+0xac>
+			81: R_XTENSA_SLOT0_OP	.text.vp_engine_on_rx+0xac
+  84:	ffa182               	movi	a8, 0x1ff
+  87:	0238a7               	bltu	a8, a10, 8d <vp_engine_on_rx+0x8d>
+			87: R_XTENSA_SLOT0_OP	.text.vp_engine_on_rx+0x8d
+  8a:	01ee16               	beqz	a14, ac <vp_engine_on_rx+0xac>
+			8a: R_XTENSA_SLOT0_OP	.text.vp_engine_on_rx+0xac
+  8d:	7288                	l32i.n	a8, a2, 28
+  8f:	52a8                	l32i.n	a10, a2, 20
+  91:	0008e0               	callx8	a8
+  94:	0abd                	mov.n	a11, a10
+  96:	0c0c                	movi.n	a12, 0
+  98:	02ad                	mov.n	a10, a2
+  9a:	000081               	l32r	a8, fffc009c <vp_engine_on_rx+0xfffc009c>
+			9a: R_XTENSA_SLOT0_OP	.literal.vp_engine_on_rx+0x4
+			9a: R_XTENSA_ASM_EXPAND	.text.mon_consume
+  9d:	0008e0               	callx8	a8
+  a0:	481682               	l16ui	a8, a6, 144
+  a3:	090c                	movi.n	a9, 0
+  a5:	828a                	add.n	a8, a2, a8
+  a7:	887a                	add.n	a8, a8, a7
+  a9:	004892               	s8i	a9, a8, 0
+  ac:	f01d                	retw.n
+
+
+Normal after RX disassembly:
+Disassembly of section .text.vp_engine_on_rx:
+
+00000000 <vp_engine_on_rx>:
+   0:	004136               	entry	a1, 32
+   3:	080c                	movi.n	a8, 0
+   5:	1e0c                	movi.n	a14, 1
+   7:	190c                	movi.n	a9, 1
+   9:	93e820               	movnez	a14, a8, a2
+   c:	838930               	moveqz	a8, a9, a3
+   f:	20ee80               	or	a14, a14, a8
+  12:	092e56               	bnez	a14, a8 <vp_engine_on_rx+0xa8>
+			12: R_XTENSA_SLOT0_OP	.text.vp_engine_on_rx+0xa8
+  15:	0fd262               	addmi	a6, a2, 0xf00
+  18:	4816a2               	l16ui	a10, a6, 144
+  1b:	000071               	l32r	a7, fffc001c <vp_engine_on_rx+0xfffc001c>
+			1b: R_XTENSA_SLOT0_OP	.literal.vp_engine_on_rx
+  1e:	0a8d                	mov.n	a8, a10
+  20:	14cc                	bnez.n	a4, 25 <vp_engine_on_rx+0x25>
+			20: R_XTENSA_SLOT0_OP	.text.vp_engine_on_rx+0x25
+  22:	001106               	j	6a <vp_engine_on_rx+0x6a>
+			22: R_XTENSA_SLOT0_OP	.text.vp_engine_on_rx+0x6a
+  25:	e53c                	movi.n	a5, 62
+  27:	ffa1f2               	movi	a15, 0x1ff
+  2a:	0ebd                	mov.n	a11, a14
+  2c:	000382               	l8ui	a8, a3, 0
+  2f:	190c                	movi.n	a9, 1
+  31:	f3c8c2               	addi	a12, a8, -13
+  34:	939bc0               	movnez	a9, a11, a12
+  37:	f6c8d2               	addi	a13, a8, -10
+  3a:	1c0c                	movi.n	a12, 1
+  3c:	93cbd0               	movnez	a12, a11, a13
+  3f:	2099c0               	or	a9, a9, a12
+  42:	a89c                	beqz.n	a8, 60 <vp_engine_on_rx+0x60>
+			42: R_XTENSA_SLOT0_OP	.text.vp_engine_on_rx+0x60
+  44:	20ee90               	or	a14, a14, a9
+  47:	099857               	bne	a8, a5, 54 <vp_engine_on_rx+0x54>
+			47: R_XTENSA_SLOT0_OP	.text.vp_engine_on_rx+0x54
+  4a:	190c                	movi.n	a9, 1
+  4c:	6f4292               	s8i	a9, a2, 111
+  4f:	1e0c                	movi.n	a14, 1
+  51:	ffffc6               	j	54 <vp_engine_on_rx+0x54>
+			51: R_XTENSA_SLOT0_OP	.text.vp_engine_on_rx+0x54
+  54:	92aa                	add.n	a9, a2, a10
+  56:	997a                	add.n	a9, a9, a7
+  58:	043fa7               	bltu	a15, a10, 60 <vp_engine_on_rx+0x60>
+			58: R_XTENSA_SLOT0_OP	.text.vp_engine_on_rx+0x60
+  5b:	004982               	s8i	a8, a9, 0
+  5e:	aa1b                	addi.n	a10, a10, 1
+  60:	331b                	addi.n	a3, a3, 1
+  62:	440b                	addi.n	a4, a4, -1
+  64:	fc4456               	bnez	a4, 2c <vp_engine_on_rx+0x2c>
+			64: R_XTENSA_SLOT0_OP	.text.vp_engine_on_rx+0x2c
+  67:	f480a0               	extui	a8, a10, 0, 16
+  6a:	a2aa                	add.n	a10, a2, a10
+  6c:	090c                	movi.n	a9, 0
+  6e:	485682               	s16i	a8, a6, 144
+  71:	aa7a                	add.n	a10, a10, a7
+  73:	004a92               	s8i	a9, a10, 0
+  76:	6e0292               	l8ui	a9, a2, 110
+  79:	b9ac                	beqz.n	a9, a8 <vp_engine_on_rx+0xa8>
+			79: R_XTENSA_SLOT0_OP	.text.vp_engine_on_rx+0xa8
+  7b:	840292               	l8ui	a9, a2, 132
+  7e:	267966               	bnei	a9, 7, a8 <vp_engine_on_rx+0xa8>
+			7e: R_XTENSA_SLOT0_OP	.text.vp_engine_on_rx+0xa8
+  81:	ffa192               	movi	a9, 0x1ff
+  84:	013987               	bltu	a9, a8, 89 <vp_engine_on_rx+0x89>
+			84: R_XTENSA_SLOT0_OP	.text.vp_engine_on_rx+0x89
+  87:	de9c                	beqz.n	a14, a8 <vp_engine_on_rx+0xa8>
+			87: R_XTENSA_SLOT0_OP	.text.vp_engine_on_rx+0xa8
+  89:	7288                	l32i.n	a8, a2, 28
+  8b:	52a8                	l32i.n	a10, a2, 20
+  8d:	0008e0               	callx8	a8
+  90:	0abd                	mov.n	a11, a10
+  92:	0c0c                	movi.n	a12, 0
+  94:	02ad                	mov.n	a10, a2
+  96:	000081               	l32r	a8, fffc0098 <vp_engine_on_rx+0xfffc0098>
+			96: R_XTENSA_SLOT0_OP	.literal.vp_engine_on_rx+0x4
+			96: R_XTENSA_ASM_EXPAND	.text.mon_consume
+  99:	0008e0               	callx8	a8
+  9c:	481682               	l16ui	a8, a6, 144
+  9f:	090c                	movi.n	a9, 0
+  a1:	828a                	add.n	a8, a2, a8
+  a3:	887a                	add.n	a8, a8, a7
+  a5:	004892               	s8i	a9, a8, 0
+  a8:	f01d                	retw.n
+
+Compile-only target sizeof(vp_engine_t), before: 5016
+Compile-only target sizeof(vp_engine_t), after: 5016
+stats target object sizes:
+   text	   data	    bss	    dec	    hex	filename
+  12349	      0	      0	  12349	   303d	/tmp/rx-append-stats-before.o
+  12345	      0	      0	  12345	   3039	/tmp/rx-append-stats-after.o
+Static RX frames (not task high-water mark):
+/tmp/obd-rx-append-before.c:1797:6:vp_engine_on_rx	32	static
+/Users/parklu/personProject/obd_brz_gauge/main/vehicle/vp_engine.c:1797:6:vp_engine_on_rx	32	static
+vp_engine_on_rx .text bytes: [174, 170]
+Standalone after/build RX function bytes match; SHA256 e9d703d86c28682adf8cef735143b2e9f47da8203b3eb258a8b3a70dbac1465a
+Linked RX function present; no probe/baseline symbols; instrumentation only in stats ELF.
+App bytes 0x286030; SHA256 567f7353ea40349f39e142ad69cbaad8b89a4bd0192b8cf818ba0d649be906c3
+no-slot target object sizes:
+   text	   data	    bss	    dec	    hex	filename
+  12349	      0	      0	  12349	   303d	/tmp/rx-append-no-slot-before.o
+  12345	      0	      0	  12345	   3039	/tmp/rx-append-no-slot-after.o
+Static RX frames (not task high-water mark):
+/tmp/obd-rx-append-before.c:1797:6:vp_engine_on_rx	32	static
+/Users/parklu/personProject/obd_brz_gauge/main/vehicle/vp_engine.c:1797:6:vp_engine_on_rx	32	static
+vp_engine_on_rx .text bytes: [174, 170]
+Standalone after/build RX function bytes match; SHA256 e9d703d86c28682adf8cef735143b2e9f47da8203b3eb258a8b3a70dbac1465a
+Linked RX function present; no probe/baseline symbols; instrumentation only in stats ELF.
+App bytes 0x276190; SHA256 9a92391570e531531b198bbca258ad12d38dbe01bf7e9cf0b2ccc25b939bd9f5
+
+-- The C compiler identification is AppleClang 21.0.0.21000101
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Performing Test EH_HAVE_SANITIZERS
+-- Performing Test EH_HAVE_SANITIZERS - Success
+-- Configuring done (1.1s)
+-- Generating done (0.0s)
+-- Build files have been written to: /tmp/obd-rx-append-negative
+[1/16] Building C object CMakeFiles/engine_core.dir/Users/parklu/personProject/obd_brz_gauge/main/vehicle/vp_builtin_generic.c.o
+[2/16] Building C object CMakeFiles/engine_core.dir/Users/parklu/personProject/obd_brz_gauge/main/app_obd_dsp/signal_registry.c.o
+[3/16] Building C object CMakeFiles/engine_core.dir/Users/parklu/personProject/obd_brz_gauge/main/vehicle/vp_rpn_json.c.o
+[4/16] Building C object CMakeFiles/engine_core.dir/Users/parklu/personProject/obd_brz_gauge/main/vehicle/vp_defaults.c.o
+[5/16] Building C object CMakeFiles/engine_core.dir/Users/parklu/personProject/obd_brz_gauge/main/vehicle/vp_rpn.c.o
+[6/16] Building C object CMakeFiles/engine_core.dir/Users/parklu/personProject/obd_brz_gauge/main/vehicle/vp_common.c.o
+[7/16] Building C object CMakeFiles/test_rx_append.dir/test_rx_append.c.o
+[8/16] Building C object CMakeFiles/eng_cjson.dir/Users/parklu/.espressif/v5.5.3/esp-idf/components/json/cJSON/cJSON.c.o
+[9/16] Building C object CMakeFiles/engine_core.dir/Users/parklu/personProject/obd_brz_gauge/main/vehicle/vp_compile.c.o
+[10/16] Building C object CMakeFiles/engine_core.dir/Users/parklu/personProject/obd_brz_gauge/main/vehicle/vp_validate.c.o
+[11/16] Linking C static library libeng_cjson.a
+[12/16] Building C object CMakeFiles/engine_core.dir/Users/parklu/personProject/obd_brz_gauge/main/vehicle/vp_engine.c.o
+[13/16] Building C object CMakeFiles/rx_append_probe.dir/rx_append_probe.c.o
+[14/16] Linking C static library libengine_core.a
+[15/16] Linking C static library librx_append_probe.a
+[16/16] Linking C executable test_rx_append
+baseline: compiled; exit=0
+RX append: 219423 complete engine/callback comparisons; engine=5112 bytes
+-- Configuring done (0.1s)
+-- Generating done (0.0s)
+-- Build files have been written to: /tmp/obd-rx-append-negative
+[1/3] Building C object CMakeFiles/rx_append_probe.dir/rx_append_probe.c.o
+[2/3] Linking C static library librx_append_probe.a
+[3/3] Linking C executable test_rx_append
+nul: compiled; exit=1
+RX failure after 256 comparisons: engine bytes or callback trace changed
+-- Configuring done (0.1s)
+-- Generating done (0.0s)
+-- Build files have been written to: /tmp/obd-rx-append-negative
+[1/3] Building C object CMakeFiles/rx_append_probe.dir/rx_append_probe.c.o
+[2/3] Linking C static library librx_append_probe.a
+[3/3] Linking C executable test_rx_append
+full-scan: compiled; exit=1
+RX failure after 12606 comparisons: engine bytes or callback trace changed
+-- Configuring done (0.1s)
+-- Generating done (0.0s)
+-- Build files have been written to: /tmp/obd-rx-append-negative
+[1/3] Building C object CMakeFiles/rx_append_probe.dir/rx_append_probe.c.o
+[2/3] Linking C static library librx_append_probe.a
+[3/3] Linking C executable test_rx_append
+prompt: compiled; exit=1
+RX failure after 318 comparisons: engine bytes or callback trace changed
+-- Configuring done (0.1s)
+-- Generating done (0.0s)
+-- Build files have been written to: /tmp/obd-rx-append-negative
+[1/3] Building C object CMakeFiles/rx_append_probe.dir/rx_append_probe.c.o
+[2/3] Linking C static library librx_append_probe.a
+[3/3] Linking C executable test_rx_append
+length: compiled; exit=1
+RX failure after 257 comparisons: engine bytes or callback trace changed
+-- Configuring done (0.1s)
+-- Generating done (0.0s)
+-- Build files have been written to: /tmp/obd-rx-append-negative
+[1/3] Building C object CMakeFiles/rx_append_probe.dir/rx_append_probe.c.o
+[2/3] Linking C static library librx_append_probe.a
+[3/3] Linking C executable test_rx_append
+full-flush: compiled; exit=1
+RX failure after 63745 comparisons: engine bytes or callback trace changed
+-- Configuring done (0.1s)
+-- Generating done (0.0s)
+-- Build files have been written to: /tmp/obd-rx-append-negative
+[1/3] Building C object CMakeFiles/rx_append_probe.dir/rx_append_probe.c.o
+[2/3] Linking C static library librx_append_probe.a
+[3/3] Linking C executable test_rx_append
+idle-flush: compiled; exit=1
+RX failure after 123146 comparisons: engine bytes or callback trace changed
+-- Configuring done (0.1s)
+-- Generating done (0.0s)
+-- Build files have been written to: /tmp/obd-rx-append-negative
+[1/3] Building C object CMakeFiles/rx_append_probe.dir/rx_append_probe.c.o
+[2/3] Linking C static library librx_append_probe.a
+[3/3] Linking C executable test_rx_append
+kind-flush: compiled; exit=1
+RX failure after 30986 comparisons: engine bytes or callback trace changed
+-- Configuring done (0.1s)
+-- Generating done (0.0s)
+-- Build files have been written to: /tmp/obd-rx-append-negative
+[1/3] Building C object CMakeFiles/rx_append_probe.dir/rx_append_probe.c.o
+[2/3] Linking C static library librx_append_probe.a
+[3/3] Linking C executable test_rx_append
+tail-nul: compiled; exit=1
+RX failure after 61706 comparisons: engine bytes or callback trace changed
+
+engine: 100% tests passed, 0 tests failed out of 5
+espnow: 100% tests passed, 0 tests failed out of 4
+media: 100% tests passed, 0 tests failed out of 7
+rules: 100% tests passed, 0 tests failed out of 6
+theme: 100% tests passed, 0 tests failed out of 6
+vehicle: 100% tests passed, 0 tests failed out of 12
+signal_store: 100% tests passed, 0 tests failed out of 4
+storage: 100% tests passed, 0 tests failed out of 2
+TOTAL: 46
+
+Desktop paired timing: Apple M1 arm64 / Apple clang 21.0.0, Release -O3, EH_SANITIZE=OFF, no LTO.
+Two complete real sources in separate TUs; same engine address, alternating order, 10000 warmup, seven samples of 200000 calls, median.
+Reset of rx_len/prompt and returned length/prompt checksum included. Monitor decode, transport and wait excluded.
+Background load exists. Do not claim all inputs get faster or convert desktop timing to ESP32 throughput or polling frequency.
+
+Final documentation/integration checks: Chinese/English heading structure; PERFORMANCE tables/code blocks identical; DEVELOPMENT adds only mirrored RX paragraphs; published diff reconstructs byte-identical old source. Contracts: 37 profiles pass. Theme generation check passes. Partition layout/documentation check passes. git diff --check passes.

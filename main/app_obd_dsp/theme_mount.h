@@ -9,11 +9,7 @@
 extern "C" {
 #endif
 
-// Raw-partition write access to theme_0, for the /ota/theme uploader.
-// theme_0 is a single self-contained 4MB blob (manifest + assets + layout,
-// already packed by pack_theme.py / the app's themePacker.ts) -- unlike
-// bootmedia there is no separate manifest region with its own offset, so
-// this module is just find-partition + erase + write.
+// Read-only legacy theme_0 access for migration to SD.
 
 // Find the theme_0 partition; returns true on success.
 bool theme_mount(void);
@@ -21,13 +17,11 @@ bool theme_mount(void);
 // Get theme_0's total size in bytes; returns 0 if not mounted.
 size_t theme_get_partition_size(void);
 
-// Erase the whole theme_0 partition.
-bool theme_erase_all(void);
+// Absolute flash address of theme_0 (for mmap reads); 0 if not found.
+uint32_t theme_get_partition_addr(void);
 
-// Write `len` bytes at `offset` into theme_0. `data` must be in
-// internal RAM or gets copied through one before the flash write (PSRAM
-// sources are not safe while the flash cache is disabled).
-esp_err_t theme_raw_write(uint32_t offset, const uint8_t *data, size_t len);
+// Read `len` bytes at `offset` from theme_0 into `buf` (any RAM).
+esp_err_t theme_raw_read(uint32_t offset, void *buf, size_t len);
 
 #ifdef __cplusplus
 }

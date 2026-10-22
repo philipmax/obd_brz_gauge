@@ -1,0 +1,12 @@
+--- a/main/vehicle/vp_rpn.c
++++ b/main/vehicle/vp_rpn.c
+@@ -280,7 +280,8 @@
+             if (!vp_rpn_extract_raw(data, len, (uint16_t)in->u.arg, in->bits, in->flags, &v)) {
+                 return VP_RPN_ERR_DATA;
+             }
+-            r = (float)v;
++            /* Extraction returns at most a signed or unsigned 32-bit field. */
++            r = (in->flags & VP_RAW_SIGNED) ? (float)(int32_t)v : (float)(uint32_t)v;
+             break;
+         }
+         case VP_OP_PUSH_CONST:

@@ -1,0 +1,137 @@
+{
+  "schema": "skygauge.vehicle/1",
+  "id": "subaru.zd8.pid",
+  "rev": 1,
+  "name": "ZD8",
+  "origin": {
+    "from": "legacy 4b056c0",
+    "legacy_idx": 4,
+    "legacy_name": "ZD8"
+  },
+  "notes": ["Same polling as subaru.zd8.obd; both legacy entries are kept so the legacy profile index maps 1:1."],
+  "bus": {
+    "proto": 6,
+    "atst": 10,
+    "gap_ms": 1
+  },
+  "drivetrain": {
+    "fd": 4.1,
+    "tire_m": 0.318,
+    "gears": [3.626, 2.189, 1.541, 1.213, 1, 0.767],
+    "tol": 0.15
+  },
+  "signals": [
+    {
+      "id": "obd.rpm",
+      "rate": "every",
+      "src": [
+        {
+          "req": "010C",
+          "len": 2,
+          "expr": "(A*256+B)/4",
+          "rpn": [["A", 0], ["k", 256], "*", ["A", 1], "+", ["k", 4], "/"]
+        }
+      ]
+    },
+    {
+      "id": "obd.intake_temp",
+      "src": [
+        {
+          "req": "010F",
+          "len": 1,
+          "expr": "A-40",
+          "rpn": [["A", 0], ["k", 40], "-"]
+        }
+      ]
+    },
+    {
+      "id": "obd.speed",
+      "post": {
+        "zero_le": 2
+      },
+      "src": [
+        {
+          "req": "010D",
+          "len": 1,
+          "expr": "A",
+          "rpn": [["A", 0]]
+        }
+      ]
+    },
+    {
+      "id": "obd.coolant_temp",
+      "src": [
+        {
+          "req": "0105",
+          "len": 1,
+          "expr": "A-40",
+          "rpn": [["A", 0], ["k", 40], "-"]
+        }
+      ]
+    },
+    {
+      "id": "obd.load",
+      "src": [
+        {
+          "req": "0104",
+          "len": 1,
+          "expr": "A*100/255",
+          "rpn": [["A", 0], ["k", 100], "*", ["k", 255], "/"]
+        }
+      ]
+    },
+    {
+      "id": "obd.throttle",
+      "src": [
+        {
+          "req": "0111",
+          "len": 1,
+          "expr": "A*100/255",
+          "rpn": [["A", 0], ["k", 100], "*", ["k", 255], "/"]
+        }
+      ]
+    },
+    {
+      "id": "obd.oil_temp",
+      "valid": [-20, 150],
+      "filter": "temp_hyst",
+      "src": [
+        {
+          "req": "015C",
+          "len": 1,
+          "valid": [-40, 215],
+          "expr": "A-40",
+          "rpn": [["A", 0], ["k", 40], "-"]
+        }
+      ]
+    },
+    {
+      "id": "obd.battery_voltage",
+      "unit": "mV",
+      "src": [
+        {
+          "req": "0142",
+          "len": 2,
+          "expr": "A*256+B",
+          "rpn": [["R", 0, 16, "be"]]
+        }
+      ]
+    },
+    {
+      "id": "obd.afr",
+      "src": [
+        {
+          "req": "0144",
+          "len": 2,
+          "valid": [8, 22],
+          "expr": "(A*256+B)*14.7/32768",
+          "rpn": [["R", 0, 16, "be"], ["k", 14.7], "*", ["k", 32768], "/"]
+        }
+      ]
+    },
+    {
+      "id": "obd.gear",
+      "derive": "ratio"
+    }
+  ]
+}

@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
-# One-click release: commit source → build → package release bins + latest.json → commit → push.
+# One-click release: commit source → reconfigure + build → package release bins
+# + latest.json → commit artifacts (build:) → push.
 #
 # Usage:  ./tools/release.sh "feat: your change message"
 #
 # Notes:
+#   - The source is committed FIRST and the build is reconfigured so CMake re-reads
+#     HEAD: the firmware's build tag / count and latest.json then all name the
+#     source commit N. The artifacts follow in a separate `build:` commit (N+1),
+#     as AGENTS.md requires. gen_release.py refuses a firmware whose embedded
+#     build tag differs from HEAD (the old "one release behind" bug).
+#   - With a clean tree the source commit is skipped and HEAD is released as is.
 #   - `--no-verify` skips the global git hooks (PythonPep8 at GIS-lm-build/git-hooks).
-#   - The source MUST be committed before building: gen_release.py derives
-#     firmware.count / build_tag from the current git HEAD.
-#   - Steps are skipped safely: if there is nothing to commit, the commit is skipped.
 #   - ESP-IDF is auto-activated. `idf.py` here is a shell *alias* (not a real
 #     binary), so the script sources the eim activation script and calls idf.py
 #     through its python interpreter directly — no manual env activation needed.
@@ -17,6 +21,19 @@ MSG="${1:-feat: update}"
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+
+# Build on the current branch; publication starts when artifacts reach main.
+# An explicit FIRMWARE_BRANCH optionally restricts the local build branch.
+CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+RELEASE_BRANCH="${FIRMWARE_BRANCH:-}"
+if [ "$CURRENT_BRANCH" = "HEAD" ]; then
+    echo "Release requires a named branch; detached HEAD is not supported." >&2
+    exit 1
+fi
+if [ -n "$RELEASE_BRANCH" ] && [ "$CURRENT_BRANCH" != "$RELEASE_BRANCH" ]; then
+    echo "Release branch must be '$RELEASE_BRANCH'; current branch is '$CURRENT_BRANCH'." >&2
+    exit 1
+fi
 
 # ---- Activate ESP-IDF ------------------------------------------------------
 if ! command -v idf.py >/dev/null 2>&1; then
@@ -57,27 +74,44 @@ else
     fi
 fi
 
-# ---- 1. Commit the source first (git tag/build count is read from HEAD) ----
+idf() {
+    if [ "$IDF_PY" = "idf.py" ]; then idf.py "$@"; else "$IDF_PY" "$IDF_TOOL" "$@"; fi
+}
+
+# ---- 1. Commit the source (never the build artifacts) ----
 git add -A
-if ! git diff --cached --quiet; then
+git reset -q -- build/ firmware/release/ CHANGELOG.md CHANGELOG.en.md
+if git diff --cached --quiet; then
+    echo "No source changes — releasing HEAD as is."
+else
     git commit --no-verify -m "$MSG"
 fi
 
-# ---- 2. Build the firmware ----
-if [ "$IDF_PY" = "idf.py" ]; then
-    idf.py build
-else
-    "$IDF_PY" "$IDF_TOOL" build
-fi
+# ---- 2. Build from HEAD (reconfigure: CMake reads the git count at configure time) ----
+idf reconfigure build
 
-# ---- 3. Copy build/*.bin → firmware/release/ and write latest.json ----
+# ---- 3. Copy build/*.bin → firmware/release/ and write latest.json (checks the build tag) ----
 python3 tools/gen_release.py
 
-# ---- 4. Commit the release binaries + manifest, then push ----
-git add firmware/release/
-if ! git diff --cached --quiet; then
-    git commit --no-verify -m "build: update release firmware binaries"
+# ---- 4. Commit the whitelisted build artifacts (.gitignore keeps build/* out by default) ----
+git add -f \
+    build/obd_brz_gauge.bin \
+    build/bootloader/bootloader.bin \
+    build/partition_table/partition-table.bin \
+    build/ota_data_initial.bin
+if [ -f build/bootmedia.bin ]; then
+    git add -f build/bootmedia.bin
 fi
-git push --no-verify
+git add firmware/release/
+SRC_COUNT="$(git rev-list --count HEAD)"
+SRC_HASH="$(git rev-parse --short=12 HEAD)"
+if git diff --cached --quiet; then
+    echo "Artifacts unchanged — nothing to commit."
+else
+    git commit --no-verify -m "build: release firmware count ${SRC_COUNT} (${SRC_HASH})"
+fi
 
-echo "released: $(git rev-parse --short HEAD)  count=$(git rev-list --count HEAD)"
+# ---- 5. Push ----
+git push --no-verify origin "$CURRENT_BRANCH"
+
+echo "✓ Released firmware count=${SRC_COUNT} git=${SRC_HASH} (artifacts at $(git rev-parse --short HEAD))"

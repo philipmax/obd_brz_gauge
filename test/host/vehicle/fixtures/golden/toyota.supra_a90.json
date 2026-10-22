@@ -1,0 +1,106 @@
+{
+  "id": "toyota.supra_a90",
+  "legacy": {
+    "rev": "4b056c0",
+    "idx": 7,
+    "name": "Supra A90"
+  },
+  "init": ["ATZ", "ATE0", "ATL0", "ATS1", "ATH0", "ATAT1", "ATST0A", "ATSP6", "ATSH7DF"],
+  "gap_ms": 1,
+  "requests": [
+    {
+      "sig": "obd.rpm",
+      "src": 0,
+      "hdr": "7DF",
+      "tx": "010C",
+      "class": "fast"
+    },
+    {
+      "sig": "obd.intake_temp",
+      "src": 0,
+      "hdr": "7DF",
+      "tx": "010F",
+      "class": "round"
+    },
+    {
+      "sig": "obd.speed",
+      "src": 0,
+      "hdr": "7DF",
+      "tx": "010D",
+      "class": "round"
+    },
+    {
+      "sig": "obd.coolant_temp",
+      "src": 0,
+      "hdr": "7DF",
+      "tx": "0105",
+      "class": "round"
+    },
+    {
+      "sig": "obd.load",
+      "src": 0,
+      "hdr": "7DF",
+      "tx": "0104",
+      "class": "round"
+    },
+    {
+      "sig": "obd.throttle",
+      "src": 0,
+      "hdr": "7DF",
+      "tx": "0111",
+      "class": "round"
+    },
+    {
+      "sig": "obd.oil_temp",
+      "src": 0,
+      "hdr": "7E0",
+      "tx": "224402",
+      "class": "round"
+    },
+    {
+      "sig": "obd.oil_temp",
+      "src": 1,
+      "hdr": "7DF",
+      "tx": "015C",
+      "class": "round"
+    },
+    {
+      "sig": "obd.battery_voltage",
+      "src": 0,
+      "hdr": "7DF",
+      "tx": "0142",
+      "class": "round"
+    },
+    {
+      "sig": "obd.boost",
+      "src": 0,
+      "hdr": "7DF",
+      "tx": "010B",
+      "class": "round"
+    },
+    {
+      "sig": "obd.afr",
+      "src": 0,
+      "hdr": "7DF",
+      "tx": "0144",
+      "class": "round"
+    },
+    {
+      "sig": "obd.oil_pressure",
+      "src": 0,
+      "hdr": "7E0",
+      "tx": "224436",
+      "class": "round"
+    }
+  ],
+  "requires": [],
+  "monitor": null,
+  "can": [],
+  "drivetrain": {
+    "fd": 2.813,
+    "tire_m": 0.33,
+    "gears": [5.25, 3.36, 2.172, 1.72, 1.316, 1, 0.822, 0.64],
+    "tol": 0.09
+  },
+  "notes": ["obd.boost: legacy truncated (MAP-100)/10 to 0.1 bar; v1 stores 0.01 bar."]
+}

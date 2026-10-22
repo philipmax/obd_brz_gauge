@@ -1,0 +1,8 @@
+scenario,requested_slots,full_ns,masked_ns,ratio
+chart_oilp,1,24.76,11.37,2.177
+chart_oilp_rpm,2,23.63,12.53,1.886
+temp,3,23.64,18.58,1.272
+temp_rpm,4,23.62,19.11,1.236
+info,5,23.60,22.87,1.032
+info_rpm,6,23.60,24.44,0.966
+all,12,23.62,24.96,0.946

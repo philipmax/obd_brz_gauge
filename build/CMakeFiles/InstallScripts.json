@@ -124,11 +124,10 @@
 		"/Users/parklu/personProject/obd_brz_gauge/build/esp-idf/ulp/cmake_install.cmake",
 		"/Users/parklu/personProject/obd_brz_gauge/build/esp-idf/usb/cmake_install.cmake",
 		"/Users/parklu/personProject/obd_brz_gauge/build/esp-idf/wifi_provisioning/cmake_install.cmake",
+		"/Users/parklu/personProject/obd_brz_gauge/build/esp-idf/joltwallet__littlefs/cmake_install.cmake",
 		"/Users/parklu/personProject/obd_brz_gauge/build/esp-idf/espressif__esp_lcd_touch/cmake_install.cmake",
 		"/Users/parklu/personProject/obd_brz_gauge/build/esp-idf/lvgl__lvgl/cmake_install.cmake",
-		"/Users/parklu/personProject/obd_brz_gauge/build/esp-idf/espressif__cmake_utilities/cmake_install.cmake",
-		"/Users/parklu/personProject/obd_brz_gauge/build/esp-idf/espressif__button/cmake_install.cmake",
-		"/Users/parklu/personProject/obd_brz_gauge/build/esp-idf/espressif__knob/cmake_install.cmake",
+		"/Users/parklu/personProject/obd_brz_gauge/build/esp-idf/espressif__esp_new_jpeg/cmake_install.cmake",
 		"/Users/parklu/personProject/obd_brz_gauge/build/esp-idf/main/cmake_install.cmake"
 	],
 	"Parallel" : false

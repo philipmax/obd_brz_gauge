@@ -35,7 +35,7 @@ static void on_alarm_slider_change(lv_event_t *e)
 
 void ui_ScreenPageChartAlarm_screen_init(void)
 {
-    s_alarm_item = nvs_cfg_get()->chart_source_idx;
+    s_alarm_item = nvs_cfg_read().chart_source_idx;
     ui_disp_item_range(s_alarm_item, &s_alarm_nmin, &s_alarm_nmax, &s_alarm_div);
     if (s_alarm_div < 1) s_alarm_div = 1;
 

@@ -1,9 +1,7 @@
 #include "bsp_obd_dsp/lcd_driver/ST77916.h"
 
 
-#define LCD_OPCODE_WRITE_CMD        (0x02ULL)
 #define LCD_OPCODE_READ_CMD         (0x0BULL)
-#define LCD_OPCODE_WRITE_COLOR      (0x32ULL)
 
 static const char *TAG_LCD = "ST77916";
 
@@ -637,8 +635,9 @@ void ST77916_Reset(){
 #endif
 }
 void LCD_Init() {        
-  ST77916_Init();
+  /* Keep the panel physically dark before its display-on command is sent. */
   Backlight_Init();
+  ST77916_Init();
   Touch_Init();
 }
 
@@ -708,7 +707,14 @@ int QSPI_Init(void){
   } else {
     ESP_LOGW(TAG_LCD, "Failed to read register 0x04, error code: %d", ret);
   } 
-  // panel_io_spi_del(io_handle);
+  /* The 3 MHz probe device must be removed before registering the display
+   * device at its normal clock. Otherwise its handle and bus-lock slot leak. */
+  ret = esp_lcd_panel_io_del(io_handle);
+  if (ret != ESP_OK) {
+    ESP_LOGE(TAG_LCD, "Failed to release LCD probe IO: %s", esp_err_to_name(ret));
+    return 0;
+  }
+  io_handle = NULL;
   io_config.pclk_hz = ESP_PANEL_LCD_SPI_CLK_HZ;
   if(esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)ESP_PANEL_HOST_SPI_ID_DEFAULT, &io_config, &io_handle) != ESP_OK){
     ESP_LOGE(TAG_LCD, "Failed to set LCD communication parameters -- SPI");
@@ -768,14 +774,22 @@ void ST77916_Init() {
 
 uint8_t LCD_Backlight = 70;
 static ledc_channel_config_t ledc_channel;
-void Backlight_Init(void)
+void LCD_BacklightOffEarly(void)
 {
-    ESP_LOGD(TAG_LCD, "Turn off LCD backlight");
+    /* Preload the inactive output latch before enabling the GPIO driver.
+     * No PWM, panel, storage or I2C initialization is required here. */
+    ESP_ERROR_CHECK(gpio_set_level(EXAMPLE_LCD_PIN_NUM_BK_LIGHT, EXAMPLE_LCD_BK_LIGHT_OFF_LEVEL));
     gpio_config_t bk_gpio_config = {
         .mode = GPIO_MODE_OUTPUT,
         .pin_bit_mask = 1ULL << EXAMPLE_LCD_PIN_NUM_BK_LIGHT
     };
     ESP_ERROR_CHECK(gpio_config(&bk_gpio_config));
+}
+
+void Backlight_Init(void)
+{
+    ESP_LOGD(TAG_LCD, "Turn off LCD backlight");
+    LCD_BacklightOffEarly();
 
     ledc_timer_config_t ledc_timer = {
         .duty_resolution = LEDC_TIMER_13_BIT,

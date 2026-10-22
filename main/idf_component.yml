@@ -1,11 +1,14 @@
 version: "0.1.0"
 dependencies:
-  idf: ">=5.1"
-  espressif/knob: "^1.0.0"
-  espressif/button: "==3.3.1"
+  idf: ">=5.5"
   espressif/esp_lcd_touch:
     public: true
     version: "^1"
   lvgl/lvgl:
     public: true
     version: "^8"
+  joltwallet/littlefs:
+    version: "^1.14.8"
+  espressif/esp_new_jpeg:
+    version: "1.0.2"
+  # button and knob components removed per REFACTOR_PLAN.md P0 (unused)

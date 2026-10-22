@@ -1,0 +1,1317 @@
+Actual ESP32-S3 compile command; standalone only changes source/output/dependency paths and adds the original header directory:
+/Users/parklu/.espressif/tools/xtensa-esp-elf/esp-14.2.0_20251107/xtensa-esp-elf/bin/xtensa-esp32s3-elf-gcc -DESP_PLATFORM -DIDF_VER=\"v5.5.3\" -DLV_CONF_INCLUDE_SIMPLE -DMBEDTLS_CONFIG_FILE=\"mbedtls/esp_config.h\" -DOBD_GAUGE_BUILD_TAG=\"rebuild-138-233b2cce8831\" -DOBD_GAUGE_GIT_BRANCH=\"rebuild\" -DOBD_GAUGE_GIT_COUNT=138 -DOBD_GAUGE_GIT_HASH=\"233b2cce8831\" -DSOC_MMU_PAGE_SIZE=CONFIG_MMU_PAGE_SIZE -DSOC_XTAL_FREQ_MHZ=CONFIG_XTAL_FREQ -D_GLIBCXX_HAVE_POSIX_SEMAPHORE -D_GLIBCXX_USE_POSIX_SEMAPHORE -D_GNU_SOURCE -D_POSIX_READER_WRITER_LOCKS -I/private/tmp/obd-brz-build/config -I/Users/parklu/personProject/obd_brz_gauge/main -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/newlib/platform_include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/freertos/config/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/freertos/config/include/freertos -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/freertos/config/xtensa/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/freertos/FreeRTOS-Kernel/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/freertos/FreeRTOS-Kernel/portable/xtensa/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/freertos/FreeRTOS-Kernel/portable/xtensa/include/freertos -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/freertos/esp_additions/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/include/soc -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/include/soc/esp32s3 -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/dma/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/ldo/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/debug_probe/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/mspi_timing_tuning/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/mspi_timing_tuning/tuning_scheme_impl/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/power_supply/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/port/esp32s3/. -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/port/esp32s3/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/mspi_timing_tuning/port/esp32s3/. -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/mspi_timing_tuning/port/esp32s3/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/heap/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/heap/tlsf -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/log/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/soc/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/soc/esp32s3 -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/soc/esp32s3/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/soc/esp32s3/register -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/hal/platform_port/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/hal/esp32s3/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/hal/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_rom/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_rom/esp32s3/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_rom/esp32s3/include/esp32s3 -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_rom/esp32s3 -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_common/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_system/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_system/port/soc -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_system/port/include/private -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/xtensa/esp32s3/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/xtensa/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/xtensa/deprecated_include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/lwip/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/lwip/include/apps -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/lwip/include/apps/sntp -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/lwip/lwip/src/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/lwip/port/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/lwip/port/freertos/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/lwip/port/esp32xx/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/lwip/port/esp32xx/include/arch -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/lwip/port/esp32xx/include/sys -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_http_server/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/http_parser -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_event/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_wifi/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_wifi/include/local -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_wifi/wifi_apps/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_wifi/wifi_apps/nan_app/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_phy/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_phy/esp32s3/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_netif/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/include/esp32c3/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/common/osi/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/common/api/include/api -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/common/btc/profile/esp/blufi/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/common/btc/profile/esp/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/common/hci_log/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/common/ble_log/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/host/bluedroid/api/include/api -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/common/tinycrypt/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/common/tinycrypt/port -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_timer/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/mbedtls/port/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/mbedtls/mbedtls/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/mbedtls/mbedtls/library -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/mbedtls/esp_crt_bundle/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/mbedtls/mbedtls/3rdparty/everest/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/mbedtls/mbedtls/3rdparty/p256-m -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/mbedtls/mbedtls/3rdparty/p256-m/p256-m -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/nvs_flash/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_partition/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/app_update/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bootloader_support/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bootloader_support/bootloader_flash/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_app_format/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_bootloader_format/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/json/cJSON -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/sdmmc/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_sdmmc/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_gpio/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/fatfs/diskio -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/fatfs/src -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/fatfs/vfs -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/wear_levelling/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_sdspi/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_spi/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_pm/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/espcoredump/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/espcoredump/include/port/xtensa -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/spi_flash/include -I/Users/parklu/personProject/obd_brz_gauge/managed_components/joltwallet__littlefs/include -I/Users/parklu/personProject/obd_brz_gauge/managed_components/espressif__esp_lcd_touch/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/driver/deprecated -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/driver/i2c/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/driver/touch_sensor/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/driver/twai/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/driver/touch_sensor/esp32s3/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_ringbuf/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_pcnt/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_gptimer/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_mcpwm/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_ana_cmpr/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_i2s/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_sdio/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_dac/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_rmt/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_tsens/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_sdm/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_i2c/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_uart/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/vfs/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_ledc/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_parlio/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_usb_serial_jtag/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_twai/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_lcd/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_lcd/interface -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_lcd/rgb/include -I/Users/parklu/personProject/obd_brz_gauge/managed_components/lvgl__lvgl -I/Users/parklu/personProject/obd_brz_gauge/managed_components/lvgl__lvgl/src -I/Users/parklu/personProject/obd_brz_gauge/managed_components -I/Users/parklu/personProject/obd_brz_gauge/managed_components/lvgl__lvgl/examples -I/Users/parklu/personProject/obd_brz_gauge/managed_components/lvgl__lvgl/demos -I/Users/parklu/personProject/obd_brz_gauge/managed_components/espressif__esp_new_jpeg/include -mlongcalls  -fno-builtin-memcpy -fno-builtin-memset -fno-builtin-bzero -fno-builtin-stpcpy -fno-builtin-strncpy -fdiagnostics-color=always -Wno-format -ffunction-sections -fdata-sections -Wall -Werror=all -Wno-error=unused-function -Wno-error=unused-variable -Wno-error=unused-but-set-variable -Wno-error=deprecated-declarations -Wextra -Wno-error=extra -Wno-unused-parameter -Wno-sign-compare -Wno-enum-conversion -gdwarf-4 -ggdb -mdisable-hardware-atomics -O2 -fmacro-prefix-map=/Users/parklu/personProject/obd_brz_gauge=. -fmacro-prefix-map=/Users/parklu/.espressif/v5.5.3/esp-idf=/IDF -fstrict-volatile-bitfields -fno-jump-tables -fno-tree-switch-conversion -std=gnu17 -Wno-old-style-declaration -o esp-idf/main/CMakeFiles/__idf_main.dir/app_obd_dsp/signal_store.c.obj -c /Users/parklu/personProject/obd_brz_gauge/main/app_obd_dsp/signal_store.c
+
+before lookup literal relocations:
+
+/tmp/obd-signal-id-20261014/before-standalone.obj:     file format elf32-xtensa-le
+
+RELOCATION RECORDS FOR [.literal.signal_store_slot_by_id]:
+OFFSET   TYPE              VALUE
+00000000 R_XTENSA_32       sig_registry
+00000004 R_XTENSA_32       .bss.s_st
+00000008 R_XTENSA_32       .data.s_mux
+0000000c R_XTENSA_32       xPortEnterCriticalTimeout
+00000010 R_XTENSA_32       vPortExitCritical
+
+
+
+before sections:
+/tmp/obd-signal-id-20261014/before-standalone.obj  :
+section                                     size   addr
+.literal.signal_store_init                    40      0
+.literal.signal_store_set_local               16      0
+.literal.signal_store_is_local                16      0
+.literal.signal_store_set                     28      0
+.literal.signal_store_set_many                28      0
+.literal.signal_store_invalidate              16      0
+.literal.signal_store_invalidate_many         16      0
+.literal.signal_store_invalidate_vehicle      16      0
+.literal.signal_store_get                     28      0
+.literal.signal_store_get_many                32      0
+.literal.signal_store_entry                   20      0
+.literal.signal_store_get_delivered_mask     120      0
+.literal.signal_store_slot_by_key             28      0
+.literal.signal_store_slot_by_id              20      0
+.literal.signal_store_copy_key                28      0
+.literal.signal_store_num_id                  20      0
+.literal.signal_store_veh_register            36      0
+.literal.signal_store_veh_clear               20      0
+.literal.signal_store_veh_count               16      0
+.text                                          0      0
+.data                                          0      0
+.bss                                           0      0
+.rodata.signal_store_init.str1.4             126      0
+.text.signal_store_init                      103      0
+.text.signal_store_set_local                 106      0
+.text.signal_store_is_local                   91      0
+.text.signal_store_set                       184      0
+.text.signal_store_set_many                  285      0
+.text.signal_store_invalidate                 63      0
+.text.signal_store_invalidate_many           167      0
+.text.signal_store_invalidate_vehicle        130      0
+.text.signal_store_get                       287      0
+.text.signal_store_get_many                  643      0
+.text.signal_store_entry                      78      0
+.text.signal_store_get_delivered_mask       1410      0
+.text.signal_store_slot_by_key               124      0
+.text.signal_store_slot_by_id                 92      0
+.text.signal_store_copy_key                  157      0
+.text.signal_store_num_id                     96      0
+.rodata.signal_store_veh_register.str1.4       5      0
+.text.signal_store_veh_register              284      0
+.text.signal_store_veh_clear                  86      0
+.text.signal_store_veh_count                  43      0
+.data.s_mux                                    8      0
+.bss.s_st                                      4      0
+.debug_frame                                 472      0
+.debug_info                                 8742      0
+.debug_abbrev                               1325      0
+.debug_loc                                  6698      0
+.debug_aranges                               176      0
+.debug_ranges                               1400      0
+.debug_line                                12566      0
+.debug_str                                  2583      0
+.comment                                      48      0
+.xtensa.info                                  56      0
+.xt.lit                                      152      0
+.xt.prop                                    2844      0
+Total                                      42178
+
+
+
+before lookup disassembly:
+Disassembly of section .text.signal_store_slot_by_id:
+
+00000000 <signal_store_slot_by_id>:
+   0:	004136        	entry	a1, 32
+   3:	000081        	l32r	a8, fffc0004 <signal_store_slot_by_id+0xfffc0004>
+			3: R_XTENSA_SLOT0_OP	.literal.signal_store_slot_by_id
+   6:	f47020        	extui	a7, a2, 0, 16
+   9:	191c      	movi.n	a9, 17
+   b:	020c      	movi.n	a2, 0
+   d:	0a8976        	loop	a9, 1b <signal_store_slot_by_id+0x1b>
+			d: R_XTENSA_SLOT0_OP	.text.signal_store_slot_by_id+0x1b
+  10:	0018a2        	l16ui	a10, a8, 0
+  13:	30c882        	addi	a8, a8, 48
+  16:	401a77        	beq	a10, a7, 5a <signal_store_slot_by_id+0x5a>
+			16: R_XTENSA_SLOT0_OP	.text.signal_store_slot_by_id+0x5a
+  19:	221b      	addi.n	a2, a2, 1
+  1b:	000021        	l32r	a2, fffc001c <signal_store_slot_by_id+0xfffc001c>
+			1b: R_XTENSA_SLOT0_OP	.literal.signal_store_slot_by_id+0x4
+  1e:	0288      	l32i.n	a8, a2, 0
+  20:	48bc      	beqz.n	a8, 58 <signal_store_slot_by_id+0x58>
+			20: R_XTENSA_SLOT0_OP	.text.signal_store_slot_by_id+0x58
+  22:	ffd762        	addmi	a6, a7, 0xffffff00
+  25:	f48060        	extui	a8, a6, 0, 16
+  28:	1fa092        	movi	a9, 31
+  2b:	293987        	bltu	a9, a8, 58 <signal_store_slot_by_id+0x58>
+			2b: R_XTENSA_SLOT0_OP	.text.signal_store_slot_by_id+0x58
+  2e:	0000a1        	l32r	a10, fffc0030 <signal_store_slot_by_id+0xfffc0030>
+			2e: R_XTENSA_SLOT0_OP	.literal.signal_store_slot_by_id+0x8
+  31:	ffafb2        	movi	a11, -1
+  34:	000081        	l32r	a8, fffc0034 <signal_store_slot_by_id+0xfffc0034>
+			34: R_XTENSA_SLOT0_OP	.literal.signal_store_slot_by_id+0xc
+			34: R_XTENSA_ASM_EXPAND	xPortEnterCriticalTimeout
+  37:	0008e0        	callx8	a8
+  3a:	0288      	l32i.n	a8, a2, 0
+  3c:	f27c      	movi.n	a2, -1
+  3e:	07d882        	addmi	a8, a8, 0x700
+  41:	332882        	l32i	a8, a8, 204
+  44:	04a687        	bge	a6, a8, 4c <signal_store_slot_by_id+0x4c>
+			44: R_XTENSA_SLOT0_OP	.text.signal_store_slot_by_id+0x4c
+  47:	11af22        	movi	a2, -239
+  4a:	272a      	add.n	a2, a7, a2
+  4c:	0000a1        	l32r	a10, fffc004c <signal_store_slot_by_id+0xfffc004c>
+			4c: R_XTENSA_SLOT0_OP	.literal.signal_store_slot_by_id+0x8
+  4f:	000081        	l32r	a8, fffc0050 <signal_store_slot_by_id+0xfffc0050>
+			4f: R_XTENSA_SLOT0_OP	.literal.signal_store_slot_by_id+0x10
+			4f: R_XTENSA_ASM_EXPAND	vPortExitCritical
+  52:	0008e0        	callx8	a8
+  55:	000046        	j	5a <signal_store_slot_by_id+0x5a>
+			55: R_XTENSA_SLOT0_OP	.text.signal_store_slot_by_id+0x5a
+  58:	f27c      	movi.n	a2, -1
+  5a:	f01d      	retw.n
+
+after lookup literal relocations:
+
+/tmp/obd-signal-id-20261014/after-standalone.obj:     file format elf32-xtensa-le
+
+RELOCATION RECORDS FOR [.literal.signal_store_slot_by_id]:
+OFFSET   TYPE              VALUE
+00000000 R_XTENSA_32       .bss.s_st
+00000004 R_XTENSA_32       .data.s_mux
+00000008 R_XTENSA_32       xPortEnterCriticalTimeout
+0000000c R_XTENSA_32       vPortExitCritical
+
+
+
+after sections:
+/tmp/obd-signal-id-20261014/after-standalone.obj  :
+section                                     size   addr
+.literal.signal_store_init                    40      0
+.literal.signal_store_set_local               16      0
+.literal.signal_store_is_local                16      0
+.literal.signal_store_set                     28      0
+.literal.signal_store_set_many                28      0
+.literal.signal_store_invalidate              16      0
+.literal.signal_store_invalidate_many         16      0
+.literal.signal_store_invalidate_vehicle      16      0
+.literal.signal_store_get                     28      0
+.literal.signal_store_get_many                32      0
+.literal.signal_store_entry                   20      0
+.literal.signal_store_get_delivered_mask     120      0
+.literal.signal_store_slot_by_key             28      0
+.literal.signal_store_slot_by_id              16      0
+.literal.signal_store_copy_key                28      0
+.literal.signal_store_num_id                  20      0
+.literal.signal_store_veh_register            36      0
+.literal.signal_store_veh_clear               20      0
+.literal.signal_store_veh_count               16      0
+.text                                          0      0
+.data                                          0      0
+.bss                                           0      0
+.rodata.signal_store_init.str1.4             126      0
+.text.signal_store_init                      103      0
+.text.signal_store_set_local                 106      0
+.text.signal_store_is_local                   91      0
+.text.signal_store_set                       184      0
+.text.signal_store_set_many                  285      0
+.text.signal_store_invalidate                 63      0
+.text.signal_store_invalidate_many           167      0
+.text.signal_store_invalidate_vehicle        130      0
+.text.signal_store_get                       287      0
+.text.signal_store_get_many                  643      0
+.text.signal_store_entry                      78      0
+.text.signal_store_get_delivered_mask       1410      0
+.text.signal_store_slot_by_key               124      0
+.text.signal_store_slot_by_id                 92      0
+.text.signal_store_copy_key                  157      0
+.text.signal_store_num_id                     96      0
+.rodata.signal_store_veh_register.str1.4       5      0
+.text.signal_store_veh_register              284      0
+.text.signal_store_veh_clear                  86      0
+.text.signal_store_veh_count                  43      0
+.data.s_mux                                    8      0
+.bss.s_st                                      4      0
+.debug_frame                                 472      0
+.debug_info                                 8805      0
+.debug_abbrev                               1325      0
+.debug_loc                                  6707      0
+.debug_aranges                               176      0
+.debug_ranges                               1376      0
+.debug_line                                12494      0
+.debug_str                                  2628      0
+.comment                                      48      0
+.xtensa.info                                  56      0
+.xt.lit                                      152      0
+.xt.prop                                    2844      0
+Total                                      42195
+
+
+
+after lookup disassembly:
+Disassembly of section .text.signal_store_slot_by_id:
+
+00000000 <signal_store_slot_by_id>:
+   0:	004136        	entry	a1, 32
+   3:	f47020        	extui	a7, a2, 0, 16
+   6:	270b      	addi.n	a2, a7, -1
+   8:	f48020        	extui	a8, a2, 0, 16
+   b:	b90c      	movi.n	a9, 11
+   d:	49b987        	bgeu	a9, a8, 5a <signal_store_slot_by_id+0x5a>
+			d: R_XTENSA_SLOT0_OP	.text.signal_store_slot_by_id+0x5a
+  10:	80c782        	addi	a8, a7, -128
+  13:	f48080        	extui	a8, a8, 0, 16
+  16:	8cc722        	addi	a2, a7, -116
+  19:	3d58b6        	bltui	a8, 5, 5a <signal_store_slot_by_id+0x5a>
+			19: R_XTENSA_SLOT0_OP	.text.signal_store_slot_by_id+0x5a
+  1c:	000021        	l32r	a2, fffc001c <signal_store_slot_by_id+0xfffc001c>
+			1c: R_XTENSA_SLOT0_OP	.literal.signal_store_slot_by_id
+  1f:	0288      	l32i.n	a8, a2, 0
+  21:	38bc      	beqz.n	a8, 58 <signal_store_slot_by_id+0x58>
+			21: R_XTENSA_SLOT0_OP	.text.signal_store_slot_by_id+0x58
+  23:	ffd762        	addmi	a6, a7, 0xffffff00
+  26:	f48060        	extui	a8, a6, 0, 16
+  29:	f91c      	movi.n	a9, 31
+  2b:	293987        	bltu	a9, a8, 58 <signal_store_slot_by_id+0x58>
+			2b: R_XTENSA_SLOT0_OP	.text.signal_store_slot_by_id+0x58
+  2e:	0000a1        	l32r	a10, fffc0030 <signal_store_slot_by_id+0xfffc0030>
+			2e: R_XTENSA_SLOT0_OP	.literal.signal_store_slot_by_id+0x4
+  31:	ffafb2        	movi	a11, -1
+  34:	000081        	l32r	a8, fffc0034 <signal_store_slot_by_id+0xfffc0034>
+			34: R_XTENSA_SLOT0_OP	.literal.signal_store_slot_by_id+0x8
+			34: R_XTENSA_ASM_EXPAND	xPortEnterCriticalTimeout
+  37:	0008e0        	callx8	a8
+  3a:	0288      	l32i.n	a8, a2, 0
+  3c:	f27c      	movi.n	a2, -1
+  3e:	07d882        	addmi	a8, a8, 0x700
+  41:	332882        	l32i	a8, a8, 204
+  44:	04a687        	bge	a6, a8, 4c <signal_store_slot_by_id+0x4c>
+			44: R_XTENSA_SLOT0_OP	.text.signal_store_slot_by_id+0x4c
+  47:	11af22        	movi	a2, -239
+  4a:	272a      	add.n	a2, a7, a2
+  4c:	0000a1        	l32r	a10, fffc004c <signal_store_slot_by_id+0xfffc004c>
+			4c: R_XTENSA_SLOT0_OP	.literal.signal_store_slot_by_id+0x4
+  4f:	000081        	l32r	a8, fffc0050 <signal_store_slot_by_id+0xfffc0050>
+			4f: R_XTENSA_SLOT0_OP	.literal.signal_store_slot_by_id+0xc
+			4f: R_XTENSA_ASM_EXPAND	vPortExitCritical
+  52:	0008e0        	callx8	a8
+  55:	000046        	j	5a <signal_store_slot_by_id+0x5a>
+			55: R_XTENSA_SLOT0_OP	.text.signal_store_slot_by_id+0x5a
+  58:	f27c      	movi.n	a2, -1
+  5a:	f01d      	retw.n
+
+normal ELF signal_store_slot_by_id:
+420133cc 0000005c T signal_store_slot_by_id
+normal ELF sig_registry:
+3c1f3e08 00000330 D sig_registry
+normal: before 0x2855f0, after 0x2855f0, delta 0 bytes. No host reference or benchmark code.
+
+/tmp/obd-brz-build/obd_brz_gauge.elf:     file format elf32-xtensa-le
+
+
+Disassembly of section .iram0.vectors:
+
+Disassembly of section .iram0.text:
+
+Disassembly of section .flash.text:
+
+420133cc <signal_store_slot_by_id>:
+420133cc:	004136        	entry	a1, 32
+420133cf:	f47020        	extui	a7, a2, 0, 16
+420133d2:	270b      	addi.n	a2, a7, -1
+420133d4:	f48020        	extui	a8, a2, 0, 16
+420133d7:	b90c      	movi.n	a9, 11
+420133d9:	49b987        	bgeu	a9, a8, 42013426 <signal_store_slot_by_id+0x5a>
+420133dc:	80c782        	addi	a8, a7, -128
+420133df:	f48080        	extui	a8, a8, 0, 16
+420133e2:	8cc722        	addi	a2, a7, -116
+420133e5:	3d58b6        	bltui	a8, 5, 42013426 <signal_store_slot_by_id+0x5a>
+420133e8:	b7ea21        	l32r	a2, 42001390 <_stext+0x1370> (3fcab4fc <s_st>)
+420133eb:	0288      	l32i.n	a8, a2, 0
+420133ed:	38bc      	beqz.n	a8, 42013424 <signal_store_slot_by_id+0x58>
+420133ef:	ffd762        	addmi	a6, a7, 0xffffff00
+420133f2:	f48060        	extui	a8, a6, 0, 16
+420133f5:	f91c      	movi.n	a9, 31
+420133f7:	293987        	bltu	a9, a8, 42013424 <signal_store_slot_by_id+0x58>
+420133fa:	b7e9a1        	l32r	a10, 420013a0 <_stext+0x1380> (3fca49f4 <s_mux>)
+420133fd:	ffafb2        	movi	a11, -1
+42013400:	b45f81        	l32r	a8, 4200057c <_stext+0x55c> (403859c8 <xPortEnterCriticalTimeout>)
+42013403:	0008e0        	callx8	a8
+42013406:	0288      	l32i.n	a8, a2, 0
+42013408:	f27c      	movi.n	a2, -1
+4201340a:	07d882        	addmi	a8, a8, 0x700
+4201340d:	332882        	l32i	a8, a8, 204
+42013410:	04a687        	bge	a6, a8, 42013418 <signal_store_slot_by_id+0x4c>
+42013413:	11af22        	movi	a2, -239
+42013416:	272a      	add.n	a2, a7, a2
+42013418:	b7e2a1        	l32r	a10, 420013a0 <_stext+0x1380> (3fca49f4 <s_mux>)
+4201341b:	b45981        	l32r	a8, 42000580 <_stext+0x560> (40385b18 <vPortExitCritical>)
+4201341e:	0008e0        	callx8	a8
+42013421:	000046        	j	42013426 <signal_store_slot_by_id+0x5a>
+42013424:	f27c      	movi.n	a2, -1
+42013426:	f01d      	retw.n
+
+{
+  "before_bytes": 2643440,
+  "after_bytes": 2643440,
+  "delta_bytes": 0,
+  "elf_sha256": "b443293f2ad33dd38d07d89c442ab042ffb37faad1261235ad414f36e9741bae",
+  "bin_sha256": "19e80a9e751e8c698ec8abc8f526b4f9ffc89639aa86dab5451f30d87e91481c"
+}
+
+stats ELF signal_store_slot_by_id:
+420137b4 0000005c T signal_store_slot_by_id
+stats ELF sig_registry:
+3c1f4020 00000330 D sig_registry
+stats: before 0x285e20, after 0x285e20, delta 0 bytes. No host reference or benchmark code.
+
+/tmp/obd-perf-idf-build/obd_brz_gauge.elf:     file format elf32-xtensa-le
+
+
+Disassembly of section .iram0.vectors:
+
+Disassembly of section .iram0.text:
+
+Disassembly of section .flash.text:
+
+420137b4 <signal_store_slot_by_id>:
+420137b4:	004136        	entry	a1, 32
+420137b7:	f47020        	extui	a7, a2, 0, 16
+420137ba:	270b      	addi.n	a2, a7, -1
+420137bc:	f48020        	extui	a8, a2, 0, 16
+420137bf:	b90c      	movi.n	a9, 11
+420137c1:	49b987        	bgeu	a9, a8, 4201380e <signal_store_slot_by_id+0x5a>
+420137c4:	80c782        	addi	a8, a7, -128
+420137c7:	f48080        	extui	a8, a8, 0, 16
+420137ca:	8cc722        	addi	a2, a7, -116
+420137cd:	3d58b6        	bltui	a8, 5, 4201380e <signal_store_slot_by_id+0x5a>
+420137d0:	b6ff21        	l32r	a2, 420013cc <_stext+0x13ac> (3fcaba38 <s_st>)
+420137d3:	0288      	l32i.n	a8, a2, 0
+420137d5:	38bc      	beqz.n	a8, 4201380c <signal_store_slot_by_id+0x58>
+420137d7:	ffd762        	addmi	a6, a7, 0xffffff00
+420137da:	f48060        	extui	a8, a6, 0, 16
+420137dd:	f91c      	movi.n	a9, 31
+420137df:	293987        	bltu	a9, a8, 4201380c <signal_store_slot_by_id+0x58>
+420137e2:	b6fea1        	l32r	a10, 420013dc <_stext+0x13bc> (3fca49fc <s_mux>)
+420137e5:	ffafb2        	movi	a11, -1
+420137e8:	b36681        	l32r	a8, 42000580 <_stext+0x560> (403859c8 <xPortEnterCriticalTimeout>)
+420137eb:	0008e0        	callx8	a8
+420137ee:	0288      	l32i.n	a8, a2, 0
+420137f0:	f27c      	movi.n	a2, -1
+420137f2:	07d882        	addmi	a8, a8, 0x700
+420137f5:	332882        	l32i	a8, a8, 204
+420137f8:	04a687        	bge	a6, a8, 42013800 <signal_store_slot_by_id+0x4c>
+420137fb:	11af22        	movi	a2, -239
+420137fe:	272a      	add.n	a2, a7, a2
+42013800:	b6f7a1        	l32r	a10, 420013dc <_stext+0x13bc> (3fca49fc <s_mux>)
+42013803:	b36081        	l32r	a8, 42000584 <_stext+0x564> (40385b18 <vPortExitCritical>)
+42013806:	0008e0        	callx8	a8
+42013809:	000046        	j	4201380e <signal_store_slot_by_id+0x5a>
+4201380c:	f27c      	movi.n	a2, -1
+4201380e:	f01d      	retw.n
+
+{
+  "before_bytes": 2645536,
+  "after_bytes": 2645536,
+  "delta_bytes": 0,
+  "elf_sha256": "932c41c66c58985c156361ec231eb7e8e91e905dc85f1474642c3464aab46636",
+  "bin_sha256": "762ad3498320b6f5a6c2446745788f4cb58c7a1d9a6843955780def580f479c0"
+}
+
+no-slot ELF signal_store_slot_by_id:
+42013450 0000005c T signal_store_slot_by_id
+no-slot ELF sig_registry:
+3c1e1588 00000330 D sig_registry
+no-slot: before 0x275fa0, after 0x275fa0, delta 0 bytes. No host reference or benchmark code.
+
+/tmp/obd-perf-storage-no-slot/obd_brz_gauge.elf:     file format elf32-xtensa-le
+
+
+Disassembly of section .iram0.vectors:
+
+Disassembly of section .iram0.text:
+
+Disassembly of section .flash.text:
+
+42013450 <signal_store_slot_by_id>:
+42013450:	004136        	entry	a1, 32
+42013453:	f47020        	extui	a7, a2, 0, 16
+42013456:	270b      	addi.n	a2, a7, -1
+42013458:	f48020        	extui	a8, a2, 0, 16
+4201345b:	b90c      	movi.n	a9, 11
+4201345d:	49b987        	bgeu	a9, a8, 420134aa <signal_store_slot_by_id+0x5a>
+42013460:	80c782        	addi	a8, a7, -128
+42013463:	f48080        	extui	a8, a8, 0, 16
+42013466:	8cc722        	addi	a2, a7, -116
+42013469:	3d58b6        	bltui	a8, 5, 420134aa <signal_store_slot_by_id+0x5a>
+4201346c:	b7c621        	l32r	a2, 42001384 <_stext+0x1364> (3fcab3ec <s_st>)
+4201346f:	0288      	l32i.n	a8, a2, 0
+42013471:	38bc      	beqz.n	a8, 420134a8 <signal_store_slot_by_id+0x58>
+42013473:	ffd762        	addmi	a6, a7, 0xffffff00
+42013476:	f48060        	extui	a8, a6, 0, 16
+42013479:	f91c      	movi.n	a9, 31
+4201347b:	293987        	bltu	a9, a8, 420134a8 <signal_store_slot_by_id+0x58>
+4201347e:	b7c5a1        	l32r	a10, 42001394 <_stext+0x1374> (3fca49f4 <s_mux>)
+42013481:	ffafb2        	movi	a11, -1
+42013484:	b43a81        	l32r	a8, 4200056c <_stext+0x54c> (403859a0 <xPortEnterCriticalTimeout>)
+42013487:	0008e0        	callx8	a8
+4201348a:	0288      	l32i.n	a8, a2, 0
+4201348c:	f27c      	movi.n	a2, -1
+4201348e:	07d882        	addmi	a8, a8, 0x700
+42013491:	332882        	l32i	a8, a8, 204
+42013494:	04a687        	bge	a6, a8, 4201349c <signal_store_slot_by_id+0x4c>
+42013497:	11af22        	movi	a2, -239
+4201349a:	272a      	add.n	a2, a7, a2
+4201349c:	b7bea1        	l32r	a10, 42001394 <_stext+0x1374> (3fca49f4 <s_mux>)
+4201349f:	b43481        	l32r	a8, 42000570 <_stext+0x550> (40385af0 <vPortExitCritical>)
+420134a2:	0008e0        	callx8	a8
+420134a5:	000046        	j	420134aa <signal_store_slot_by_id+0x5a>
+420134a8:	f27c      	movi.n	a2, -1
+420134aa:	f01d      	retw.n
+
+{
+  "before_bytes": 2580384,
+  "after_bytes": 2580384,
+  "delta_bytes": 0,
+  "elf_sha256": "7b67d8230c92c32cdd87046958da91d8d807dd275cd624eb443f12a90380683b",
+  "bin_sha256": "ab04c4b60ee4485dfb40cd9586a8eba1f3003ca9881494a202b5005c9ba34d71"
+}
+
+
+Verification:
+{
+  "whitespace": "pass including new source files",
+  "bilingual_mirrors": "heading structure matches; PERFORMANCE code/tables identical; DEVELOPMENT original code/tables unchanged",
+  "reverse_patch": "exact generator/header/store baseline",
+  "frozen_lookup_reference": "exact old complete function",
+  "registry_c": "byte-identical baseline",
+  "registry_header": "byte-identical baseline except new helper",
+  "platform": "macOS-26.3.1-arm64-arm-64bit",
+  "compiler": "Apple clang version 21.0.0 (clang-2100.1.1.101)",
+  "negative_controls": {
+    "missing_endpoint": {
+      "returncode": 1,
+      "summary": "signal_lookup: 7077955 checks, 72 failures"
+    },
+    "wrong_slot": {
+      "returncode": 1,
+      "summary": "signal_lookup: 7077955 checks, 864 failures"
+    },
+    "accept_static_hole": {
+      "returncode": 1,
+      "summary": "signal_lookup: 7077955 checks, 72 failures"
+    },
+    "ignore_registration": {
+      "returncode": 1,
+      "summary": "signal_lookup: 7077955 checks, 591 failures"
+    }
+  },
+  "target": {
+    "before": {
+      "lookup_text_bytes": 92,
+      "lookup_literal_bytes": 20,
+      "lookup_static_frame_bytes": 32,
+      "totals": {
+        ".text": 4429,
+        ".literal": 544,
+        ".bss": 4,
+        ".data": 8,
+        ".rodata": 131
+      }
+    },
+    "after": {
+      "lookup_text_bytes": 92,
+      "lookup_literal_bytes": 16,
+      "lookup_static_frame_bytes": 32,
+      "totals": {
+        ".text": 4429,
+        ".literal": 540,
+        ".bss": 4,
+        ".data": 8,
+        ".rodata": 131
+      }
+    },
+    "normal": {
+      "before_bytes": 2643440,
+      "after_bytes": 2643440,
+      "delta_bytes": 0,
+      "elf_sha256": "b443293f2ad33dd38d07d89c442ab042ffb37faad1261235ad414f36e9741bae",
+      "bin_sha256": "19e80a9e751e8c698ec8abc8f526b4f9ffc89639aa86dab5451f30d87e91481c"
+    },
+    "stats": {
+      "before_bytes": 2645536,
+      "after_bytes": 2645536,
+      "delta_bytes": 0,
+      "elf_sha256": "932c41c66c58985c156361ec231eb7e8e91e905dc85f1474642c3464aab46636",
+      "bin_sha256": "762ad3498320b6f5a6c2446745788f4cb58c7a1d9a6843955780def580f479c0"
+    },
+    "no-slot": {
+      "before_bytes": 2580384,
+      "after_bytes": 2580384,
+      "delta_bytes": 0,
+      "elf_sha256": "7b67d8230c92c32cdd87046958da91d8d807dd275cd624eb443f12a90380683b",
+      "bin_sha256": "ab04c4b60ee4485dfb40cd9586a8eba1f3003ca9881494a202b5005c9ba34d71"
+    }
+  },
+  "generation_contract_checks": [
+    {
+      "command": [
+        "python3",
+        "tools/gen_signals.py",
+        "--check"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "python3",
+        "contracts/check_contracts.py",
+        "--profiles",
+        "vehicles/catalog",
+        "vehicles/import/OBD/IMPORT",
+        "vehicles/examples"
+      ],
+      "returncode": 0,
+      "stdout": "signals: 17 entries (12 obd.*)\nschema: valid JSON Schema draft 2020-12\nfixtures: rules vectors=38 steps=79, format cases=24, editor pin 5a7484e\nprofiles: 37 file(s) checked\ncheck_contracts: OK\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "python3",
+        "tools/gen_themes.py",
+        "--check"
+      ],
+      "returncode": 0,
+      "stdout": "gen_themes: up to date (3 themes, 0 artwork file(s), 0 KB of 1536 KB budget)\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "python3",
+        "tools/gen_layout.py",
+        "--check",
+        "--no-idf"
+      ],
+      "returncode": 0,
+      "stdout": "partitions.csv: 9 partitions, PARTITION_LAYOUT_CRC = 0x94752aa3\n  nvs        type 0x01 subtype 0x02 offset 0x0009000 size 0x0006000 (24 KB)\n  otadata    type 0x01 subtype 0x00 offset 0x000F000 size 0x0002000 (8 KB)\n  nvs_app    type 0x01 subtype 0x02 offset 0x0011000 size 0x000F000 (60 KB)\n  ota_0      type 0x00 subtype 0x10 offset 0x0020000 size 0x0300000 (3 MB)\n  ota_1      type 0x00 subtype 0x11 offset 0x0320000 size 0x0300000 (3 MB)\n  theme_0    type 0x01 subtype 0x82 offset 0x0620000 size 0x0400000 (4 MB)\n  bootmedia  type 0x01 subtype 0x82 offset 0x0A20000 size 0x04C0000 (4.75 MB)\n  coredump   type 0x01 subtype 0x03 offset 0x0EE0000 size 0x0020000 (128 KB)\n  config     type 0x01 subtype 0x83 offset 0x0F00000 size 0x0100000 (1 MB)\ndocs/FLASH.md: partition table matches\ndocs/FLASH.en.md: partition table matches\n",
+      "stderr": ""
+    }
+  ],
+  "tests": {
+    "signal_store_asan": {
+      "passed": 6,
+      "total": 6
+    },
+    "signal_store_release": {
+      "passed": 6,
+      "total": 6
+    },
+    "espnow_asan": {
+      "passed": 7,
+      "total": 7
+    },
+    "vehicle_asan": {
+      "passed": 14,
+      "total": 14
+    }
+  },
+  "benchmarks": {
+    "host.csv": {
+      "cases": 24,
+      "samples_per_path": 7,
+      "min_group_seconds": 0.02
+    },
+    "host-repeat.csv": {
+      "cases": 24,
+      "samples_per_path": 7,
+      "min_group_seconds": 0.02
+    },
+    "host-third.csv": {
+      "cases": 24,
+      "samples_per_path": 7,
+      "min_group_seconds": 0.02
+    }
+  },
+  "sha256": {
+    "tools/gen_signals.py": "a287c988af9dd7579bb455529d128ddb0a8131fb12894251ceba4d0d282aa1c2",
+    "main/app_obd_dsp/signal_registry.h": "d29522f6c53abdad877ba50d9c44ae9d555534616288b50bf5d970a612616e16",
+    "main/app_obd_dsp/signal_registry.c": "792d5d04024ba3a2620a2c86b48ddafe87ade9a8c42a7d80471af189ff0a93bf",
+    "main/app_obd_dsp/signal_store.c": "353cc6d0285284f35739d4be9fa4f1751e3f2ffb8c93bfb4238f0d4ba0d48296",
+    "test/host/signal_store/CMakeLists.txt": "854641d1b6100601c7542aeefee88a3d8f21b256aed359ce465e1291053fd502",
+    "test/host/signal_store/lookup_probe.c": "5254fd6cc42b666a44e0fa8172b5a79d6cd63491c3635668ab193f9c18684514",
+    "test/host/signal_store/lookup_reference.inc": "e774009bbd7a9f201f56874239484928c115e6d2afeb50f296964dd37db1a06c",
+    "test/host/signal_store/test_lookup.c": "e84bc7cb0d78dfe6c87d95cc749ac8a69cfa416ea91fe964f8ac9a8977eb206c",
+    "test/host/signal_store/test_lookup_generator.py": "34b688c05f7fe6a8864de178736d3bcc152ff25fb0eb51c2cb2bc45e76b243dd",
+    "test/host/signal_store/bench_lookup.c": "0d0a5edd3ea119ff294e1eaf0e47d31e4a525a3809616fd806a45a2637801161",
+    "docs/PERFORMANCE.md": "fee6f21a51da3dc10adad2e1c362b968f9f67983fe1d5454ed7c2fbc75b74729",
+    "docs/PERFORMANCE.en.md": "afc9940abcee25b86876ff59ad9c170c240954d7a5010631b57307fb6608076c",
+    "docs/DEVELOPMENT.md": "333d4c4f4c3e64852c935dcc2ce8e3ff47a390b7abe580b5ed4dc103c8308424",
+    "docs/DEVELOPMENT.en.md": "3b9b59c117e12101e3711c8c224222295e5eca4e7747d76eeaaf5130b9cdfb52",
+    "CHANGELOG.md": "dbebf448f5a95e941f21afefd98a3aafe1694ac08977f6180969fc22798e533b",
+    "CHANGELOG.en.md": "637aa2d94d26ad5f0d8d99f09bddbe4bc9e0e2d39dae848c777146076db7b742",
+    "docs/performance/signal-id-host-2026-10-14.csv": "67a1aff3ce6b3133520793a61ef16526e90244b21766bfd109262c2c57e14fb0",
+    "docs/performance/signal-id-host-repeat-2026-10-14.csv": "00593da4fad2d5b36e7d5f2cce5a6917d3ad49c7c4b0153f1af6e3e17392819d",
+    "docs/performance/signal-id-host-third-2026-10-14.csv": "1637febbf919df7e4090a706818ab247498acc0ab3608af2e35a1c68c1ca6411",
+    "docs/performance/signal-id-source-2026-10-14.diff": "8f4c3b3033c8a4390f66975e12484f1b2bad3bf6c395fa122fa6e0a1c0412db5",
+    "/tmp/obd-signal-id-20261014/host-release/bench_signal_lookup": "57669d9c2328faac0595966aaf4a774a023bb6a1219267bb72e312614fbc1a7f",
+    "/tmp/obd-signal-id-20261014/host-release/test_signal_lookup": "5487dfa1697efa705f96a44820680f18a959f6c6722a4a49687e92a8f65b39fc",
+    "/tmp/obd-signal-id-20261014/host-asan/test_signal_lookup": "618fe691aca534f47ebead9c27309cb945fc2592a7a281c20ff26051c2895585",
+    "/tmp/obd-signal-id-20261014/normal-before.obj": "148e98e56cb9d4a8f59c8cdd9ad93d5c34ff3bec0274d650d3c08478acfe7b0b",
+    "/tmp/obd-signal-id-20261014/stats-before.obj": "06fcaf178784fb87aa3f918301e03733aec1f1f167d664fdffd205a636923544",
+    "/tmp/obd-signal-id-20261014/no-slot-before.obj": "2da7d2cb18b362c2a633de48b0a5744b2d1ebd86cf1228a7fed9e549da1628ce"
+  }
+}
+
+Release compiler/link commands:
+/usr/bin/cc  -I/Users/parklu/personProject/obd_brz_gauge/test/host/signal_store/stubs -I/Users/parklu/personProject/obd_brz_gauge/main -O3 -DNDEBUG -std=c99 -arch arm64 -Wall -Wextra -Werror -MD -MT CMakeFiles/bench_signal_lookup.dir/bench_lookup.c.o -MF CMakeFiles/bench_signal_lookup.dir/bench_lookup.c.o.d -o CMakeFiles/bench_signal_lookup.dir/bench_lookup.c.o -c /Users/parklu/personProject/obd_brz_gauge/test/host/signal_store/bench_lookup.c
+/usr/bin/cc  -I/Users/parklu/personProject/obd_brz_gauge/test/host/signal_store/stubs -I/Users/parklu/personProject/obd_brz_gauge/main -O3 -DNDEBUG -std=c99 -arch arm64 -Wall -Wextra -Werror -MD -MT CMakeFiles/bench_signal_lookup.dir/lookup_probe.c.o -MF CMakeFiles/bench_signal_lookup.dir/lookup_probe.c.o.d -o CMakeFiles/bench_signal_lookup.dir/lookup_probe.c.o -c /Users/parklu/personProject/obd_brz_gauge/test/host/signal_store/lookup_probe.c
+/usr/bin/cc  -I/Users/parklu/personProject/obd_brz_gauge/test/host/signal_store/stubs -I/Users/parklu/personProject/obd_brz_gauge/main -O3 -DNDEBUG -std=c99 -arch arm64 -Wall -Wextra -Werror -MD -MT CMakeFiles/bench_signal_lookup.dir/Users/parklu/personProject/obd_brz_gauge/main/app_obd_dsp/signal_registry.c.o -MF CMakeFiles/bench_signal_lookup.dir/Users/parklu/personProject/obd_brz_gauge/main/app_obd_dsp/signal_registry.c.o.d -o CMakeFiles/bench_signal_lookup.dir/Users/parklu/personProject/obd_brz_gauge/main/app_obd_dsp/signal_registry.c.o -c /Users/parklu/personProject/obd_brz_gauge/main/app_obd_dsp/signal_registry.c
+/usr/bin/cc  -I/Users/parklu/personProject/obd_brz_gauge/test/host/signal_store/stubs -I/Users/parklu/personProject/obd_brz_gauge/main -O3 -DNDEBUG -std=c99 -arch arm64 -Wall -Wextra -Werror -MD -MT CMakeFiles/bench_signal_lookup.dir/Users/parklu/personProject/obd_brz_gauge/main/bsp_obd_dsp/espnow_v6.c.o -MF CMakeFiles/bench_signal_lookup.dir/Users/parklu/personProject/obd_brz_gauge/main/bsp_obd_dsp/espnow_v6.c.o.d -o CMakeFiles/bench_signal_lookup.dir/Users/parklu/personProject/obd_brz_gauge/main/bsp_obd_dsp/espnow_v6.c.o -c /Users/parklu/personProject/obd_brz_gauge/main/bsp_obd_dsp/espnow_v6.c
+: && /usr/bin/cc -O3 -DNDEBUG -arch arm64 -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/bench_signal_lookup.dir/bench_lookup.c.o CMakeFiles/bench_signal_lookup.dir/lookup_probe.c.o CMakeFiles/bench_signal_lookup.dir/Users/parklu/personProject/obd_brz_gauge/main/app_obd_dsp/signal_registry.c.o CMakeFiles/bench_signal_lookup.dir/Users/parklu/personProject/obd_brz_gauge/main/bsp_obd_dsp/espnow_v6.c.o -o bench_signal_lookup  -lm && :
+/usr/bin/cc  -I/Users/parklu/personProject/obd_brz_gauge/test/host/signal_store/stubs -I/Users/parklu/personProject/obd_brz_gauge/main -O3 -DNDEBUG -std=c99 -arch arm64 -Wall -Wextra -Werror -MD -MT CMakeFiles/test_signal_lookup.dir/test_lookup.c.o -MF CMakeFiles/test_signal_lookup.dir/test_lookup.c.o.d -o CMakeFiles/test_signal_lookup.dir/test_lookup.c.o -c /Users/parklu/personProject/obd_brz_gauge/test/host/signal_store/test_lookup.c
+/usr/bin/cc  -I/Users/parklu/personProject/obd_brz_gauge/test/host/signal_store/stubs -I/Users/parklu/personProject/obd_brz_gauge/main -O3 -DNDEBUG -std=c99 -arch arm64 -Wall -Wextra -Werror -MD -MT CMakeFiles/test_signal_lookup.dir/lookup_probe.c.o -MF CMakeFiles/test_signal_lookup.dir/lookup_probe.c.o.d -o CMakeFiles/test_signal_lookup.dir/lookup_probe.c.o -c /Users/parklu/personProject/obd_brz_gauge/test/host/signal_store/lookup_probe.c
+/usr/bin/cc  -I/Users/parklu/personProject/obd_brz_gauge/test/host/signal_store/stubs -I/Users/parklu/personProject/obd_brz_gauge/main -O3 -DNDEBUG -std=c99 -arch arm64 -Wall -Wextra -Werror -MD -MT CMakeFiles/test_signal_lookup.dir/Users/parklu/personProject/obd_brz_gauge/main/app_obd_dsp/signal_registry.c.o -MF CMakeFiles/test_signal_lookup.dir/Users/parklu/personProject/obd_brz_gauge/main/app_obd_dsp/signal_registry.c.o.d -o CMakeFiles/test_signal_lookup.dir/Users/parklu/personProject/obd_brz_gauge/main/app_obd_dsp/signal_registry.c.o -c /Users/parklu/personProject/obd_brz_gauge/main/app_obd_dsp/signal_registry.c
+: && /usr/bin/cc -O3 -DNDEBUG -arch arm64 -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/test_signal_lookup.dir/test_lookup.c.o CMakeFiles/test_signal_lookup.dir/lookup_probe.c.o CMakeFiles/test_signal_lookup.dir/Users/parklu/personProject/obd_brz_gauge/main/app_obd_dsp/signal_registry.c.o -o test_signal_lookup  -lm && :
+
+
+signal_store_asan complete CTest output:
+Start testing: Oct 14 13:29 CST
+----------------------------------------------------------
+1/6 Testing: signal_store
+1/6 Test: signal_store
+Command: "/tmp/obd-signal-id-20261014/host-asan/test_signal_store"
+Directory: /tmp/obd-signal-id-20261014/host-asan
+"signal_store" start time: Oct 14 13:29 CST
+Output:
+----------------------------------------------------------
+signal_store batch operations: OK
+<end of output>
+Test time =   0.85 sec
+----------------------------------------------------------
+Test Passed.
+"signal_store" end time: Oct 14 13:29 CST
+"signal_store" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/6 Testing: perf_hist
+2/6 Test: perf_hist
+Command: "/tmp/obd-signal-id-20261014/host-asan/test_perf_hist"
+Directory: /tmp/obd-signal-id-20261014/host-asan
+"perf_hist" start time: Oct 14 13:29 CST
+Output:
+----------------------------------------------------------
+perf_hist: 1783 checks, 0 failures
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"perf_hist" end time: Oct 14 13:29 CST
+"perf_hist" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/6 Testing: signal_delivery
+3/6 Test: signal_delivery
+Command: "/tmp/obd-signal-id-20261014/host-asan/test_delivery"
+Directory: /tmp/obd-signal-id-20261014/host-asan
+"signal_delivery" start time: Oct 14 13:29 CST
+Output:
+----------------------------------------------------------
+signal_delivery: checks=569001 fail=0
+<end of output>
+Test time =   0.58 sec
+----------------------------------------------------------
+Test Passed.
+"signal_delivery" end time: Oct 14 13:29 CST
+"signal_delivery" time elapsed: 00:00:00
+----------------------------------------------------------
+
+4/6 Testing: snapshot_mask
+4/6 Test: snapshot_mask
+Command: "/tmp/obd-signal-id-20261014/host-asan/test_snapshot_mask"
+Directory: /tmp/obd-signal-id-20261014/host-asan
+"snapshot_mask" start time: Oct 14 13:29 CST
+Output:
+----------------------------------------------------------
+snapshot masks: all 4096 masks x 8 validity/override scenarios OK
+<end of output>
+Test time =   0.54 sec
+----------------------------------------------------------
+Test Passed.
+"snapshot_mask" end time: Oct 14 13:29 CST
+"snapshot_mask" time elapsed: 00:00:00
+----------------------------------------------------------
+
+5/6 Testing: signal_lookup
+5/6 Test: signal_lookup
+Command: "/tmp/obd-signal-id-20261014/host-asan/test_signal_lookup"
+Directory: /tmp/obd-signal-id-20261014/host-asan
+"signal_lookup" start time: Oct 14 13:29 CST
+Output:
+----------------------------------------------------------
+signal_lookup: 7077955 checks, 0 failures
+<end of output>
+Test time =   1.23 sec
+----------------------------------------------------------
+Test Passed.
+"signal_lookup" end time: Oct 14 13:29 CST
+"signal_lookup" time elapsed: 00:00:01
+----------------------------------------------------------
+
+6/6 Testing: signal_lookup_generator
+6/6 Test: signal_lookup_generator
+Command: "/Users/parklu/anaconda3/bin/python3.11" "/Users/parklu/personProject/obd_brz_gauge/test/host/signal_store/test_lookup_generator.py" "/usr/bin/cc"
+Directory: /tmp/obd-signal-id-20261014/host-asan
+"signal_lookup_generator" start time: Oct 14 13:29 CST
+Output:
+----------------------------------------------------------
+signal_lookup_generator: 8 registries, 524288 IDs checked
+<end of output>
+Test time =   4.23 sec
+----------------------------------------------------------
+Test Passed.
+"signal_lookup_generator" end time: Oct 14 13:29 CST
+"signal_lookup_generator" time elapsed: 00:00:04
+----------------------------------------------------------
+
+End testing: Oct 14 13:29 CST
+
+
+signal_store_release complete CTest output:
+Start testing: Oct 14 13:35 CST
+----------------------------------------------------------
+1/6 Testing: signal_store
+1/6 Test: signal_store
+Command: "/tmp/obd-signal-id-20261014/host-release/test_signal_store"
+Directory: /tmp/obd-signal-id-20261014/host-release
+"signal_store" start time: Oct 14 13:35 CST
+Output:
+----------------------------------------------------------
+signal_store batch operations: OK
+<end of output>
+Test time =   0.69 sec
+----------------------------------------------------------
+Test Passed.
+"signal_store" end time: Oct 14 13:35 CST
+"signal_store" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/6 Testing: perf_hist
+2/6 Test: perf_hist
+Command: "/tmp/obd-signal-id-20261014/host-release/test_perf_hist"
+Directory: /tmp/obd-signal-id-20261014/host-release
+"perf_hist" start time: Oct 14 13:35 CST
+Output:
+----------------------------------------------------------
+perf_hist: 1783 checks, 0 failures
+<end of output>
+Test time =   0.47 sec
+----------------------------------------------------------
+Test Passed.
+"perf_hist" end time: Oct 14 13:35 CST
+"perf_hist" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/6 Testing: signal_delivery
+3/6 Test: signal_delivery
+Command: "/tmp/obd-signal-id-20261014/host-release/test_delivery"
+Directory: /tmp/obd-signal-id-20261014/host-release
+"signal_delivery" start time: Oct 14 13:35 CST
+Output:
+----------------------------------------------------------
+signal_delivery: checks=569001 fail=0
+<end of output>
+Test time =   0.47 sec
+----------------------------------------------------------
+Test Passed.
+"signal_delivery" end time: Oct 14 13:35 CST
+"signal_delivery" time elapsed: 00:00:00
+----------------------------------------------------------
+
+4/6 Testing: snapshot_mask
+4/6 Test: snapshot_mask
+Command: "/tmp/obd-signal-id-20261014/host-release/test_snapshot_mask"
+Directory: /tmp/obd-signal-id-20261014/host-release
+"snapshot_mask" start time: Oct 14 13:35 CST
+Output:
+----------------------------------------------------------
+snapshot masks: all 4096 masks x 8 validity/override scenarios OK
+<end of output>
+Test time =   0.47 sec
+----------------------------------------------------------
+Test Passed.
+"snapshot_mask" end time: Oct 14 13:35 CST
+"snapshot_mask" time elapsed: 00:00:00
+----------------------------------------------------------
+
+5/6 Testing: signal_lookup
+5/6 Test: signal_lookup
+Command: "/tmp/obd-signal-id-20261014/host-release/test_signal_lookup"
+Directory: /tmp/obd-signal-id-20261014/host-release
+"signal_lookup" start time: Oct 14 13:35 CST
+Output:
+----------------------------------------------------------
+signal_lookup: 7077955 checks, 0 failures
+<end of output>
+Test time =   0.54 sec
+----------------------------------------------------------
+Test Passed.
+"signal_lookup" end time: Oct 14 13:35 CST
+"signal_lookup" time elapsed: 00:00:00
+----------------------------------------------------------
+
+6/6 Testing: signal_lookup_generator
+6/6 Test: signal_lookup_generator
+Command: "/Users/parklu/anaconda3/bin/python3.11" "/Users/parklu/personProject/obd_brz_gauge/test/host/signal_store/test_lookup_generator.py" "/usr/bin/cc"
+Directory: /tmp/obd-signal-id-20261014/host-release
+"signal_lookup_generator" start time: Oct 14 13:35 CST
+Output:
+----------------------------------------------------------
+signal_lookup_generator: 8 registries, 524288 IDs checked
+<end of output>
+Test time =   5.06 sec
+----------------------------------------------------------
+Test Passed.
+"signal_lookup_generator" end time: Oct 14 13:35 CST
+"signal_lookup_generator" time elapsed: 00:00:05
+----------------------------------------------------------
+
+End testing: Oct 14 13:35 CST
+
+
+espnow_asan complete CTest output:
+Start testing: Oct 14 13:38 CST
+----------------------------------------------------------
+1/7 Testing: espnow_proto
+1/7 Test: espnow_proto
+Command: "/tmp/obd-signal-id-20261014/host-espnow/test_espnow_proto"
+Directory: /tmp/obd-signal-id-20261014/host-espnow
+"espnow_proto" start time: Oct 14 13:38 CST
+Output:
+----------------------------------------------------------
+espnow_proto: 1026 checks, 0 failures
+<end of output>
+Test time =   0.83 sec
+----------------------------------------------------------
+Test Passed.
+"espnow_proto" end time: Oct 14 13:38 CST
+"espnow_proto" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/7 Testing: racechrono_filter
+2/7 Test: racechrono_filter
+Command: "/tmp/obd-signal-id-20261014/host-espnow/test_racechrono_filter"
+Directory: /tmp/obd-signal-id-20261014/host-espnow
+"racechrono_filter" start time: Oct 14 13:38 CST
+Output:
+----------------------------------------------------------
+deadline mode=0 wakes=10 snapshots=10 notifications=80
+deadline mode=1 wakes=10 snapshots=10 notifications=10
+deadline mode=2 wakes=0 snapshots=0 notifications=0
+deadline mode=3 wakes=46 snapshots=46 notifications=0
+deadline mode=4 wakes=9 snapshots=9 notifications=72
+RaceChrono mode=0 ticks=50 snapshots=10 slot_reads=80 notifications=80
+RaceChrono mode=1 ticks=50 snapshots=10 slot_reads=10 notifications=10
+RaceChrono mode=2 ticks=50 snapshots=0 slot_reads=0 notifications=0
+racechrono_filter: 269071 checks, 0 failures
+<end of output>
+Test time =   0.56 sec
+----------------------------------------------------------
+Test Passed.
+"racechrono_filter" end time: Oct 14 13:38 CST
+"racechrono_filter" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/7 Testing: racechrono_stream
+3/7 Test: racechrono_stream
+Command: "/tmp/obd-signal-id-20261014/host-espnow/test_racechrono_stream"
+Directory: /tmp/obd-signal-id-20261014/host-espnow
+"racechrono_stream" start time: Oct 14 13:38 CST
+Output:
+----------------------------------------------------------
+all: snapshots=10 slots=80 packets=80 timed_wakes=10 event_gives=6
+one: snapshots=10 slots=10 packets=10 timed_wakes=10 event_gives=8
+deny: snapshots=0 slots=0 packets=0 timed_wakes=0 event_gives=7
+disconnected: snapshots=0 slots=0 packets=0 timed_wakes=0 event_gives=5
+notify_off: snapshots=0 slots=0 packets=0 timed_wakes=0 event_gives=5
+retired: snapshots=0 slots=0 packets=0 timed_wakes=0 event_gives=8
+invalid: snapshots=46 slots=368 packets=0 timed_wakes=46 event_gives=6
+event_storm: snapshots=46 slots=368 packets=0 timed_wakes=0 event_gives=1006
+101ms: snapshots=9 slots=72 packets=72 timed_wakes=9 event_gives=7
+shutdown_before_take: snapshots=0 slots=0 packets=0 timed_wakes=0 event_gives=6
+reconfigure: snapshots=6 slots=6 packets=6 timed_wakes=5 event_gives=12
+notify_off_during_snapshot: snapshots=10 slots=80 packets=72 timed_wakes=10 event_gives=8
+racechrono_stream: all deterministic firmware-wrapper scenarios pass
+<end of output>
+Test time =   1.31 sec
+----------------------------------------------------------
+Test Passed.
+"racechrono_stream" end time: Oct 14 13:38 CST
+"racechrono_stream" time elapsed: 00:00:01
+----------------------------------------------------------
+
+4/7 Testing: espnow_link
+4/7 Test: espnow_link
+Command: "/tmp/obd-signal-id-20261014/host-espnow/test_espnow_link"
+Directory: /tmp/obd-signal-id-20261014/host-espnow
+"espnow_link" start time: Oct 14 13:38 CST
+Output:
+----------------------------------------------------------
+idle           packets=10 cfg=10 override=0 waits=10 gives=0 tasks=1
+local          packets=422 cfg=422 override=416 waits=423 gives=1 tasks=1
+remote         packets=422 cfg=422 override=416 waits=423 gives=1 tasks=1
+v6             packets=50 cfg=50 override=50 waits=51 gives=1 tasks=1
+restart        packets=834 cfg=834 override=831 waits=836 gives=2 tasks=1
+threshold      packets=422 cfg=422 override=416 waits=423 gives=1 tasks=1
+saturate       packets=422 cfg=422 override=416 waits=423 gives=1 tasks=1
+storm          packets=50 cfg=50 override=50 waits=1001 gives=1000 tasks=1
+before_take    packets=50 cfg=50 override=49 waits=51 gives=1 tasks=1
+ota_active     packets=7 cfg=7 override=9 waits=8 gives=1 tasks=1
+ota_idle       packets=2 cfg=2 override=2 waits=2 gives=0 tasks=1
+create_fail    packets=0 cfg=0 override=1 waits=0 gives=0 tasks=1
+slave          packets=0 cfg=0 override=0 waits=0 gives=0 tasks=1
+64bit_clock    packets=422 cfg=422 override=416 waits=423 gives=1 tasks=1
+zero_threshold packets=422 cfg=422 override=416 waits=423 gives=1 tasks=1
+remote_idle    packets=50 cfg=50 override=49 waits=50 gives=1 tasks=1
+snapshot_restart packets=834 cfg=834 override=831 waits=836 gives=2 tasks=1
+17 real ESP-NOW worker/callback/lifecycle scenarios passed
+<end of output>
+Test time =   0.96 sec
+----------------------------------------------------------
+Test Passed.
+"espnow_link" end time: Oct 14 13:38 CST
+"espnow_link" time elapsed: 00:00:00
+----------------------------------------------------------
+
+5/7 Testing: espnow_crc_portable
+5/7 Test: espnow_crc_portable
+Command: "/tmp/obd-signal-id-20261014/host-espnow/test_espnow_crc"
+Directory: /tmp/obd-signal-id-20261014/host-espnow
+"espnow_crc_portable" start time: Oct 14 13:38 CST
+Output:
+----------------------------------------------------------
+espnow_crc: 643162 checks, 0 failures
+<end of output>
+Test time =   4.07 sec
+----------------------------------------------------------
+Test Passed.
+"espnow_crc_portable" end time: Oct 14 13:38 CST
+"espnow_crc_portable" time elapsed: 00:00:04
+----------------------------------------------------------
+
+6/7 Testing: espnow_proto_rom
+6/7 Test: espnow_proto_rom
+Command: "/tmp/obd-signal-id-20261014/host-espnow/test_espnow_proto_rom"
+Directory: /tmp/obd-signal-id-20261014/host-espnow
+"espnow_proto_rom" start time: Oct 14 13:38 CST
+Output:
+----------------------------------------------------------
+espnow_proto: 1026 checks, 0 failures
+<end of output>
+Test time =   0.57 sec
+----------------------------------------------------------
+Test Passed.
+"espnow_proto_rom" end time: Oct 14 13:38 CST
+"espnow_proto_rom" time elapsed: 00:00:00
+----------------------------------------------------------
+
+7/7 Testing: espnow_crc_rom
+7/7 Test: espnow_crc_rom
+Command: "/tmp/obd-signal-id-20261014/host-espnow/test_espnow_crc_rom"
+Directory: /tmp/obd-signal-id-20261014/host-espnow
+"espnow_crc_rom" start time: Oct 14 13:38 CST
+Output:
+----------------------------------------------------------
+espnow_crc: 17420636 checks, 0 failures
+<end of output>
+Test time =   3.73 sec
+----------------------------------------------------------
+Test Passed.
+"espnow_crc_rom" end time: Oct 14 13:38 CST
+"espnow_crc_rom" time elapsed: 00:00:03
+----------------------------------------------------------
+
+End testing: Oct 14 13:38 CST
+
+
+vehicle_asan complete CTest output:
+Start testing: Oct 14 13:32 CST
+----------------------------------------------------------
+1/14 Testing: vehicle_rpn
+1/14 Test: vehicle_rpn
+Command: "/tmp/obd-defaults-review-20261014/test_rpn"
+Directory: /tmp/obd-defaults-review-20261014
+"vehicle_rpn" start time: Oct 14 13:32 CST
+Output:
+----------------------------------------------------------
+PASS test_push_byte
+PASS test_push_raw
+PASS test_raw_all_fields
+PASS test_const
+PASS test_arith
+PASS test_clamp
+PASS test_div0
+PASS test_int_ops
+PASS test_sext
+PASS test_lut
+PASS test_stack
+PASS test_nonfinite
+PASS test_opcode
+PASS test_json_example
+PASS test_json_opcodes
+PASS test_json_x
+PASS test_json_errors
+test_rpn: 605650 checks, 0 failures
+<end of output>
+Test time =   0.92 sec
+----------------------------------------------------------
+Test Passed.
+"vehicle_rpn" end time: Oct 14 13:32 CST
+"vehicle_rpn" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/14 Testing: vehicle_validate
+2/14 Test: vehicle_validate
+Command: "/tmp/obd-defaults-review-20261014/test_validate"
+Directory: /tmp/obd-defaults-review-20261014
+"vehicle_validate" start time: Oct 14 13:32 CST
+Output:
+----------------------------------------------------------
+PASS test_good
+  182 mutation cases
+PASS test_mutations
+PASS test_limits
+PASS test_misc
+PASS test_default_cfg
+PASS test_at_check
+test_validate: 815 checks, 0 failures
+<end of output>
+Test time =   0.63 sec
+----------------------------------------------------------
+Test Passed.
+"vehicle_validate" end time: Oct 14 13:32 CST
+"vehicle_validate" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/14 Testing: vehicle_defaults
+3/14 Test: vehicle_defaults
+Command: "/tmp/obd-defaults-review-20261014/test_defaults"
+Directory: /tmp/obd-defaults-review-20261014
+"vehicle_defaults" start time: Oct 14 13:32 CST
+Output:
+----------------------------------------------------------
+PASS test_minimal
+PASS test_override_and_disable
+PASS test_policy_and_validation
+PASS test_effective_limits
+PASS test_expansion_oom
+test_defaults: 2894 checks, 0 failures
+<end of output>
+Test time =   0.57 sec
+----------------------------------------------------------
+Test Passed.
+"vehicle_defaults" end time: Oct 14 13:32 CST
+"vehicle_defaults" time elapsed: 00:00:00
+----------------------------------------------------------
+
+4/14 Testing: vehicle_examples
+4/14 Test: vehicle_examples
+Command: "/tmp/obd-defaults-review-20261014/validate_catalog" "--strict" "/Users/parklu/personProject/obd_brz_gauge/vehicles/examples"
+Directory: /tmp/obd-defaults-review-20261014
+"vehicle_examples" start time: Oct 14 13:32 CST
+Output:
+----------------------------------------------------------
+ok   custom.bmw.g.sparse.vehicle.json  id=custom.bmw.g.sparse rev=1 signals=10 requests=10 blob=2104B json=673B
+ok   custom.obd2.sparse.vehicle.json  id=custom.obd2.sparse rev=1 signals=9 requests=9 blob=1932B json=104B
+validate_catalog: 2 files, 2 ok, 0 failed
+<end of output>
+Test time =   0.53 sec
+----------------------------------------------------------
+Test Passed.
+"vehicle_examples" end time: Oct 14 13:32 CST
+"vehicle_examples" time elapsed: 00:00:00
+----------------------------------------------------------
+
+5/14 Testing: vehicle_compile
+5/14 Test: vehicle_compile
+Command: "/tmp/obd-defaults-review-20261014/test_compile" "/Users/parklu/personProject/obd_brz_gauge/vehicles/catalog/obd2.generic.vehicle.json"
+Directory: /tmp/obd-defaults-review-20261014
+"vehicle_compile" start time: Oct 14 13:32 CST
+Output:
+----------------------------------------------------------
+PASS test_layout
+PASS test_eval
+PASS test_check
+PASS test_errors
+PASS test_deterministic
+PASS test_builtin
+test_compile: 162 checks, 0 failures
+<end of output>
+Test time =   0.55 sec
+----------------------------------------------------------
+Test Passed.
+"vehicle_compile" end time: Oct 14 13:32 CST
+"vehicle_compile" time elapsed: 00:00:00
+----------------------------------------------------------
+
+6/14 Testing: vehicle_fixtures
+6/14 Test: vehicle_fixtures
+Command: "/tmp/obd-defaults-review-20261014/validate_catalog" "--strict" "/Users/parklu/personProject/obd_brz_gauge/test/host/vehicle/fixtures/good_full.json" "/Users/parklu/personProject/obd_brz_gauge/test/host/vehicle/fixtures/good_min.json"
+Directory: /tmp/obd-defaults-review-20261014
+"vehicle_fixtures" start time: Oct 14 13:32 CST
+Output:
+----------------------------------------------------------
+ok   good_full.json  id=test.full rev=3 signals=10 requests=9 blob=2280B json=2340B
+ok   good_min.json  id=test.min rev=1 signals=1 requests=1 blob=412B json=215B
+validate_catalog: 2 files, 2 ok, 0 failed
+<end of output>
+Test time =   0.04 sec
+----------------------------------------------------------
+Test Passed.
+"vehicle_fixtures" end time: Oct 14 13:32 CST
+"vehicle_fixtures" time elapsed: 00:00:00
+----------------------------------------------------------
+
+7/14 Testing: vehicle_catalog
+7/14 Test: vehicle_catalog
+Command: "/tmp/obd-defaults-review-20261014/validate_catalog" "--strict" "/Users/parklu/personProject/obd_brz_gauge/vehicles/catalog"
+Directory: /tmp/obd-defaults-review-20261014
+"vehicle_catalog" start time: Oct 14 13:32 CST
+Output:
+----------------------------------------------------------
+ok   alfa.giulia_20t.vehicle.json  id=alfa.giulia_20t rev=1 signals=11 requests=10 blob=2204B json=2894B
+ok   bmw.e.vehicle.json  id=bmw.e rev=1 signals=11 requests=11 blob=2340B json=3157B
+ok   bmw.fg.vehicle.json  id=bmw.fg rev=1 signals=11 requests=11 blob=2292B json=3146B
+ok   bmw.g.obd.vehicle.json  id=bmw.g.obd rev=1 signals=11 requests=10 blob=2220B json=2870B
+ok   honda.integra.vehicle.json  id=honda.integra rev=1 signals=10 requests=10 blob=2120B json=2715B
+ok   jeep.generic.vehicle.json  id=jeep.generic rev=1 signals=10 requests=9 blob=2032B json=2574B
+ok   mazda.mx5nd.vehicle.json  id=mazda.mx5nd rev=1 signals=10 requests=10 blob=2168B json=2783B
+ok   mini.jcw_f56.vehicle.json  id=mini.jcw_f56 rev=1 signals=11 requests=11 blob=2308B json=2965B
+ok   mini.r55.vehicle.json  id=mini.r55 rev=1 signals=11 requests=11 blob=2308B json=3203B
+ok   obd2.generic.vehicle.json  id=obd2.generic rev=1 signals=10 requests=9 blob=2032B json=2516B
+ok   porsche.997_1.vehicle.json  id=porsche.997_1 rev=1 signals=10 requests=9 blob=2032B json=2538B
+ok   porsche.997_2.vehicle.json  id=porsche.997_2 rev=1 signals=10 requests=9 blob=2032B json=2543B
+ok   subaru.zc6.can.vehicle.json  id=subaru.zc6.can rev=1 signals=10 requests=6 blob=1960B json=2744B
+ok   subaru.zc6.pid.vehicle.json  id=subaru.zc6.pid rev=1 signals=10 requests=9 blob=2032B json=2721B
+ok   subaru.zd8.obd.vehicle.json  id=subaru.zd8.obd rev=1 signals=10 requests=9 blob=2032B json=2683B
+ok   subaru.zd8.pid.vehicle.json  id=subaru.zd8.pid rev=1 signals=10 requests=9 blob=2032B json=2675B
+ok   toyota.supra_a90.vehicle.json  id=toyota.supra_a90 rev=1 signals=12 requests=12 blob=2528B json=3433B
+validate_catalog: 17 files, 17 ok, 0 failed
+<end of output>
+Test time =   0.05 sec
+----------------------------------------------------------
+Test Passed.
+"vehicle_catalog" end time: Oct 14 13:32 CST
+"vehicle_catalog" time elapsed: 00:00:00
+----------------------------------------------------------
+
+8/14 Testing: vehicle_import_pack
+8/14 Test: vehicle_import_pack
+Command: "/tmp/obd-defaults-review-20261014/validate_catalog" "--strict" "/Users/parklu/personProject/obd_brz_gauge/vehicles/import/OBD/IMPORT"
+Directory: /tmp/obd-defaults-review-20261014
+"vehicle_import_pack" start time: Oct 14 13:32 CST
+Output:
+----------------------------------------------------------
+ok   custom.alfa.giulia_20t.vehicle.json  id=custom.alfa.giulia_20t rev=1 signals=11 requests=10 blob=2204B json=6211B
+ok   custom.bmw.e.vehicle.json  id=custom.bmw.e rev=1 signals=11 requests=11 blob=2340B json=6833B
+ok   custom.bmw.fg.vehicle.json  id=custom.bmw.fg rev=1 signals=11 requests=11 blob=2292B json=6642B
+ok   custom.bmw.g.gear.vehicle.json  id=custom.bmw.g.gear rev=1 signals=11 requests=11 blob=2292B json=6807B
+ok   custom.bmw.g.obd.vehicle.json  id=custom.bmw.g.obd rev=1 signals=11 requests=10 blob=2220B json=6221B
+ok   custom.honda.integra.vehicle.json  id=custom.honda.integra rev=1 signals=10 requests=10 blob=2120B json=6099B
+ok   custom.jeep.generic.vehicle.json  id=custom.jeep.generic rev=1 signals=10 requests=9 blob=2032B json=5710B
+ok   custom.mazda.mx5nd.vehicle.json  id=custom.mazda.mx5nd rev=1 signals=10 requests=10 blob=2168B json=6323B
+ok   custom.mini.jcw_f56.vehicle.json  id=custom.mini.jcw_f56 rev=1 signals=11 requests=11 blob=2308B json=6630B
+ok   custom.mini.r55.vehicle.json  id=custom.mini.r55 rev=1 signals=11 requests=11 blob=2308B json=6756B
+ok   custom.obd2.generic.vehicle.json  id=custom.obd2.generic rev=1 signals=10 requests=9 blob=2032B json=5640B
+ok   custom.porsche.997_1.vehicle.json  id=custom.porsche.997_1 rev=1 signals=10 requests=9 blob=2032B json=5648B
+ok   custom.porsche.997_2.vehicle.json  id=custom.porsche.997_2 rev=1 signals=10 requests=9 blob=2032B json=5659B
+ok   custom.subaru.zc6.can.vehicle.json  id=custom.subaru.zc6.can rev=1 signals=10 requests=6 blob=1960B json=5617B
+ok   custom.subaru.zc6.pid.vehicle.json  id=custom.subaru.zc6.pid rev=1 signals=10 requests=9 blob=2032B json=5786B
+ok   custom.subaru.zd8.obd.vehicle.json  id=custom.subaru.zd8.obd rev=1 signals=10 requests=9 blob=2032B json=5755B
+ok   custom.subaru.zd8.pid.vehicle.json  id=custom.subaru.zd8.pid rev=1 signals=10 requests=9 blob=2032B json=5751B
+ok   custom.toyota.supra_a90.vehicle.json  id=custom.toyota.supra_a90 rev=1 signals=12 requests=12 blob=2528B json=7449B
+validate_catalog: 18 files, 18 ok, 0 failed
+<end of output>
+Test time =   0.05 sec
+----------------------------------------------------------
+Test Passed.
+"vehicle_import_pack" end time: Oct 14 13:32 CST
+"vehicle_import_pack" time elapsed: 00:00:00
+----------------------------------------------------------
+
+9/14 Testing: vehicle_golden
+9/14 Test: vehicle_golden
+Command: "/tmp/obd-defaults-review-20261014/test_golden" "/Users/parklu/personProject/obd_brz_gauge/vehicles/catalog" "/Users/parklu/personProject/obd_brz_gauge/test/host/vehicle/fixtures/golden"
+Directory: /tmp/obd-defaults-review-20261014
+"vehicle_golden" start time: Oct 14 13:32 CST
+Output:
+----------------------------------------------------------
+PASS alfa.giulia_20t
+PASS bmw.e
+PASS bmw.fg
+PASS bmw.g.obd
+PASS honda.integra
+PASS jeep.generic
+PASS mazda.mx5nd
+PASS mini.jcw_f56
+PASS mini.r55
+PASS obd2.generic
+PASS porsche.997_1
+PASS porsche.997_2
+PASS subaru.zc6.can
+PASS subaru.zc6.pid
+PASS subaru.zd8.obd
+PASS subaru.zd8.pid
+PASS toyota.supra_a90
+test_golden: 370 checks, 0 failures
+<end of output>
+Test time =   0.56 sec
+----------------------------------------------------------
+Test Passed.
+"vehicle_golden" end time: Oct 14 13:32 CST
+"vehicle_golden" time elapsed: 00:00:00
+----------------------------------------------------------
+
+10/14 Testing: vehicle_import_fresh
+10/14 Test: vehicle_import_fresh
+Command: "/Users/parklu/anaconda3/bin/python3.11" "/Users/parklu/personProject/obd_brz_gauge/tools/vehicles/gen_import_pack.py" "--check"
+Directory: /tmp/obd-defaults-review-20261014
+"vehicle_import_fresh" start time: Oct 14 13:32 CST
+Output:
+----------------------------------------------------------
+Import pack: 18 profiles are current
+<end of output>
+Test time =   0.04 sec
+----------------------------------------------------------
+Test Passed.
+"vehicle_import_fresh" end time: Oct 14 13:32 CST
+"vehicle_import_fresh" time elapsed: 00:00:00
+----------------------------------------------------------
+
+11/14 Testing: vehicle_expr
+11/14 Test: vehicle_expr
+Command: "/Users/parklu/anaconda3/bin/python3.11" "/Users/parklu/personProject/obd_brz_gauge/tools/vehicles/expr2rpn.py" "--check" "/Users/parklu/personProject/obd_brz_gauge/vehicles/catalog/alfa.giulia_20t.vehicle.json" "/Users/parklu/personProject/obd_brz_gauge/vehicles/catalog/bmw.e.vehicle.json" "/Users/parklu/personProject/obd_brz_gauge/vehicles/catalog/bmw.fg.vehicle.json" "/Users/parklu/personProject/obd_brz_gauge/vehicles/catalog/bmw.g.obd.vehicle.json" "/Users/parklu/personProject/obd_brz_gauge/vehicles/catalog/honda.integra.vehicle.json" "/Users/parklu/personProject/obd_brz_gauge/vehicles/catalog/jeep.generic.vehicle.json" "/Users/parklu/personProject/obd_brz_gauge/vehicles/catalog/mazda.mx5nd.vehicle.json" "/Users/parklu/personProject/obd_brz_gauge/vehicles/catalog/mini.jcw_f56.vehicle.json" "/Users/parklu/personProject/obd_brz_gauge/vehicles/catalog/mini.r55.vehicle.json" "/Users/parklu/personProject/obd_brz_gauge/vehicles/catalog/obd2.generic.vehicle.json" "/Users/parklu/personProject/obd_brz_gauge/vehicles/catalog/porsche.997_1.vehicle.json" "/Users/parklu/personProject/obd_brz_gauge/vehicles/catalog/porsche.997_2.vehicle.json" "/Users/parklu/personProject/obd_brz_gauge/vehicles/catalog/subaru.zc6.can.vehicle.json" "/Users/parklu/personProject/obd_brz_gauge/vehicles/catalog/subaru.zc6.pid.vehicle.json" "/Users/parklu/personProject/obd_brz_gauge/vehicles/catalog/subaru.zd8.obd.vehicle.json" "/Users/parklu/personProject/obd_brz_gauge/vehicles/catalog/subaru.zd8.pid.vehicle.json" "/Users/parklu/personProject/obd_brz_gauge/vehicles/catalog/toyota.supra_a90.vehicle.json" "/Users/parklu/personProject/obd_brz_gauge/vehicles/import/OBD/IMPORT/custom.alfa.giulia_20t.vehicle.json" "/Users/parklu/personProject/obd_brz_gauge/vehicles/import/OBD/IMPORT/custom.bmw.e.vehicle.json" "/Users/parklu/personProject/obd_brz_gauge/vehicles/import/OBD/IMPORT/custom.bmw.fg.vehicle.json" "/Users/parklu/personProject/obd_brz_gauge/vehicles/import/OBD/IMPORT/custom.bmw.g.gear.vehicle.json" "/Users/parklu/personProject/obd_brz_gauge/vehicles/import/OBD/IMPORT/custom.bmw.g.obd.vehicle.json" "/Users/parklu/personProject/obd_brz_gauge/vehicles/import/OBD/IMPORT/custom.honda.integra.vehicle.json" "/Users/parklu/personProject/obd_brz_gauge/vehicles/import/OBD/IMPORT/custom.jeep.generic.vehicle.json" "/Users/parklu/personProject/obd_brz_gauge/vehicles/import/OBD/IMPORT/custom.mazda.mx5nd.vehicle.json" "/Users/parklu/personProject/obd_brz_gauge/vehicles/import/OBD/IMPORT/custom.mini.jcw_f56.vehicle.json" "/Users/parklu/personProject/obd_brz_gauge/vehicles/import/OBD/IMPORT/custom.mini.r55.vehicle.json" "/Users/parklu/personProject/obd_brz_gauge/vehicles/import/OBD/IMPORT/custom.obd2.generic.vehicle.json" "/Users/parklu/personProject/obd_brz_gauge/vehicles/import/OBD/IMPORT/custom.porsche.997_1.vehicle.json" "/Users/parklu/personProject/obd_brz_gauge/vehicles/import/OBD/IMPORT/custom.porsche.997_2.vehicle.json" "/Users/parklu/personProject/obd_brz_gauge/vehicles/import/OBD/IMPORT/custom.subaru.zc6.can.vehicle.json" "/Users/parklu/personProject/obd_brz_gauge/vehicles/import/OBD/IMPORT/custom.subaru.zc6.pid.vehicle.json" "/Users/parklu/personProject/obd_brz_gauge/vehicles/import/OBD/IMPORT/custom.subaru.zd8.obd.vehicle.json" "/Users/parklu/personProject/obd_brz_gauge/vehicles/import/OBD/IMPORT/custom.subaru.zd8.pid.vehicle.json" "/Users/parklu/personProject/obd_brz_gauge/vehicles/import/OBD/IMPORT/custom.toyota.supra_a90.vehicle.json" "/Users/parklu/personProject/obd_brz_gauge/vehicles/examples/custom.bmw.g.sparse.vehicle.json" "/Users/parklu/personProject/obd_brz_gauge/vehicles/examples/custom.obd2.sparse.vehicle.json"
+Directory: /tmp/obd-defaults-review-20261014
+"vehicle_expr" start time: Oct 14 13:32 CST
+Output:
+----------------------------------------------------------
+expr2rpn: 37 file(s), 348 formula(s), 0 file(s) with mismatches
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"vehicle_expr" end time: Oct 14 13:32 CST
+"vehicle_expr" time elapsed: 00:00:00
+----------------------------------------------------------
+
+12/14 Testing: vehicle_builtin_fresh
+12/14 Test: vehicle_builtin_fresh
+Command: "/Users/parklu/anaconda3/bin/python3.11" "/Users/parklu/personProject/obd_brz_gauge/tools/vehicles/gen_builtin.py" "--check" "--blobgen" "/tmp/obd-defaults-review-20261014/vp_blobgen"
+Directory: /tmp/obd-defaults-review-20261014
+"vehicle_builtin_fresh" start time: Oct 14 13:32 CST
+Output:
+----------------------------------------------------------
+gen_builtin: main/vehicle/vp_builtin_generic.c is up to date (2032 blob bytes)
+<end of output>
+Test time =   0.57 sec
+----------------------------------------------------------
+Test Passed.
+"vehicle_builtin_fresh" end time: Oct 14 13:32 CST
+"vehicle_builtin_fresh" time elapsed: 00:00:00
+----------------------------------------------------------
+
+13/14 Testing: vehicle_rpn_integer
+13/14 Test: vehicle_rpn_integer
+Command: "/tmp/obd-defaults-review-20261014/test_rpn_integer"
+Directory: /tmp/obd-defaults-review-20261014
+"vehicle_rpn_integer" start time: Oct 14 13:32 CST
+Output:
+----------------------------------------------------------
+integer conversions: 1001690 patterns; full formulas: 610140; PASS
+<end of output>
+Test time =   0.83 sec
+----------------------------------------------------------
+Test Passed.
+"vehicle_rpn_integer" end time: Oct 14 13:32 CST
+"vehicle_rpn_integer" time elapsed: 00:00:00
+----------------------------------------------------------
+
+14/14 Testing: vehicle_rpn_raw_float
+14/14 Test: vehicle_rpn_raw_float
+Command: "/tmp/obd-defaults-review-20261014/test_rpn_raw_float"
+Directory: /tmp/obd-defaults-review-20261014
+"vehicle_rpn_raw_float" start time: Oct 14 13:32 CST
+Output:
+----------------------------------------------------------
+raw float: 4274988 complete formula comparisons; 1319950 valid field cases; PASS
+<end of output>
+Test time =   1.32 sec
+----------------------------------------------------------
+Test Passed.
+"vehicle_rpn_raw_float" end time: Oct 14 13:32 CST
+"vehicle_rpn_raw_float" time elapsed: 00:00:01
+----------------------------------------------------------
+
+End testing: Oct 14 13:32 CST

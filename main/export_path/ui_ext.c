@@ -19,13 +19,18 @@
 #include "bsp_obd_dsp/espnow_link.h"
 #include "bsp_obd_dsp/lcd_driver/ST77916.h"
 #include "app_obd_dsp/obd_data_cache.h"
-#include "app_obd_dsp/vehicle_profiles.h"
-#include "app_obd_dsp/boot_block_player.h"
-#include "app_obd_dsp/boot_media_mount.h"
+#include "app_obd_dsp/signal_store.h"
+#include "app_obd_dsp/theme_library.h"
+#include "media/boot_video.h"
 #include "theme_engine/theme_interface.h"
 #include "esp_timer.h"
 #include "esp_random.h"
+#include "esp_system.h"
+#include "esp_log.h"
 #include "lvgl.h"
+#include <stdatomic.h>
+#include "freertos/task.h"
+#include "app_obd_dsp/lvgl_runtime.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -88,6 +93,7 @@ static volatile bool s_boot_video_ready = false;
 static int64_t s_boot_video_start_us = 0;
 static lv_obj_t *s_boot_video_screen = NULL;
 static lv_timer_t *s_boot_video_timer = NULL;
+static bool s_boot_video_screen_shown = false;
 static bool    s_boot_done = false;
 
 // Video sync signals (reuses intro_step; values >5 never trigger RACE/AS/ONE rendering)
@@ -128,23 +134,20 @@ static void showroom_load_slot(uint8_t slot)
     if (page == 0) {
         // Video page
         if (s_boot_video_ready || s_boot_video_active) return;  // already loaded
-        // Single boot animation slot: the boot_block flashed via the phone app.
-        boot_block_player_set_paths("/bootmedia/boot_block.txt", "/bootmedia/boot_block.bin");
-        if (boot_media_mount()) {
-            if (s_showroom_video_scr) { lv_obj_del(s_showroom_video_scr); s_showroom_video_scr = NULL; }
-            s_showroom_video_scr = lv_obj_create(NULL);
-            lv_obj_set_style_bg_color(s_showroom_video_scr, lv_color_black(), LV_PART_MAIN);
-            lv_obj_set_style_bg_opa(s_showroom_video_scr, 255, LV_PART_MAIN);
-            lv_obj_set_style_border_width(s_showroom_video_scr, 0, LV_PART_MAIN);
-            lv_obj_set_style_radius(s_showroom_video_scr, 360, LV_PART_MAIN);
-            lv_obj_clear_flag(s_showroom_video_scr, LV_OBJ_FLAG_SCROLLABLE);
-            lv_obj_t *canvas = NULL;
-            if (boot_block_player_create(s_showroom_video_scr, &canvas)) {
-                s_boot_video_ready = true;
-            } else {
-                lv_obj_del(s_showroom_video_scr);
-                s_showroom_video_scr = NULL;
-            }
+        // Boot animation is independent of the selected theme.
+        if (s_showroom_video_scr) { lv_obj_del(s_showroom_video_scr); s_showroom_video_scr = NULL; }
+        s_showroom_video_scr = lv_obj_create(NULL);
+        if (!s_showroom_video_scr) return;
+        lv_obj_set_style_bg_color(s_showroom_video_scr, lv_color_black(), LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(s_showroom_video_scr, 255, LV_PART_MAIN);
+        lv_obj_set_style_border_width(s_showroom_video_scr, 0, LV_PART_MAIN);
+        lv_obj_set_style_radius(s_showroom_video_scr, 360, LV_PART_MAIN);
+        lv_obj_clear_flag(s_showroom_video_scr, LV_OBJ_FLAG_SCROLLABLE);
+        if (boot_video_create(s_showroom_video_scr, NULL, NULL)) {
+            s_boot_video_ready = true;
+        } else {
+            lv_obj_del(s_showroom_video_scr);
+            s_showroom_video_scr = NULL;
         }
     } else if (page == 2) {
         // RACE/AS/ONE: start the animation directly
@@ -188,6 +191,8 @@ static void showroom_fake_data(void) {
     fake_tps  += ((float)(esp_random() % 16) - 8);          if (fake_tps < 0) fake_tps = 0; if (fake_tps > 100) fake_tps = 100;
     fake_boost+= ((float)(esp_random() % 10) - 5) * 0.1f;  if (fake_boost < -5) fake_boost = -5; if (fake_boost > 20) fake_boost = 20;
     fake_afr  += ((float)(esp_random() % 10) - 5) * 0.04f; if (fake_afr < 10.0) fake_afr = 10.0; if (fake_afr > 18.0) fake_afr = 18.0;
+    // obd.* only reads valid while sys.obd_link == DATA; showroom runs without an adapter.
+    signal_store_set(SIG_SYS_OBD_LINK, SIG_LINK_DATA);
     obd_data_set_rpm((uint16_t)fake_rpm);
     obd_data_set_speed((uint8_t)fake_spd);
     obd_data_set_coolant_temp((int16_t)fake_clt);
@@ -197,7 +202,6 @@ static void showroom_fake_data(void) {
     obd_data_set_tps((int16_t)fake_tps);
     obd_data_set_boost_x10((int16_t)(fake_boost * 10));
     obd_data_set_oil_pressure_x10((int16_t)(30 + (esp_random() % 40)));
-    obd_data_set_brake_temp_x10((int16_t)(200 + (esp_random() % 300)));
     obd_data_set_afr_x100((int16_t)(fake_afr * 100));
 }
 
@@ -205,79 +209,170 @@ static void showroom_fake_data(void) {
  *  Boot / video helpers
  * ================================================================ */
 
-// Dedicated high-rate timer for video (33ms ≈ 30fps)
-static void boot_video_timer_cb(lv_timer_t *t)
-{
-    if (!s_boot_video_active) return;
-    int64_t now_us = esp_timer_get_time();
-    uint32_t elapsed_ms = (uint32_t)((now_us - s_boot_video_start_us) / 1000);
-    boot_block_player_update(elapsed_ms);
-    if (boot_block_player_is_finished()) {
-        ESP_LOGD(TAG, "Boot video finished");
-        s_boot_video_active = false;
-        s_boot_video_ready = false;
-        boot_block_player_destroy();
-        if (s_boot_video_timer) { lv_timer_del(s_boot_video_timer); s_boot_video_timer = NULL; }
+// The worker owns its source snapshot and unpublished image cache. Completion
+// transfers ownership to the LVGL task; no theme mutex is held while converting.
+static theme_page_prepared_t *s_boot_theme_job;
+static atomic_bool s_boot_theme_ready;
+static bool s_boot_theme_attempted;
 
-        if (s_showroom_active) {
-            // showroom mode: don't switch pages, keep the last frame, let the carousel move on
-            // Keep bootmedia mounted for OTA (unmount would require 400ms+ remount during BLE callback)
-        } else {
-            // normal boot: go straight to the default page
-            s_boot_video_done = true;
-            boot_enter_default_page();
-            // Keep bootmedia mounted for OTA
-            // lv_scr_load_anim(..., true) in boot_enter_default_page already sets auto_del;
-            // LVGL frees the old screen automatically once the transition ends. Do NOT lv_obj_del
-            // manually here — touching the freed object mid-animation crashes (LoadProhibited).
+static void boot_video_finish(boot_video_state_t state);
+
+static void boot_theme_worker(void *arg)
+{
+    int64_t start = esp_timer_get_time();
+    theme_page_prepare_run(arg);
+    ESP_LOGI(TAG, "Boot theme image preparation finished in %lld ms",
+             (long long)((esp_timer_get_time() - start) / 1000));
+    atomic_store_explicit(&s_boot_theme_ready, true, memory_order_release);
+    lvgl_runtime_wake();
+    vTaskDelete(NULL);
+}
+
+static void boot_theme_poll(lv_timer_t *timer)
+{
+    if (!atomic_load_explicit(&s_boot_theme_ready, memory_order_acquire)) return;
+    // Avoid pausing the direct-to-panel decoder for widget creation.
+    bool finish_video = s_boot_video_active;
+    if (finish_video && boot_video_get_state() != BOOT_VIDEO_COMPLETED) return;
+    int64_t start = esp_timer_get_time();
+    lv_obj_t *screen = theme_page_prepare_finish(s_boot_theme_job);
+    ESP_LOGI(TAG, "Boot theme page creation finished in %lld ms",
+             (long long)((esp_timer_get_time() - start) / 1000));
+    s_boot_theme_job = NULL;
+    ui_ScreenPageThemeGauge_attach(screen);
+    if (!screen) ESP_LOGW(TAG, "boot theme preparation failed; using built-in page");
+    // Creating theme video widgets may replace the fullscreen player and
+    // resume refresh. Switch now, before LVGL can redraw the empty video screen.
+    if (finish_video) boot_video_finish(BOOT_VIDEO_COMPLETED);
+    else if (!s_showroom_active && s_boot_video_done) boot_enter_default_page();
+    lv_timer_del(timer);
+}
+
+static void boot_video_finish(boot_video_state_t state)
+{
+    if (state == BOOT_VIDEO_FAILED) ESP_LOGW(TAG, "Boot media failed; returning to Logo");
+    else if (state == BOOT_VIDEO_COMPLETED && s_boot_theme_job)
+        ESP_LOGI(TAG, "Boot video ended before theme was ready; returning to Logo");
+    else ESP_LOGI(TAG, "Boot video finished");
+    s_boot_video_active = false;
+    s_boot_video_ready = false;
+    boot_video_destroy();
+    if (s_boot_video_timer) { lv_timer_del(s_boot_video_timer); s_boot_video_timer = NULL; }
+    if (!s_showroom_active) {
+        s_boot_video_done = true;
+        if (s_boot_theme_job) {
+            // On failure restore a real LVGL image while the worker finishes.
+            // The direct-to-panel screen may contain no usable video frame.
+            if (!ui_ScreenPageLogo) ui_ScreenPageLogo_screen_init();
+            lv_scr_load(ui_ScreenPageLogo);
+            if (s_boot_video_screen) lv_obj_del(s_boot_video_screen);
             s_boot_video_screen = NULL;
+            return;
         }
+        boot_enter_default_page();
+        // The transition owns and deletes the previous screen.
+        s_boot_video_screen = NULL;
     }
 }
 
-// Jump to the BLE scan page and mark the boot flow done (shared by slaves not bound to a master, and masters/standalone units with no OBD device configured)
+// Dedicated high-rate timer for video (33ms ≈ 30fps).
+static void boot_video_timer_cb(lv_timer_t *t)
+{
+    (void)t;
+    if (!s_boot_video_active) return;
+    uint32_t elapsed_ms = (uint32_t)((esp_timer_get_time() - s_boot_video_start_us) / 1000);
+    boot_video_update(elapsed_ms);
+    if (!s_showroom_active && s_boot_video_screen &&
+        !s_boot_video_screen_shown && boot_video_first_frame_presented()) {
+        // Fullscreen OBV pauses LVGL refresh while it decodes. Keep the already
+        // painted Logo active until a complete video frame has reached the LCD.
+        lv_scr_load(s_boot_video_screen);
+        s_boot_video_screen_shown = true;
+        ESP_LOGI(TAG, "Boot video first frame displayed; leaving Logo");
+    }
+    boot_video_state_t state = boot_video_get_state();
+    if (state != BOOT_VIDEO_RUNNING) boot_video_finish(state);
+}
+
+// Pairing is needed only for unbound slaves or units without a saved OBD adapter.
+static bool boot_needs_ble_scan(const nvs_user_cfg_t *cfg)
+{
+    if (cfg->device_role == ESPNOW_ROLE_SLAVE) {
+        uint8_t mac[6];
+        espnow_link_get_bound_master_mac(mac);
+        return (mac[0] | mac[1] | mac[2] | mac[3] | mac[4] | mac[5]) == 0;
+    }
+    return cfg->ble_device_name[0] == '\0';
+}
+
+void ui_ext_boot_prepare(void)
+{
+    nvs_user_cfg_t cfg = nvs_cfg_read();
+    if (theme_page_list_count() > 0 && !s_boot_theme_attempted) {
+        s_boot_theme_attempted = true;
+        ui_theme_gauge_page_index = theme_page_default_index();
+        s_boot_theme_job = theme_page_prepare_begin(theme_page_list_at(ui_theme_gauge_page_index));
+        if (s_boot_theme_job) {
+            atomic_store_explicit(&s_boot_theme_ready, false, memory_order_relaxed);
+            lv_timer_t *poll = lv_timer_create(boot_theme_poll, 20, NULL);
+            if (!poll || xTaskCreate(boot_theme_worker, "theme_boot", 6144, s_boot_theme_job, 3, NULL) != pdPASS) {
+                // Cancel without running: do not perform the conversion under
+                // the LVGL mutex on allocation failure.
+                if (poll) lv_timer_del(poll);
+                theme_page_prepare_finish(s_boot_theme_job);
+                s_boot_theme_job = NULL;
+                ESP_LOGW(TAG, "could not start boot theme worker; using built-in page");
+            }
+        }
+    }
+    if (theme_page_list_count() == 0 && boot_needs_ble_scan(&cfg) &&
+        !ui_ScreenPageBLEScan) {
+        /* Build before playback; the screen starts scanning only when shown. */
+        ui_ScreenPageBLEScan_screen_init();
+    }
+}
+
+static void boot_load_destination(lv_obj_t *screen)
+{
+    // Fullscreen OBV writes directly to the panel; its LVGL screen has no
+    // image of the last frame. A fade would redraw that empty black screen.
+    bool from_video = s_boot_video_screen && lv_scr_act() == s_boot_video_screen;
+    lv_scr_load_anim(screen, from_video ? LV_SCR_LOAD_ANIM_NONE : LV_SCR_LOAD_ANIM_FADE_ON,
+                     from_video ? 0 : 300, 0, true);
+}
+
 static void boot_goto_ble_scan(void)
 {
     if (ui_ScreenPageBLEScan == NULL) ui_ScreenPageBLEScan_screen_init();
-    lv_scr_load_anim(ui_ScreenPageBLEScan, LV_SCR_LOAD_ANIM_FADE_ON, 300, 0, true);
+    boot_load_destination(ui_ScreenPageBLEScan);
     ui_ScreenPageLogo = NULL;
-    imageLogo = NULL;
     s_boot_done = true;
 }
 
 // Enter the default page when boot finishes (called on Logo timeout or after the boot animation completes)
 static void boot_enter_default_page(void)
 {
-    const nvs_user_cfg_t *pg_cfg = nvs_cfg_get();
+    if (s_boot_theme_job) return; // keep Logo / intro / video visible
+    nvs_user_cfg_t pg_cfg = nvs_cfg_read();
 
-    // If a custom theme with pages is loaded, boot directly into the first theme page
+    // If a custom theme with pages is loaded, boot directly into its default page ("main_gauge" or the first)
     uint8_t page_count = theme_page_list_count();
     if (page_count > 0) {
-        ui_theme_gauge_page_index = 0;
-        if (ui_ScreenPageThemeGauge) {
-            lv_obj_del(ui_ScreenPageThemeGauge);
-            ui_ScreenPageThemeGauge = NULL;
-        }
-        ui_ScreenPageThemeGauge_screen_init();
-        lv_scr_load_anim(ui_ScreenPageThemeGauge, LV_SCR_LOAD_ANIM_FADE_ON, 300, 0, true);
-        ui_ScreenPageLogo = NULL;
-        imageLogo = NULL;
-        s_boot_done = true;
-        if(s_sweep_pending) { s_sweep_pending = false; s_sweep_step = 1; }
-        return;
-    }
-
-    if (pg_cfg->device_role == ESPNOW_ROLE_SLAVE) {
-        // Slave: not yet bound to a master → go to the BLE page to pair (ui_ScreenPageBLEScan enters "FIND MASTER" mode automatically per role);
-        // if already bound, do nothing and fall through to the same default_page branch as the master, showing gauge data directly.
-        const uint8_t *bound_mac = espnow_link_get_bound_master_mac();
-        bool bound = (bound_mac[0] | bound_mac[1] | bound_mac[2] | bound_mac[3] | bound_mac[4] | bound_mac[5]) != 0;
-        if (!bound) {
-            boot_goto_ble_scan();
+        ui_theme_gauge_page_index = theme_page_default_index();
+        // The worker prepared this page during Logo / animation playback.
+        // A failed preparation falls back; never retry expensive work here.
+        if (!s_boot_theme_attempted && !ui_ScreenPageThemeGauge) ui_ScreenPageThemeGauge_screen_init();
+        if (ui_ScreenPageThemeGauge) {   // build failed → fall back to the built-in default page below
+            boot_load_destination(ui_ScreenPageThemeGauge);
+            ESP_LOGI(TAG, "Boot entered theme page");
+            ui_ScreenPageLogo = NULL;
+            s_boot_done = true;
+            if(s_sweep_pending) { s_sweep_pending = false; s_sweep_step = 1; }
             return;
         }
-    } else if (pg_cfg->ble_device_name[0] == '\0') {
-        // First flash with no saved device: go straight to the BLE scan page and let the user pick manually
+    }
+
+    if (boot_needs_ble_scan(&pg_cfg)) {
         boot_goto_ble_scan();
         return;
     }
@@ -285,7 +380,7 @@ static void boot_enter_default_page(void)
     lv_obj_t **target_scr = NULL;
     void (*target_init)(void) = NULL;
     // Default page: 0=Temp,1=Info,2=Chart,3=Needle,4=Gear,5=Rpm,6=Speed
-    switch(pg_cfg->default_page) {
+    switch(pg_cfg.default_page) {
         case 0: target_scr = &ui_ScreenPageTemp;  target_init = ui_ScreenPageTemp_screen_init;  break;
         case 1: target_scr = &ui_ScreenPageInfo;  target_init = ui_ScreenPageInfo_screen_init;  break;
         case 2: target_scr = &ui_ScreenPageOilPressure; target_init = ui_ScreenPageOilPressure_screen_init;  break;
@@ -296,9 +391,8 @@ static void boot_enter_default_page(void)
         default: target_scr = &ui_ScreenPageTemp; target_init = ui_ScreenPageTemp_screen_init;  break;
     }
     if(*target_scr == NULL) target_init();
-    lv_scr_load_anim(*target_scr, LV_SCR_LOAD_ANIM_FADE_ON, 300, 0, true);
+    boot_load_destination(*target_scr);
     ui_ScreenPageLogo = NULL;
-    imageLogo = NULL;
     s_boot_done = true;
     if(s_sweep_pending) { s_sweep_pending = false; s_sweep_step = 1; }  // a sweep deferred while the boot animation played fires now, as the default page loads
 }
@@ -315,7 +409,7 @@ void ui_showroom_set_active(bool en) {
     s_showroom_active = en;
     s_showroom_tap_cnt = 0;
     if (en) {
-        ESP_LOGD("showroom", "ENTER role=%d", nvs_cfg_get()->device_role);
+        ESP_LOGD("showroom", "ENTER role=%d", nvs_cfg_read().device_role);
         s_sweep_step = 0;
         // pick 4 random data pages; the position offset guarantees the three gauges differ
         static const uint8_t pool[] = { 3, 4, 5, 6, 7 };
@@ -400,8 +494,7 @@ void ui_ext_showroom_tick(bool is_slave)
             uint8_t old_page = showroom_slot_to_page(s_showroom_slot);
             if (old_page == 0 && s_boot_video_active) {
                 s_boot_video_active = false; s_boot_video_ready = false;
-                boot_block_player_destroy();
-                // Keep bootmedia mounted for OTA
+                boot_video_destroy();
                 if (s_boot_video_timer) { lv_timer_del(s_boot_video_timer); s_boot_video_timer = NULL; }
             }
             if (old_page == 2) { s_intro_step = 0; s_intro_shown = false; }
@@ -444,8 +537,7 @@ void ui_ext_showroom_tick(bool is_slave)
                 if (cur_page == 0 && s_boot_video_active) {
                     s_boot_video_active = false;
                     s_boot_video_ready = false;
-                    boot_block_player_destroy();
-                    // Keep bootmedia mounted for OTA
+                    boot_video_destroy();
                     if (s_boot_video_timer) { lv_timer_del(s_boot_video_timer); s_boot_video_timer = NULL; }
                 }
                 if (cur_page == 2) { s_intro_step = 0; s_intro_shown = false; }
@@ -527,7 +619,7 @@ float ui_ext_sweep_tick(bool is_slave, uint8_t configured_brightness)
  *  Boot animation API (called from my_timerMain)
  * ================================================================ */
 
-// Video boot mode (INTRO == 2): prepare/play the boot_block video, syncing master/slaves.
+// Video boot mode (INTRO == 2): prepare/play the boot video (media/boot_video.h), syncing master/slaves.
 // Returns true when my_timerMain should return early (still showing the Logo or the video is playing).
 bool ui_ext_boot_video_tick(void)
 {
@@ -541,38 +633,36 @@ bool ui_ext_boot_video_tick(void)
     int64_t logo_el_ms = (esp_timer_get_time() - s_video_logo_start_us) / 1000;
     if (logo_el_ms < 1000) return true;  // Logo still showing, skip
 
-    // Phase 1: prepare the video (single app-flashed boot_block slot)
+    // Phase 1: prepare boot media from the shared SD boot directory.
     if (!s_boot_video_ready && !s_boot_video_active && s_boot_video_screen == NULL) {
-        boot_block_player_set_paths("/bootmedia/boot_block.txt", "/bootmedia/boot_block.bin");
-
-        if (boot_media_mount()) {
-            ESP_LOGI(TAG, "boot_media_mount() succeeded, attempting to create player");
-            s_boot_video_screen = lv_obj_create(NULL);
-            lv_obj_set_style_bg_color(s_boot_video_screen, lv_color_black(), LV_PART_MAIN);
-            lv_obj_set_style_bg_opa(s_boot_video_screen, 255, LV_PART_MAIN);
-            lv_obj_set_style_border_width(s_boot_video_screen, 0, LV_PART_MAIN);
-            lv_obj_set_style_radius(s_boot_video_screen, 360, LV_PART_MAIN);
-            lv_obj_clear_flag(s_boot_video_screen, LV_OBJ_FLAG_SCROLLABLE);
-            lv_obj_t *canvas = NULL;
-            if (boot_block_player_create(s_boot_video_screen, &canvas)) {
-                // no lv_scr_load yet: keep the Logo screen, switch only when playback starts
-                s_boot_video_ready = true;
-                ESP_LOGI(TAG, "Boot video ready (logo kept)");
-            } else {
-                ESP_LOGE(TAG, "boot_block_player_create() failed - boot animation will be skipped");
-                lv_obj_del(s_boot_video_screen);
-                s_boot_video_screen = NULL;
-                s_boot_video_done = true;
-            }
+        boot_video_src_t src = BOOT_VIDEO_SRC_NONE;
+        s_boot_video_screen = lv_obj_create(NULL);
+        if (!s_boot_video_screen) {
+            ESP_LOGW(TAG, "could not allocate boot video screen");
+            s_boot_video_done = true;
+            return false;
+        }
+        lv_obj_set_style_bg_color(s_boot_video_screen, lv_color_black(), LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(s_boot_video_screen, 255, LV_PART_MAIN);
+        lv_obj_set_style_border_width(s_boot_video_screen, 0, LV_PART_MAIN);
+        lv_obj_set_style_radius(s_boot_video_screen, 360, LV_PART_MAIN);
+        lv_obj_clear_flag(s_boot_video_screen, LV_OBJ_FLAG_SCROLLABLE);
+        if (boot_video_create(s_boot_video_screen, NULL, &src)) {
+            ESP_LOGI(TAG, "boot video source %d, creating player", (int)src);
+            // no lv_scr_load yet: keep the Logo screen, switch only when playback starts
+            s_boot_video_ready = true;
+            ESP_LOGI(TAG, "Boot video ready (logo kept)");
         } else {
-            ESP_LOGE(TAG, "boot_media_mount() failed - bootmedia partition not accessible");
+            ESP_LOGW(TAG, "no usable SD boot media - boot animation skipped");
+            lv_obj_del(s_boot_video_screen);
+            s_boot_video_screen = NULL;
             s_boot_video_done = true;
         }
     }
     // Phase 2: wait for the sync signal before playing
     if (s_boot_video_ready && !s_boot_video_active) {
         bool should_start = false;
-        uint8_t role = nvs_cfg_get()->device_role;
+        uint8_t role = nvs_cfg_read().device_role;
         if (role == ESPNOW_ROLE_STANDALONE) {
             // standalone: play directly
             should_start = true;
@@ -608,7 +698,11 @@ bool ui_ext_boot_video_tick(void)
             }
         }
         if (should_start) {
-            lv_scr_load(s_boot_video_screen);  // switch screens only now, keeping the Logo until the last moment
+            // Start fullscreen playback while retaining the Logo as LVGL's
+            // active screen. The video timer switches screens only after the
+            // first complete frame has been written to the panel.
+            boot_video_update(0);
+            s_boot_video_screen_shown = false;
             s_boot_video_active = true;
             s_boot_video_start_us = esp_timer_get_time();
             s_boot_video_timer = lv_timer_create(boot_video_timer_cb, 33, NULL);
@@ -662,7 +756,7 @@ void ui_ext_intro_tick(bool is_slave)
                 if (ui_ScreenPageIntro == NULL) ui_ScreenPageIntro_screen_init();
                 if (!in_showroom_intro) {
                     lv_scr_load_anim(ui_ScreenPageIntro, LV_SCR_LOAD_ANIM_FADE_ON, 150, 0, false);
-                    ui_ScreenPageLogo = NULL; imageLogo = NULL;
+                    ui_ScreenPageLogo = NULL;
                 }
                 s_intro_shown = true;
             }
@@ -729,16 +823,120 @@ void ui_ext_no_signal_update(bool signal_ok)
  *  Lifecycle
  * ================================================================ */
 
-void ui_ext_init(void)
+/* ================================================================
+ *  SD theme library: validated selection (UI side of theme_library.h)
+ *
+ *  A user switch (storage page) restarts the device when the copy is done:
+ *  built-in vs theme pages and the palette are chosen once in ui_init().
+ *  A write resumed after power loss (boot / card insert) started with an
+ *  no selected SD theme, so no theme page exists: theme_load(0) picks it up live.
+ * ================================================================ */
+
+#define THEME_LIB_POLL_MS     500
+#define THEME_RESTART_DELAY_US 1500000   // long enough to read "restarting"
+
+static bool    s_theme_switching = false;   // ui_ext_theme_activate() started a write
+static int64_t s_theme_restart_at = 0;      // esp_timer deadline, 0 = none
+static char    s_theme_msg[72] = "";
+static bool    s_theme_msg_ok = true;
+
+static void theme_msg(bool ok, const char *msg)
 {
+    strlcpy(s_theme_msg, msg, sizeof(s_theme_msg));
+    s_theme_msg_ok = ok;
 }
 
-void ui_ext_tick(void)
+esp_err_t ui_ext_theme_prepare_install(void)
 {
-    // The showroom / boot-animation / sweep / rpm-warn logic previously planned to live
-    // here now runs inside my_timerMain through the dedicated ui_ext_* functions above,
-    // so the old ui_ext_tick() hook is intentionally empty. Kept as a no-op hook for the
-    // ui_event_easter_egg_background / OTA-screen call sites.
+    if (s_boot_theme_job || s_theme_switching || theme_library_get_state(NULL) != THEME_LIB_IDLE) return ESP_ERR_INVALID_STATE;
+    if (ui_ScreenPageThemeGauge) {
+        if (ui_ScreenPageThemeGauge == lv_scr_act()) {
+            if (!ui_ScreenPageSettings) ui_ScreenPageSettings_screen_init();
+            if (!ui_ScreenPageSettings) return ESP_ERR_NO_MEM;
+            lv_scr_load(ui_ScreenPageSettings);
+        }
+        lv_obj_del(ui_ScreenPageThemeGauge);
+        ui_ScreenPageThemeGauge = NULL;
+    }
+    theme_unload();
+    theme_info_t info;
+    return theme_get_info(&info) == ESP_OK ? ESP_ERR_INVALID_STATE : ESP_OK;
+}
+
+esp_err_t ui_ext_theme_activate(const char *key)
+{
+    if (s_boot_theme_job || s_theme_switching || theme_library_get_state(NULL) != THEME_LIB_IDLE) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    // Delete old pages before selecting a new SD package.
+    if (ui_ScreenPageThemeGauge) {
+        if (ui_ScreenPageThemeGauge == lv_scr_act()) return ESP_ERR_INVALID_STATE;
+        lv_obj_del(ui_ScreenPageThemeGauge);
+        ui_ScreenPageThemeGauge = NULL;
+    }
+    theme_unload();
+    theme_info_t info;
+    if (theme_get_info(&info) == ESP_OK) {   // unload refused: a theme page still exists
+        return ESP_ERR_INVALID_STATE;
+    }
+    esp_err_t err = theme_library_activate(key);
+    if (err != ESP_OK) {
+        theme_load(0);   // Selection unchanged: restore the current theme
+        return err;
+    }
+    s_theme_switching = true;
+    theme_msg(true, "Loading theme...");
+    return ESP_OK;
+}
+
+const char *ui_ext_theme_status(bool *ok)
+{
+    if (ok) *ok = s_theme_msg_ok;
+    return s_theme_msg;
+}
+
+static void theme_lib_timer_cb(lv_timer_t *t)
+{
+    (void)t;
+    if (s_theme_restart_at != 0) {
+        if (esp_timer_get_time() >= s_theme_restart_at) esp_restart();
+        return;
+    }
+    uint8_t pct = 0;
+    theme_lib_state_t st = theme_library_get_state(&pct);
+    if (st == THEME_LIB_WRITING) {
+        if (s_theme_switching) {
+            char line[32];
+            snprintf(line, sizeof(line), "Loading theme %u%%", (unsigned)pct);
+            theme_msg(true, line);
+        }
+        return;
+    }
+    if (st != THEME_LIB_DONE && st != THEME_LIB_ERROR) return;
+    if (s_boot_theme_job) return; // finish the SD reader before reloading its source
+
+    if (st == THEME_LIB_DONE && s_theme_switching) {
+        theme_library_ack();
+        theme_msg(true, "Theme selected, restarting");
+        s_theme_restart_at = esp_timer_get_time() + THEME_RESTART_DELAY_US;
+        return;
+    }
+    if (st == THEME_LIB_ERROR) {
+        char line[72];
+        snprintf(line, sizeof(line), "Theme selection failed: %s", theme_library_last_error());
+        theme_msg(false, line);
+        ESP_LOGW("ui_ext", "%s", line);
+    }
+    // Reload the persisted SD selection; absent resources use the built-in UI.
+    esp_err_t err = theme_load(0);
+    ESP_LOGI("ui_ext", "SD theme selection reload: %s", esp_err_to_name(err));
+    theme_library_ack();
+    s_theme_switching = false;
+}
+
+void ui_ext_init(void)
+{
+    lv_timer_create(theme_lib_timer_cb, THEME_LIB_POLL_MS, NULL);
 }
 
 /* ================================================================
@@ -766,64 +964,44 @@ static bool s_rpm_link_bg = false;    // multi-gauge linked flash: background is
 bool ui_ext_rpm_is_flashing(void) { return s_rpm_flashing; }
 bool ui_ext_rpm_link_ramp_active(void) { return s_rpm_link_ramp; }
 
-// Whether any RPM flash mode could be active (used by my_timerMain's OBD snapshot gate)
-bool ui_ext_rpm_warn_possible(void)
+// Alarm over: built-in pages get the palette bg + dial face back; a theme page
+// puts its own layout background back in theme_tick() once rules resume.
+static void rpm_restore_bg(lv_obj_t *scr)
 {
-    const nvs_user_cfg_t *cfg = nvs_cfg_get();
-    return cfg->rpm_warn_anim_en ||
-           (cfg->device_role != ESPNOW_ROLE_STANDALONE &&
-            (espnow_link_linked_en() || espnow_link_linktest_active()));
+    if (scr != ui_ScreenPageThemeGauge) ui_helpers_style_screen_bg(scr);
+    lv_obj_set_style_bg_opa(scr, 255, LV_PART_MAIN);
 }
 
-void ui_ext_rpm_flash_tick(uint16_t usRpm, bool in_sweep)
+// Whether any RPM flash mode could be active (used by my_timerMain's OBD snapshot gate)
+bool ui_ext_rpm_warn_possible(const nvs_user_cfg_t *cfg, bool linked_flash_on)
 {
-    const nvs_user_cfg_t *user_cfg = nvs_cfg_get();
-    uint16_t warn_thresh = user_cfg->rpm_warn_threshold; // already clamped to [1000,...]/default 6000 in nvs_storage_init()
+    if (!cfg) return false;
+    return cfg->rpm_warn_anim_en ||
+           (cfg->device_role != ESPNOW_ROLE_STANDALONE &&
+            linked_flash_on);
+}
+
+void ui_ext_rpm_flash_tick(uint16_t usRpm, bool in_sweep,
+                           const nvs_user_cfg_t *cfg, bool linked_flash_on)
+{
+    if (!cfg) return;
+    uint16_t warn_thresh = cfg->rpm_warn_threshold; // already clamped to [1000,...]/default 6000 in nvs_storage_init()
     // Linked flash and FLASH ANIM are mutually exclusive (the settings page ensures at most one is on); with linked on, the at-threshold strobe does not depend on anim_en.
     // While a link test is running (linktest_active), this unit renders even if LINKED FLASH is off locally, so the all-gauge sync test works.
     // espnow_link_linked_en(): master = local NVS, slave = mirrored from master's broadcast (bit2 in flags).
     // This ensures slaves render the gradient without needing manual NVS config on each unit.
-    bool linked_on = (espnow_link_linked_en() || espnow_link_linktest_active()) &&
-                     (user_cfg->device_role != ESPNOW_ROLE_STANDALONE);
+    bool linked_on = linked_flash_on && (cfg->device_role != ESPNOW_ROLE_STANDALONE);
 
     // The linked-test RPM ramp is written by the master into the RPM override layer and broadcast via ESP-NOW; usRpm is the synced value, identical on all three gauges
-    bool over = (!in_sweep && (user_cfg->rpm_warn_anim_en || linked_on) && usRpm >= warn_thresh);
+    bool over = (!in_sweep && (cfg->rpm_warn_anim_en || linked_on) && usRpm >= warn_thresh);
     // Test mode: force trigger
     if (s_rpm_flash_test_ticks > 0) { over = true; s_rpm_flash_test_ticks--; }
 
     // Stable flag: stays true while strobing, driving the timer to flash at RPM_FLASH_PERIOD_MS (independent of the red/black toggle)
+    bool was_flashing = s_rpm_flashing;
     s_rpm_flashing = over;
 
-    // Background image flash: img1→black→img2→black→img3→black loop; UI widgets keep showing above the image
-#if USE_CUSTOM_RPM_FLASH == 1
-    static int8_t s_flash_step = -1;
-    static const lv_img_dsc_t *s_flash_imgs[3] = { &imgRpmFlash1, &imgRpmFlash2, &imgRpmFlash3 };
-
-    if (over) {
-        if (s_flash_step < 0) s_flash_step = 0;
-        lv_obj_t *scr = lv_scr_act();
-        if (s_flash_step & 1) {
-            lv_obj_set_style_bg_img_src(scr, NULL, LV_PART_MAIN);
-            lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), LV_PART_MAIN);
-            lv_obj_set_style_bg_opa(scr, 255, LV_PART_MAIN);
-        } else {
-            lv_obj_set_style_bg_img_src(scr, s_flash_imgs[(s_flash_step / 2) % 3], LV_PART_MAIN);
-            lv_obj_set_style_bg_opa(scr, 255, LV_PART_MAIN);
-        }
-        s_flash_step = (s_flash_step + 1) % 6;
-        s_rpm_flash_red = true;
-    } else {
-        if (s_flash_step >= 0) {
-            lv_obj_t *scr = lv_scr_act();
-            // Restore the theme background (and its dial-face artwork, if any).
-            // Hardcoding black here would blank a themed dial face for good.
-            ui_helpers_style_screen_bg(scr);
-            lv_obj_set_style_bg_opa(scr, 255, LV_PART_MAIN);
-            s_flash_step = -1;
-        }
-        s_rpm_flash_red = false;
-    }
-#else
+    // Red/black strobe. Custom flash artwork is a theme rule now (obd.rpm → set.asset), see docs/THEMES.md.
     if (over) {
         s_rpm_flash_red = !s_rpm_flash_red;
         lv_obj_t *scr = lv_scr_act();
@@ -833,14 +1011,11 @@ void ui_ext_rpm_flash_tick(uint16_t usRpm, bool in_sweep)
         lv_obj_set_style_bg_color(scr, s_rpm_flash_red ? lv_color_hex(UI_SEM_FLASH) : lv_color_hex(0x000000), LV_PART_MAIN);
         lv_obj_set_style_bg_opa(scr, 255, LV_PART_MAIN);
     } else {
-        if (s_rpm_flash_red) {
-            lv_obj_t *scr = lv_scr_act();
-            ui_helpers_style_screen_bg(scr);   // restore theme bg + dial face
-            lv_obj_set_style_bg_opa(scr, 255, LV_PART_MAIN);
+        if (was_flashing || s_rpm_flash_red) {   // also when the strobe ended on its black phase
+            rpm_restore_bg(lv_scr_act());
             s_rpm_flash_red = false;
         }
     }
-#endif
 
     // ---- Multi-gauge linked strobe (triple-gauge mode) ----
     {
@@ -877,11 +1052,12 @@ void ui_ext_rpm_flash_tick(uint16_t usRpm, bool in_sweep)
             // during over (strobe) the flash logic owns the background, don't touch it here; otherwise, leaving the linked red must restore black
             s_rpm_link_ramp = false;
             if (s_rpm_link_bg) {
-                lv_obj_t *scr = lv_scr_act();
-                ui_helpers_style_screen_bg(scr);   // restore theme bg + dial face
-                lv_obj_set_style_bg_opa(scr, 255, LV_PART_MAIN);
+                rpm_restore_bg(lv_scr_act());
                 s_rpm_link_bg = false;
             }
         }
     }
+
+    // System alarms own the background: theme rules pause while they draw.
+    theme_set_rules_suppressed(over || s_rpm_link_bg);
 }

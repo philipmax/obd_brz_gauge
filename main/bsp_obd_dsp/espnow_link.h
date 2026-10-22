@@ -21,18 +21,14 @@ void espnow_link_start_slave(void);
 // OTA SoftAP can reuse it. The normal OTA flow reboots after completion/exit.
 void espnow_link_pause_for_ota(void);
 
-// Stop ESP-NOW and release WiFi resources.
-// After calling this, espnow_link_start_master/slave can be called again to restart.
-void espnow_link_stop(void);
-
 // Slave: whether master data was received within the last ~2s (for the "waiting for master" hint).
 bool espnow_link_slave_has_data(void);
 
 // Slave: name of the last master heard (empty string = none yet).
 const char *espnow_link_get_master_name(void);
 
-// Slave: MAC of the currently bound master (returns a 6-byte array; all-zero = unbound).
-const uint8_t *espnow_link_get_bound_master_mac(void);
+// Slave: copy the currently bound master MAC to out (all-zero = unbound).
+void espnow_link_get_bound_master_mac(uint8_t out[6]);
 
 // Slave: bind to a specific master MAC (the ESP-NOW MAC read during BLE pairing).
 void espnow_link_bind_master(const uint8_t mac[6]);
@@ -65,6 +61,11 @@ bool espnow_link_linktest_active(void);
 // Whether rpm_warn_linked_en is active: master = local NVS, slave = mirrored from broadcast flags bit2.
 // Slaves use this so the gradient fires without needing manual NVS config on each slave unit.
 bool espnow_link_linked_en(void);
+
+// Same query with the caller's already-read local setting. This avoids an extra
+// NVS snapshot in high-frequency UI paths; the legacy wrapper remains for
+// callers that do not already have a configuration snapshot.
+bool espnow_link_linked_en_with_local(bool local_enabled);
 
 #ifdef __cplusplus
 }

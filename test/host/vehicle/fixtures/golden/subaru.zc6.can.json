@@ -1,0 +1,88 @@
+{
+  "id": "subaru.zc6.can",
+  "legacy": {
+    "rev": "4b056c0",
+    "idx": 1,
+    "name": "ZN/C6 CAN"
+  },
+  "init": ["ATZ", "ATE0", "ATL0", "ATS1", "ATH0", "ATAT1", "ATST0A", "ATSP6", "ATSH7E0"],
+  "gap_ms": 1,
+  "requests": [
+    {
+      "sig": "obd.rpm",
+      "src": 0,
+      "hdr": "7E0",
+      "tx": "010C",
+      "class": "fast"
+    },
+    {
+      "sig": "obd.intake_temp",
+      "src": 0,
+      "hdr": "7E0",
+      "tx": "010F",
+      "class": "round"
+    },
+    {
+      "sig": "obd.speed",
+      "src": 0,
+      "hdr": "7E0",
+      "tx": "010D",
+      "class": "round"
+    },
+    {
+      "sig": "obd.load",
+      "src": 0,
+      "hdr": "7E0",
+      "tx": "0104",
+      "class": "round"
+    },
+    {
+      "sig": "obd.battery_voltage",
+      "src": 0,
+      "hdr": "7E0",
+      "tx": "0142",
+      "class": "round"
+    },
+    {
+      "sig": "obd.afr",
+      "src": 0,
+      "hdr": "7E0",
+      "tx": "0144",
+      "class": "round"
+    }
+  ],
+  "requires": ["ATMA"],
+  "monitor": {
+    "mode": "probe",
+    "every_ms": 500,
+    "window_ms": 120,
+    "stale_ms": 15000
+  },
+  "can": [
+    {
+      "sig": "obd.throttle",
+      "id": "140",
+      "bit": 48,
+      "bits": 8
+    },
+    {
+      "sig": "obd.oil_temp",
+      "id": "360",
+      "bit": 16,
+      "bits": 8
+    },
+    {
+      "sig": "obd.coolant_temp",
+      "id": "360",
+      "bit": 24,
+      "bits": 8
+    }
+  ],
+  "drivetrain": {
+    "fd": 4.1,
+    "tire_m": 0.314,
+    "gears": [3.626, 2.188, 1.541, 1.213, 1, 0.767],
+    "tol": 0.15
+  },
+  "notes": ["CAN coolant/oil after stale_ms without frames: legacy wrote coolant -40 and oil invalid; v1 invalidates both."]
+}

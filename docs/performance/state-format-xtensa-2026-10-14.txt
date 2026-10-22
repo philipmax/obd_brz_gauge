@@ -1,0 +1,223 @@
+Adapter state formatting evidence — 2026-10-14
+ESP-IDF 5.5.3 / Xtensa GCC 14.2.0
+baseline vp_engine.c SHA256 cac95d32764bab76ff4b4a1927525397df72bedf336631595fbb8cdc952a9a6f
+production vp_engine.c SHA256 0e83d063323b964abc0109ae233fe6facdaf15b18405244b1c4e45a40287c232
+
+normal before text	   data	    bss	    dec	    hex	filename
+  12285	      0	      0	  12285	   2ffd	/tmp/state-format-normal-before.o
+normal before engine sizeof 5016
+normal after text	   data	    bss	    dec	    hex	filename
+  12349	      0	      0	  12349	   303d	/tmp/state-format-normal-after.o
+normal static frame changes {'fmt_id': (None, 32)}
+/Users/parklu/personProject/obd_brz_gauge/main/vehicle/vp_engine.c:322:20:q_push	48	static
+/Users/parklu/personProject/obd_brz_gauge/main/vehicle/vp_engine.c:252:13:fmt_id	32	static
+/Users/parklu/personProject/obd_brz_gauge/main/vehicle/vp_engine.c:350:13:push_state	64	static
+/Users/parklu/personProject/obd_brz_gauge/main/vehicle/vp_engine.c:1817:10:vp_engine_run	128	static
+normal after engine sizeof 5016
+stats before text	   data	    bss	    dec	    hex	filename
+  12285	      0	      0	  12285	   2ffd	/tmp/state-format-stats-before.o
+stats before engine sizeof 5016
+stats after text	   data	    bss	    dec	    hex	filename
+  12349	      0	      0	  12349	   303d	/tmp/state-format-stats-after.o
+stats static frame changes {'fmt_id': (None, 32)}
+/Users/parklu/personProject/obd_brz_gauge/main/vehicle/vp_engine.c:322:20:q_push	48	static
+/Users/parklu/personProject/obd_brz_gauge/main/vehicle/vp_engine.c:252:13:fmt_id	32	static
+/Users/parklu/personProject/obd_brz_gauge/main/vehicle/vp_engine.c:350:13:push_state	64	static
+/Users/parklu/personProject/obd_brz_gauge/main/vehicle/vp_engine.c:1817:10:vp_engine_run	128	static
+stats after engine sizeof 5016
+no-slot before text	   data	    bss	    dec	    hex	filename
+  12285	      0	      0	  12285	   2ffd	/tmp/state-format-no-slot-before.o
+no-slot before engine sizeof 5016
+no-slot after text	   data	    bss	    dec	    hex	filename
+  12349	      0	      0	  12349	   303d	/tmp/state-format-no-slot-after.o
+no-slot static frame changes {'fmt_id': (None, 32)}
+/Users/parklu/personProject/obd_brz_gauge/main/vehicle/vp_engine.c:322:20:q_push	48	static
+/Users/parklu/personProject/obd_brz_gauge/main/vehicle/vp_engine.c:252:13:fmt_id	32	static
+/Users/parklu/personProject/obd_brz_gauge/main/vehicle/vp_engine.c:350:13:push_state	64	static
+/Users/parklu/personProject/obd_brz_gauge/main/vehicle/vp_engine.c:1817:10:vp_engine_run	128	static
+no-slot after engine sizeof 5016
+
+normal: push_state and fmt_id have no snprintf/memcpy relocations; constant off paths use stores; one 17-byte eng_hex table; evidence/build object function bytes match; helpers present in linked ELF; no probe/baseline symbols.
+normal complete ESP32-S3 firmware: app size 0x2857d0; SHA256 9cbe8f3993765b272d22fa4d41bf56d866bea58772d11dc24224ac4c823649ef
+
+stats: push_state and fmt_id have no snprintf/memcpy relocations; constant off paths use stores; one 17-byte eng_hex table; evidence/build object function bytes match; helpers present in linked ELF; no probe/baseline symbols.
+stats complete ESP32-S3 firmware: app size 0x286030; SHA256 50dd12cd69fc720a68ec55471889371fac68b90e472cce7060d58249f018783a
+
+no-slot: push_state and fmt_id have no snprintf/memcpy relocations; constant off paths use stores; one 17-byte eng_hex table; evidence/build object function bytes match; helpers present in linked ELF; no probe/baseline symbols.
+no-slot complete ESP32-S3 firmware: app size 0x276190; SHA256 df03b506d1c6e4f3cddfb5fba1fd6c68ef3dcaffd289fd929c613566fc207673
+
+baseline baseline passed
+mask11 compiled then rejected (1)
+flag29 compiled then rejected (1)
+width29 compiled then rejected (1)
+width11 compiled then rejected (1)
+lowercase compiled then rejected (1)
+cea-off compiled then rejected (1)
+caf-reverse compiled then rejected (1)
+req-lost compiled then rejected (1)
+
+engine: 100% tests passed, 0 tests failed out of 4
+espnow: 100% tests passed, 0 tests failed out of 4
+media: 100% tests passed, 0 tests failed out of 7
+rules: 100% tests passed, 0 tests failed out of 6
+theme: 100% tests passed, 0 tests failed out of 6
+vehicle: 100% tests passed, 0 tests failed out of 12
+signal_store: 100% tests passed, 0 tests failed out of 4
+storage: 100% tests passed, 0 tests failed out of 2
+TOTAL: 45
+
+Compiler static-frame reports are not maximum task stack depth.
+Target object text/readonly is +64 bytes; linked app deltas are +32/+16/+32 bytes, not speed measurements.
+
+Paired host baseline alias verification: Mach-O __TEXT,__text bytes identical to standalone baseline; SHA256 4625d89ca99f2a40c5a89408ed12c89f24aa0c495045a7d7efdab492266eeb20
+Host wrapper calls production push_state then pop/checksum; both versions run on the same engine address.
+Host timing ran under background system load. Dynamic/CAF gains and constant-off slowdowns are both retained; no device-speed claim.
+
+Normal configuration push_state/fmt_id disassembly:
+Disassembly of section .text.push_state:
+
+00000000 <push_state>:
+   0:	008136               	entry	a1, 64
+   3:	191326               	beqi	a3, 1, 20 <push_state+0x20>
+			3: R_XTENSA_SLOT0_OP	.text.push_state+0x20
+   6:	422326               	beqi	a3, 2, 4c <push_state+0x4c>
+			6: R_XTENSA_SLOT0_OP	.text.push_state+0x4c
+   9:	07f356               	bnez	a3, 8c <push_state+0x8c>
+			9: R_XTENSA_SLOT0_OP	.text.push_state+0x8c
+   c:	000081               	l32r	a8, fffc000c <push_state+0xfffc000c>
+			c: R_XTENSA_SLOT0_OP	.literal.push_state
+   f:	04bd                	mov.n	a11, a4
+  11:	a14b                	addi.n	a10, a1, 4
+  13:	006182               	s32i	a8, a1, 0
+  16:	000081               	l32r	a8, fffc0018 <push_state+0xfffc0018>
+			16: R_XTENSA_SLOT0_OP	.literal.push_state+0x1c
+			16: R_XTENSA_ASM_EXPAND	.text.fmt_id
+  19:	0008e0               	callx8	a8
+  1c:	0021c6               	j	a7 <push_state+0xa7>
+			1c: R_XTENSA_SLOT0_OP	.text.push_state+0xa7
+  1f:	00                      	.byte	00
+  20:	04dc                	bnez.n	a4, 34 <push_state+0x34>
+			20: R_XTENSA_SLOT0_OP	.text.push_state+0x34
+  22:	000081               	l32r	a8, fffc0024 <push_state+0xfffc0024>
+			22: R_XTENSA_SLOT0_OP	.literal.push_state+0x4
+  25:	0898                	l32i.n	a9, a8, 0
+  27:	021882               	l16ui	a8, a8, 4
+  2a:	0199                	s32i.n	a9, a1, 0
+  2c:	025182               	s16i	a8, a1, 4
+  2f:	001d06               	j	a7 <push_state+0xa7>
+			2f: R_XTENSA_SLOT0_OP	.text.push_state+0xa7
+  32:	00                      	.byte	00
+  33:	00                      	.byte	00
+  34:	000081               	l32r	a8, fffc0034 <push_state+0xfffc0034>
+			34: R_XTENSA_SLOT0_OP	.literal.push_state+0x8
+  37:	04bd                	mov.n	a11, a4
+  39:	0189                	s32i.n	a8, a1, 0
+  3b:	a15b                	addi.n	a10, a1, 5
+  3d:	184c                	movi.n	a8, 65
+  3f:	044182               	s8i	a8, a1, 4
+  42:	000081               	l32r	a8, fffc0044 <push_state+0xfffc0044>
+			42: R_XTENSA_SLOT0_OP	.literal.push_state+0x20
+			42: R_XTENSA_ASM_EXPAND	.text.fmt_id
+  45:	0008e0               	callx8	a8
+  48:	0016c6               	j	a7 <push_state+0xa7>
+			48: R_XTENSA_SLOT0_OP	.text.push_state+0xa7
+  4b:	00                      	.byte	00
+  4c:	10f466               	bnei	a4, 0x100, 60 <push_state+0x60>
+			4c: R_XTENSA_SLOT0_OP	.text.push_state+0x60
+  4f:	000081               	l32r	a8, fffc0050 <push_state+0xfffc0050>
+			4f: R_XTENSA_SLOT0_OP	.literal.push_state+0xc
+  52:	0898                	l32i.n	a9, a8, 0
+  54:	021882               	l16ui	a8, a8, 4
+  57:	0199                	s32i.n	a9, a1, 0
+  59:	025182               	s16i	a8, a1, 4
+  5c:	0011c6               	j	a7 <push_state+0xa7>
+			5c: R_XTENSA_SLOT0_OP	.text.push_state+0xa7
+  5f:	00                      	.byte	00
+  60:	000081               	l32r	a8, fffc0060 <push_state+0xfffc0060>
+			60: R_XTENSA_SLOT0_OP	.literal.push_state+0x14
+  63:	34a440               	extui	a10, a4, 4, 4
+  66:	349040               	extui	a9, a4, 0, 4
+  69:	989a                	add.n	a9, a8, a9
+  6b:	88aa                	add.n	a8, a8, a10
+  6d:	0000a1               	l32r	a10, fffc0070 <push_state+0xfffc0070>
+			6d: R_XTENSA_SLOT0_OP	.literal.push_state+0x10
+  70:	000992               	l8ui	a9, a9, 0
+  73:	000882               	l8ui	a8, a8, 0
+  76:	01a9                	s32i.n	a10, a1, 0
+  78:	1a4c                	movi.n	a10, 65
+  7a:	0441a2               	s8i	a10, a1, 4
+  7d:	0a0c                	movi.n	a10, 0
+  7f:	0741a2               	s8i	a10, a1, 7
+  82:	064192               	s8i	a9, a1, 6
+  85:	054182               	s8i	a8, a1, 5
+  88:	0006c6               	j	a7 <push_state+0xa7>
+			88: R_XTENSA_SLOT0_OP	.text.push_state+0xa7
+  8b:	00                      	.byte	00
+  8c:	40f480               	nsau	a8, a4
+  8f:	000091               	l32r	a9, fffc0090 <push_state+0xfffc0090>
+			8f: R_XTENSA_SLOT0_OP	.literal.push_state+0x18
+  92:	418580               	srli	a8, a8, 5
+  95:	30c882               	addi	a8, a8, 48
+  98:	0199                	s32i.n	a9, a1, 0
+  9a:	054182               	s8i	a8, a1, 5
+  9d:	694c                	movi.n	a9, 70
+  9f:	080c                	movi.n	a8, 0
+  a1:	044192               	s8i	a9, a1, 4
+  a4:	064182               	s8i	a8, a1, 6
+  a7:	0d0c                	movi.n	a13, 0
+  a9:	01cd                	mov.n	a12, a1
+  ab:	2b0c                	movi.n	a11, 2
+  ad:	20a220               	or	a10, a2, a2
+  b0:	000081               	l32r	a8, fffc00b0 <push_state+0xfffc00b0>
+			b0: R_XTENSA_SLOT0_OP	.literal.push_state+0x24
+			b0: R_XTENSA_ASM_EXPAND	.text.q_push
+  b3:	0008e0               	callx8	a8
+  b6:	6a8c                	beqz.n	a10, c0 <push_state+0xc0>
+			b6: R_XTENSA_SLOT0_OP	.text.push_state+0xc0
+  b8:	154a32               	s8i	a3, a10, 21
+  bb:	7a49                	s32i.n	a4, a10, 28
+  bd:	0d5a52               	s16i	a5, a10, 26
+  c0:	f01d                	retw.n
+
+Disassembly of section .text.fmt_id:
+
+00000000 <fmt_id>:
+   0:	004136               	entry	a1, 32
+   3:	0293d6               	bgez	a3, 30 <fmt_id+0x30>
+			3: R_XTENSA_SLOT0_OP	.text.fmt_id+0x30
+   6:	090c                	movi.n	a9, 0
+   8:	1183d0               	slli	a8, a3, 3
+   b:	0000c1               	l32r	a12, fffc000c <fmt_id+0xfffc000c>
+			b: R_XTENSA_SLOT0_OP	.literal.fmt_id
+   e:	084292               	s8i	a9, a2, 8
+  11:	418380               	srli	a8, a8, 3
+  14:	927b                	addi.n	a9, a2, 7
+  16:	08a0b2               	movi	a11, 8
+  19:	0f8b76               	loop	a11, 2c <fmt_id+0x2c>
+			19: R_XTENSA_SLOT0_OP	.text.fmt_id+0x2c
+  1c:	34a080               	extui	a10, a8, 0, 4
+  1f:	acaa                	add.n	a10, a12, a10
+  21:	000aa2               	l8ui	a10, a10, 0
+  24:	418480               	srli	a8, a8, 4
+  27:	0049a2               	s8i	a10, a9, 0
+  2a:	990b                	addi.n	a9, a9, -1
+  2c:	000886               	j	52 <fmt_id+0x52>
+			2c: R_XTENSA_SLOT0_OP	.text.fmt_id+0x52
+  2f:	00                      	.byte	00
+  30:	090c                	movi.n	a9, 0
+  32:	0000c1               	l32r	a12, fffc0034 <fmt_id+0xfffc0034>
+			32: R_XTENSA_SLOT0_OP	.literal.fmt_id
+  35:	034292               	s8i	a9, a2, 3
+  38:	a48030               	extui	a8, a3, 0, 11
+  3b:	922b                	addi.n	a9, a2, 2
+  3d:	34a080               	extui	a10, a8, 0, 4
+  40:	acaa                	add.n	a10, a12, a10
+  42:	000ab2               	l8ui	a11, a10, 0
+  45:	09ad                	mov.n	a10, a9
+  47:	0049b2               	s8i	a11, a9, 0
+  4a:	418480               	srli	a8, a8, 4
+  4d:	990b                	addi.n	a9, a9, -1
+  4f:	ea92a7               	bne	a2, a10, 3d <fmt_id+0x3d>
+			4f: R_XTENSA_SLOT0_OP	.text.fmt_id+0x3d
+  52:	f01d                	retw.n
+

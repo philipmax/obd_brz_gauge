@@ -38,6 +38,8 @@ $<TARGET_FILE:__idf_app_update>
 $<TARGET_FILE:__idf_esp_app_format>
 $<TARGET_FILE:__idf_esp_bootloader_format>
 $<TARGET_FILE:idf::esp_mm>
+$<TARGET_FILE:__idf_espcoredump>
+$<TARGET_FILE:idf::esp_app_format>
 $<TARGET_FILE:__idf_esp_gdbstub>
 $<TARGET_FILE:__idf_esp_coex>
 $<TARGET_FILE:__idf_driver>
@@ -73,7 +75,6 @@ $<TARGET_FILE:__idf_esp_security>
 $<TARGET_FILE:__idf_pthread>
 $<TARGET_FILE:idf::esp_driver_gpio>
 $<TARGET_FILE:idf::esp_pm>
-$<TARGET_FILE:idf::esp_app_format>
 $<TARGET_FILE:idf::esp_bootloader_format>
 $<TARGET_FILE:idf::app_update>
 $<TARGET_FILE:idf::esp_partition>
@@ -163,14 +164,12 @@ $<TARGET_FILE:idf::touch_element>
 $<TARGET_FILE:idf::usb>
 $<TARGET_FILE:idf::wifi_provisioning>
 $<TARGET_FILE:__idf_json>
+$<TARGET_FILE:idf::joltwallet__littlefs>
 $<TARGET_FILE:idf::espressif__esp_lcd_touch>
 $<TARGET_FILE:__idf_esp_lcd>
 $<TARGET_FILE:idf::lvgl__lvgl>
-$<TARGET_FILE:idf::espressif__button>
-$<TARGET_FILE:idf::espressif__knob>
 $<TARGET_FILE:idf::main>
-$<TARGET_FILE:__idf_spiffs>
+$<TARGET_FILE:__idf_fatfs>
+$<TARGET_FILE:__idf_joltwallet__littlefs>
 $<TARGET_FILE:__idf_espressif__esp_lcd_touch>
 $<TARGET_FILE:__idf_lvgl__lvgl>
-$<TARGET_FILE:__idf_espressif__button>
-$<TARGET_FILE:__idf_espressif__knob>

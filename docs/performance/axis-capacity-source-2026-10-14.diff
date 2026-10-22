@@ -1,0 +1,15 @@
+--- a/main/theme_engine/theme_pixconv.c
++++ b/main/theme_engine/theme_pixconv.c
+@@ -324,7 +324,11 @@
+ static bool px_axis_build(const tpx_alloc_t *a, uint32_t sn, uint32_t dn, px_axis_t *ax)
+ {
+     memset(ax, 0, sizeof(*ax));
+-    size_t cap = (size_t)sn + 2u * dn + 2u;
++    // Identity needs one tap/output; bilinear stores exactly two. For area
++    // sampling, the union of source/output boundaries gives at most sn+dn-1
++    // intervals. Integer shrink ratios have exact double boundaries: sn taps.
++    size_t cap = sn == dn ? dn : sn < dn ? 2u * dn :
++                 sn % dn == 0 ? sn : (size_t)sn + dn - 1u;
+     ax->start = px_alloc(a, dn * sizeof(uint32_t));
+     ax->count = px_alloc(a, dn * sizeof(uint16_t));
+     ax->idx = px_alloc(a, cap * sizeof(uint16_t));

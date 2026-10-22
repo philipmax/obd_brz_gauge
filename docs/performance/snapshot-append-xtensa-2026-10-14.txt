@@ -1,0 +1,2377 @@
+ESP32-S3 snapshot append evidence, ESP-IDF 5.5.3 / -O2.
+
+Actual firmware command espnow_v6:
+/Users/parklu/.espressif/tools/xtensa-esp-elf/esp-14.2.0_20251107/xtensa-esp-elf/bin/xtensa-esp32s3-elf-gcc -DESP_PLATFORM -DIDF_VER=\"v5.5.3\" -DLV_CONF_INCLUDE_SIMPLE -DMBEDTLS_CONFIG_FILE=\"mbedtls/esp_config.h\" -DOBD_GAUGE_BUILD_TAG=\"rebuild-138-233b2cce8831\" -DOBD_GAUGE_GIT_BRANCH=\"rebuild\" -DOBD_GAUGE_GIT_COUNT=138 -DOBD_GAUGE_GIT_HASH=\"233b2cce8831\" -DSOC_MMU_PAGE_SIZE=CONFIG_MMU_PAGE_SIZE -DSOC_XTAL_FREQ_MHZ=CONFIG_XTAL_FREQ -D_GLIBCXX_HAVE_POSIX_SEMAPHORE -D_GLIBCXX_USE_POSIX_SEMAPHORE -D_GNU_SOURCE -D_POSIX_READER_WRITER_LOCKS -I/private/tmp/obd-brz-build/config -I/Users/parklu/personProject/obd_brz_gauge/main -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/newlib/platform_include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/freertos/config/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/freertos/config/include/freertos -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/freertos/config/xtensa/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/freertos/FreeRTOS-Kernel/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/freertos/FreeRTOS-Kernel/portable/xtensa/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/freertos/FreeRTOS-Kernel/portable/xtensa/include/freertos -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/freertos/esp_additions/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/include/soc -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/include/soc/esp32s3 -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/dma/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/ldo/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/debug_probe/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/mspi_timing_tuning/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/mspi_timing_tuning/tuning_scheme_impl/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/power_supply/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/port/esp32s3/. -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/port/esp32s3/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/mspi_timing_tuning/port/esp32s3/. -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/mspi_timing_tuning/port/esp32s3/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/heap/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/heap/tlsf -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/log/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/soc/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/soc/esp32s3 -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/soc/esp32s3/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/soc/esp32s3/register -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/hal/platform_port/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/hal/esp32s3/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/hal/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_rom/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_rom/esp32s3/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_rom/esp32s3/include/esp32s3 -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_rom/esp32s3 -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_common/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_system/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_system/port/soc -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_system/port/include/private -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/xtensa/esp32s3/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/xtensa/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/xtensa/deprecated_include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/lwip/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/lwip/include/apps -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/lwip/include/apps/sntp -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/lwip/lwip/src/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/lwip/port/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/lwip/port/freertos/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/lwip/port/esp32xx/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/lwip/port/esp32xx/include/arch -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/lwip/port/esp32xx/include/sys -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_http_server/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/http_parser -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_event/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_wifi/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_wifi/include/local -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_wifi/wifi_apps/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_wifi/wifi_apps/nan_app/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_phy/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_phy/esp32s3/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_netif/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/include/esp32c3/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/common/osi/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/common/api/include/api -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/common/btc/profile/esp/blufi/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/common/btc/profile/esp/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/common/hci_log/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/common/ble_log/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/host/bluedroid/api/include/api -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/common/tinycrypt/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/common/tinycrypt/port -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_timer/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/mbedtls/port/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/mbedtls/mbedtls/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/mbedtls/mbedtls/library -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/mbedtls/esp_crt_bundle/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/mbedtls/mbedtls/3rdparty/everest/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/mbedtls/mbedtls/3rdparty/p256-m -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/mbedtls/mbedtls/3rdparty/p256-m/p256-m -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/nvs_flash/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_partition/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/app_update/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bootloader_support/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bootloader_support/bootloader_flash/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_app_format/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_bootloader_format/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/json/cJSON -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/sdmmc/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_sdmmc/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_gpio/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/fatfs/diskio -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/fatfs/src -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/fatfs/vfs -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/wear_levelling/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_sdspi/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_spi/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_pm/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/espcoredump/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/espcoredump/include/port/xtensa -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/spi_flash/include -I/Users/parklu/personProject/obd_brz_gauge/managed_components/joltwallet__littlefs/include -I/Users/parklu/personProject/obd_brz_gauge/managed_components/espressif__esp_lcd_touch/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/driver/deprecated -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/driver/i2c/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/driver/touch_sensor/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/driver/twai/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/driver/touch_sensor/esp32s3/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_ringbuf/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_pcnt/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_gptimer/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_mcpwm/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_ana_cmpr/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_i2s/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_sdio/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_dac/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_rmt/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_tsens/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_sdm/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_i2c/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_uart/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/vfs/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_ledc/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_parlio/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_usb_serial_jtag/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_twai/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_lcd/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_lcd/interface -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_lcd/rgb/include -I/Users/parklu/personProject/obd_brz_gauge/managed_components/lvgl__lvgl -I/Users/parklu/personProject/obd_brz_gauge/managed_components/lvgl__lvgl/src -I/Users/parklu/personProject/obd_brz_gauge/managed_components -I/Users/parklu/personProject/obd_brz_gauge/managed_components/lvgl__lvgl/examples -I/Users/parklu/personProject/obd_brz_gauge/managed_components/lvgl__lvgl/demos -I/Users/parklu/personProject/obd_brz_gauge/managed_components/espressif__esp_new_jpeg/include -mlongcalls  -fno-builtin-memcpy -fno-builtin-memset -fno-builtin-bzero -fno-builtin-stpcpy -fno-builtin-strncpy -fdiagnostics-color=always -Wno-format -ffunction-sections -fdata-sections -Wall -Werror=all -Wno-error=unused-function -Wno-error=unused-variable -Wno-error=unused-but-set-variable -Wno-error=deprecated-declarations -Wextra -Wno-error=extra -Wno-unused-parameter -Wno-sign-compare -Wno-enum-conversion -gdwarf-4 -ggdb -mdisable-hardware-atomics -O2 -fmacro-prefix-map=/Users/parklu/personProject/obd_brz_gauge=. -fmacro-prefix-map=/Users/parklu/.espressif/v5.5.3/esp-idf=/IDF -fstrict-volatile-bitfields -fno-jump-tables -fno-tree-switch-conversion -std=gnu17 -Wno-old-style-declaration -o esp-idf/main/CMakeFiles/__idf_main.dir/bsp_obd_dsp/espnow_v6.c.obj -c /Users/parklu/personProject/obd_brz_gauge/main/bsp_obd_dsp/espnow_v6.c
+
+espnow_v6 before: standalone exactly matches actual object text/literal/data/rodata bytes and all section sizes.
+espnow_v6 after: standalone exactly matches actual object text/literal/data/rodata bytes and all section sizes.
+espnow_v6 changed section contents: ['.text.espnow_hello_encode', '.text.espnow_rx_apply', '.text.espnow_snapshot_append_unique', '.text.espnow_v5_encode']
+espnow_v6 before sizes:
+/tmp/obd-snapshot-append-20261014/espnow_v6-before-standalone.obj  :
+section                           size   addr
+.literal.espnow_crc16                8      0
+.literal.espnow_profile_hash        16      0
+.literal.espnow_snapshot_init        4      0
+.literal.espnow_v5_encode           36      0
+.literal.espnow_v6_frame_count       4      0
+.literal.espnow_v6_encode           20      0
+.literal.espnow_hello_encode         4      0
+.literal.espnow_classify             4      0
+.literal.espnow_v5_decode           20      0
+.literal.espnow_v6_decode           16      0
+.literal.espnow_hello_decode         4      0
+.literal.espnow_rx_apply            12      0
+.text                                0      0
+.data                                0      0
+.bss                                 0      0
+.text.invalidate_clear_bits        107      0
+.text.espnow_crc16                  32      0
+.text.espnow_profile_hash           70      0
+.text.espnow_snapshot_init          28      0
+.text.espnow_snapshot_put          200      0
+.text.espnow_snapshot_get           90      0
+.text.espnow_v5_encode             964      0
+.text.espnow_v6_frame_count         34      0
+.text.espnow_v6_encode             452      0
+.text.espnow_hello_encode           72      0
+.text.espnow_classify              106      0
+.text.espnow_v5_decode            1008      0
+.text.espnow_v6_decode             385      0
+.text.espnow_hello_decode           82      0
+.text.espnow_rx_record             122      0
+.text.espnow_rx_apply              364      0
+.debug_frame                       400      0
+.debug_info                      12263      0
+.debug_abbrev                     1239      0
+.debug_loc                       12127      0
+.debug_aranges                     152      0
+.debug_ranges                     2880      0
+.debug_line                      17661      0
+.debug_str                        1690      0
+.comment                            48      0
+.xtensa.info                        56      0
+.xt.lit                             96      0
+.xt.prop                          2520      0
+Total                            55396
+
+
+
+before .text.espnow_snapshot_put:
+Disassembly of section .text.espnow_snapshot_put:
+
+00000000 <espnow_snapshot_put>:
+   0:	004136        	entry	a1, 32
+   3:	090c      	movi.n	a9, 0
+   5:	02ad      	mov.n	a10, a2
+   7:	f43030        	extui	a3, a3, 0, 16
+   a:	120c      	movi.n	a2, 1
+   c:	180c      	movi.n	a8, 1
+   e:	9329a0        	movnez	a2, a9, a10
+  11:	938930        	movnez	a8, a9, a3
+  14:	202280        	or	a2, a2, a8
+  17:	0a9256        	bnez	a2, c4 <espnow_snapshot_put+0xc4>
+			17: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_put+0xc4
+  1a:	80c382        	addi	a8, a3, -128
+  1d:	f48080        	extui	a8, a8, 0, 16
+  20:	f93c      	movi.n	a9, 63
+  22:	023987        	bltu	a9, a8, 28 <espnow_snapshot_put+0x28>
+			22: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_put+0x28
+  25:	002746        	j	c6 <espnow_snapshot_put+0xc6>
+			25: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_put+0xc6
+  28:	106326        	beqi	a3, 6, 3c <espnow_snapshot_put+0x3c>
+			28: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_put+0x3c
+  2b:	200ad2        	l8ui	a13, a10, 32
+  2e:	043d16        	beqz	a13, 75 <espnow_snapshot_put+0x75>
+			2e: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_put+0x75
+  31:	24ca82        	addi	a8, a10, 36
+  34:	02bd      	mov.n	a11, a2
+  36:	0d9d      	mov.n	a9, a13
+  38:	000906        	j	60 <espnow_snapshot_put+0x60>
+			38: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_put+0x60
+  3b:	00          	.byte	00
+  3c:	80a082        	movi	a8, 128
+  3f:	848a      	add.n	a8, a4, a8
+  41:	fea092        	movi	a9, 254
+  44:	7e3987        	bltu	a9, a8, c6 <espnow_snapshot_put+0xc6>
+			44: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_put+0xc6
+  47:	2a88      	l32i.n	a8, a10, 8
+  49:	092c      	movi.n	a9, 32
+  4b:	208890        	or	a8, a8, a9
+  4e:	114a42        	s8i	a4, a10, 17
+  51:	2a89      	s32i.n	a8, a10, 8
+  53:	0012c6        	j	a2 <espnow_snapshot_put+0xa2>
+			53: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_put+0xa2
+  56:	bb1b      	addi.n	a11, a11, 1
+  58:	990b      	addi.n	a9, a9, -1
+  5a:	29cc      	bnez.n	a9, 60 <espnow_snapshot_put+0x60>
+			5a: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_put+0x60
+  5c:	000346        	j	6d <espnow_snapshot_put+0x6d>
+			5c: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_put+0x6d
+  5f:	00          	.byte	00
+  60:	0018c2        	l16ui	a12, a8, 0
+  63:	888b      	addi.n	a8, a8, 8
+  65:	ed9c37        	bne	a12, a3, 56 <espnow_snapshot_put+0x56>
+			65: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_put+0x56
+  68:	8b4b      	addi.n	a8, a11, 4
+  6a:	169db7        	bne	a13, a11, 84 <espnow_snapshot_put+0x84>
+			6a: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_put+0x84
+  6d:	f83c      	movi.n	a8, 63
+  6f:	04b8d7        	bgeu	a8, a13, 77 <espnow_snapshot_put+0x77>
+			6f: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_put+0x77
+  72:	001406        	j	c6 <espnow_snapshot_put+0xc6>
+			72: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_put+0xc6
+  75:	0dbd      	mov.n	a11, a13
+  77:	dd1b      	addi.n	a13, a13, 1
+  79:	8b4b      	addi.n	a8, a11, 4
+  7b:	204ad2        	s8i	a13, a10, 32
+  7e:	b098a0        	addx8	a9, a8, a10
+  81:	025932        	s16i	a3, a9, 4
+  84:	b088a0        	addx8	a8, a8, a10
+  87:	930b      	addi.n	a9, a3, -1
+  89:	2849      	s32i.n	a4, a8, 8
+  8b:	f4b090        	extui	a11, a9, 0, 16
+  8e:	f81c      	movi.n	a8, 31
+  90:	1438b7        	bltu	a8, a11, a8 <espnow_snapshot_put+0xa8>
+			90: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_put+0xa8
+  93:	2a88      	l32i.n	a8, a10, 8
+  95:	1b0c      	movi.n	a11, 1
+  97:	401900        	ssl	a9
+  9a:	a19b00        	sll	a9, a11
+  9d:	208890        	or	a8, a8, a9
+  a0:	2a89      	s32i.n	a8, a10, 8
+  a2:	120c      	movi.n	a2, 1
+  a4:	000786        	j	c6 <espnow_snapshot_put+0xc6>
+			a4: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_put+0xc6
+  a7:	00          	.byte	00
+  a8:	ffd332        	addmi	a3, a3, 0xffffff00
+  ab:	f49030        	extui	a9, a3, 0, 16
+  ae:	f03897        	bltu	a8, a9, a2 <espnow_snapshot_put+0xa2>
+			ae: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_put+0xa2
+  b1:	3a88      	l32i.n	a8, a10, 12
+  b3:	190c      	movi.n	a9, 1
+  b5:	401300        	ssl	a3
+  b8:	a19900        	sll	a9, a9
+  bb:	208890        	or	a8, a8, a9
+  be:	3a89      	s32i.n	a8, a10, 12
+  c0:	fff786        	j	a2 <espnow_snapshot_put+0xa2>
+			c0: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_put+0xa2
+  c3:	00          	.byte	00
+  c4:	092d      	mov.n	a2, a9
+  c6:	f01d      	retw.n
+
+espnow_v6 after sizes:
+/tmp/obd-snapshot-append-20261014/espnow_v6-after-standalone.obj  :
+section                                size   addr
+.literal.espnow_crc16                     8      0
+.literal.espnow_profile_hash             16      0
+.literal.espnow_snapshot_init             4      0
+.literal.espnow_v5_encode                36      0
+.literal.espnow_v6_frame_count            4      0
+.literal.espnow_v6_encode                20      0
+.literal.espnow_hello_encode              4      0
+.literal.espnow_classify                  4      0
+.literal.espnow_v5_decode                20      0
+.literal.espnow_v6_decode                16      0
+.literal.espnow_hello_decode              4      0
+.literal.espnow_rx_apply                 12      0
+.text                                     0      0
+.data                                     0      0
+.bss                                      0      0
+.text.invalidate_clear_bits             107      0
+.text.espnow_crc16                       32      0
+.text.espnow_profile_hash                70      0
+.text.espnow_snapshot_init               28      0
+.text.espnow_snapshot_put               200      0
+.text.espnow_snapshot_append_unique     140      0
+.text.espnow_snapshot_get                90      0
+.text.espnow_v5_encode                  962      0
+.text.espnow_v6_frame_count              34      0
+.text.espnow_v6_encode                  452      0
+.text.espnow_hello_encode                71      0
+.text.espnow_classify                   106      0
+.text.espnow_v5_decode                 1008      0
+.text.espnow_v6_decode                  385      0
+.text.espnow_hello_decode                82      0
+.text.espnow_rx_record                  122      0
+.text.espnow_rx_apply                   363      0
+.debug_frame                            424      0
+.debug_info                           12519      0
+.debug_abbrev                          1239      0
+.debug_loc                            12673      0
+.debug_aranges                          160      0
+.debug_ranges                          2944      0
+.debug_line                           18268      0
+.debug_str                             1721      0
+.comment                                 48      0
+.xtensa.info                             56      0
+.xt.lit                                  96      0
+.xt.prop                               2652      0
+Total                                 57200
+
+
+
+after .text.espnow_snapshot_put:
+Disassembly of section .text.espnow_snapshot_put:
+
+00000000 <espnow_snapshot_put>:
+   0:	004136        	entry	a1, 32
+   3:	090c      	movi.n	a9, 0
+   5:	02ad      	mov.n	a10, a2
+   7:	f43030        	extui	a3, a3, 0, 16
+   a:	120c      	movi.n	a2, 1
+   c:	180c      	movi.n	a8, 1
+   e:	9329a0        	movnez	a2, a9, a10
+  11:	938930        	movnez	a8, a9, a3
+  14:	202280        	or	a2, a2, a8
+  17:	0a9256        	bnez	a2, c4 <espnow_snapshot_put+0xc4>
+			17: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_put+0xc4
+  1a:	80c382        	addi	a8, a3, -128
+  1d:	f48080        	extui	a8, a8, 0, 16
+  20:	f93c      	movi.n	a9, 63
+  22:	023987        	bltu	a9, a8, 28 <espnow_snapshot_put+0x28>
+			22: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_put+0x28
+  25:	002746        	j	c6 <espnow_snapshot_put+0xc6>
+			25: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_put+0xc6
+  28:	106326        	beqi	a3, 6, 3c <espnow_snapshot_put+0x3c>
+			28: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_put+0x3c
+  2b:	200ad2        	l8ui	a13, a10, 32
+  2e:	043d16        	beqz	a13, 75 <espnow_snapshot_put+0x75>
+			2e: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_put+0x75
+  31:	24ca82        	addi	a8, a10, 36
+  34:	02bd      	mov.n	a11, a2
+  36:	0d9d      	mov.n	a9, a13
+  38:	000906        	j	60 <espnow_snapshot_put+0x60>
+			38: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_put+0x60
+  3b:	00          	.byte	00
+  3c:	80a082        	movi	a8, 128
+  3f:	848a      	add.n	a8, a4, a8
+  41:	fea092        	movi	a9, 254
+  44:	7e3987        	bltu	a9, a8, c6 <espnow_snapshot_put+0xc6>
+			44: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_put+0xc6
+  47:	2a88      	l32i.n	a8, a10, 8
+  49:	092c      	movi.n	a9, 32
+  4b:	208890        	or	a8, a8, a9
+  4e:	114a42        	s8i	a4, a10, 17
+  51:	2a89      	s32i.n	a8, a10, 8
+  53:	0012c6        	j	a2 <espnow_snapshot_put+0xa2>
+			53: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_put+0xa2
+  56:	bb1b      	addi.n	a11, a11, 1
+  58:	990b      	addi.n	a9, a9, -1
+  5a:	29cc      	bnez.n	a9, 60 <espnow_snapshot_put+0x60>
+			5a: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_put+0x60
+  5c:	000346        	j	6d <espnow_snapshot_put+0x6d>
+			5c: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_put+0x6d
+  5f:	00          	.byte	00
+  60:	0018c2        	l16ui	a12, a8, 0
+  63:	888b      	addi.n	a8, a8, 8
+  65:	ed9c37        	bne	a12, a3, 56 <espnow_snapshot_put+0x56>
+			65: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_put+0x56
+  68:	8b4b      	addi.n	a8, a11, 4
+  6a:	169db7        	bne	a13, a11, 84 <espnow_snapshot_put+0x84>
+			6a: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_put+0x84
+  6d:	f83c      	movi.n	a8, 63
+  6f:	04b8d7        	bgeu	a8, a13, 77 <espnow_snapshot_put+0x77>
+			6f: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_put+0x77
+  72:	001406        	j	c6 <espnow_snapshot_put+0xc6>
+			72: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_put+0xc6
+  75:	0dbd      	mov.n	a11, a13
+  77:	dd1b      	addi.n	a13, a13, 1
+  79:	8b4b      	addi.n	a8, a11, 4
+  7b:	204ad2        	s8i	a13, a10, 32
+  7e:	b098a0        	addx8	a9, a8, a10
+  81:	025932        	s16i	a3, a9, 4
+  84:	b088a0        	addx8	a8, a8, a10
+  87:	930b      	addi.n	a9, a3, -1
+  89:	2849      	s32i.n	a4, a8, 8
+  8b:	f4b090        	extui	a11, a9, 0, 16
+  8e:	f81c      	movi.n	a8, 31
+  90:	1438b7        	bltu	a8, a11, a8 <espnow_snapshot_put+0xa8>
+			90: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_put+0xa8
+  93:	2a88      	l32i.n	a8, a10, 8
+  95:	1b0c      	movi.n	a11, 1
+  97:	401900        	ssl	a9
+  9a:	a19b00        	sll	a9, a11
+  9d:	208890        	or	a8, a8, a9
+  a0:	2a89      	s32i.n	a8, a10, 8
+  a2:	120c      	movi.n	a2, 1
+  a4:	000786        	j	c6 <espnow_snapshot_put+0xc6>
+			a4: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_put+0xc6
+  a7:	00          	.byte	00
+  a8:	ffd332        	addmi	a3, a3, 0xffffff00
+  ab:	f49030        	extui	a9, a3, 0, 16
+  ae:	f03897        	bltu	a8, a9, a2 <espnow_snapshot_put+0xa2>
+			ae: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_put+0xa2
+  b1:	3a88      	l32i.n	a8, a10, 12
+  b3:	190c      	movi.n	a9, 1
+  b5:	401300        	ssl	a3
+  b8:	a19900        	sll	a9, a9
+  bb:	208890        	or	a8, a8, a9
+  be:	3a89      	s32i.n	a8, a10, 12
+  c0:	fff786        	j	a2 <espnow_snapshot_put+0xa2>
+			c0: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_put+0xa2
+  c3:	00          	.byte	00
+  c4:	092d      	mov.n	a2, a9
+  c6:	f01d      	retw.n
+
+after .text.espnow_snapshot_append_unique:
+Disassembly of section .text.espnow_snapshot_append_unique:
+
+00000000 <espnow_snapshot_append_unique>:
+   0:	004136        	entry	a1, 32
+   3:	028d      	mov.n	a8, a2
+   5:	f43030        	extui	a3, a3, 0, 16
+   8:	07e216        	beqz	a2, 8a <espnow_snapshot_append_unique+0x8a>
+			8: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_append_unique+0x8a
+   b:	1b6366        	bnei	a3, 6, 2a <espnow_snapshot_append_unique+0x2a>
+			b: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_append_unique+0x2a
+   e:	80a092        	movi	a9, 128
+  11:	949a      	add.n	a9, a4, a9
+  13:	fea0a2        	movi	a10, 254
+  16:	020c      	movi.n	a2, 0
+  18:	6e3a97        	bltu	a10, a9, 8a <espnow_snapshot_append_unique+0x8a>
+			18: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_append_unique+0x8a
+  1b:	2898      	l32i.n	a9, a8, 8
+  1d:	0a2c      	movi.n	a10, 32
+  1f:	2099a0        	or	a9, a9, a10
+  22:	114842        	s8i	a4, a8, 17
+  25:	2899      	s32i.n	a9, a8, 8
+  27:	0011c6        	j	72 <espnow_snapshot_append_unique+0x72>
+			27: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_append_unique+0x72
+  2a:	020c      	movi.n	a2, 0
+  2c:	05a316        	beqz	a3, 8a <espnow_snapshot_append_unique+0x8a>
+			2c: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_append_unique+0x8a
+  2f:	80c392        	addi	a9, a3, -128
+  32:	f49090        	extui	a9, a9, 0, 16
+  35:	fa3c      	movi.n	a10, 63
+  37:	4fba97        	bgeu	a10, a9, 8a <espnow_snapshot_append_unique+0x8a>
+			37: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_append_unique+0x8a
+  3a:	200892        	l8ui	a9, a8, 32
+  3d:	493a97        	bltu	a10, a9, 8a <espnow_snapshot_append_unique+0x8a>
+			3d: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_append_unique+0x8a
+  40:	a91b      	addi.n	a10, a9, 1
+  42:	2048a2        	s8i	a10, a8, 32
+  45:	b09980        	addx8	a9, a9, a8
+  48:	a30b      	addi.n	a10, a3, -1
+  4a:	125932        	s16i	a3, a9, 36
+  4d:	a949      	s32i.n	a4, a9, 40
+  4f:	f4b0a0        	extui	a11, a10, 0, 16
+  52:	f91c      	movi.n	a9, 31
+  54:	1139b7        	bltu	a9, a11, 69 <espnow_snapshot_append_unique+0x69>
+			54: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_append_unique+0x69
+  57:	2898      	l32i.n	a9, a8, 8
+  59:	1b0c      	movi.n	a11, 1
+  5b:	401a00        	ssl	a10
+  5e:	a1ab00        	sll	a10, a11
+  61:	2099a0        	or	a9, a9, a10
+  64:	2899      	s32i.n	a9, a8, 8
+  66:	000206        	j	72 <espnow_snapshot_append_unique+0x72>
+			66: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_append_unique+0x72
+  69:	ffd332        	addmi	a3, a3, 0xffffff00
+  6c:	f4a030        	extui	a10, a3, 0, 16
+  6f:	05b9a7        	bgeu	a9, a10, 78 <espnow_snapshot_append_unique+0x78>
+			6f: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_append_unique+0x78
+  72:	120c      	movi.n	a2, 1
+  74:	000486        	j	8a <espnow_snapshot_append_unique+0x8a>
+			74: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_append_unique+0x8a
+  77:	00          	.byte	00
+  78:	3898      	l32i.n	a9, a8, 12
+  7a:	1a0c      	movi.n	a10, 1
+  7c:	401300        	ssl	a3
+  7f:	a1aa00        	sll	a10, a10
+  82:	2099a0        	or	a9, a9, a10
+  85:	3899      	s32i.n	a9, a8, 12
+  87:	fff9c6        	j	72 <espnow_snapshot_append_unique+0x72>
+			87: R_XTENSA_SLOT0_OP	.text.espnow_snapshot_append_unique+0x72
+  8a:	f01d      	retw.n
+
+Actual firmware command espnow_link:
+/Users/parklu/.espressif/tools/xtensa-esp-elf/esp-14.2.0_20251107/xtensa-esp-elf/bin/xtensa-esp32s3-elf-gcc -DESP_PLATFORM -DIDF_VER=\"v5.5.3\" -DLV_CONF_INCLUDE_SIMPLE -DMBEDTLS_CONFIG_FILE=\"mbedtls/esp_config.h\" -DOBD_GAUGE_BUILD_TAG=\"rebuild-138-233b2cce8831\" -DOBD_GAUGE_GIT_BRANCH=\"rebuild\" -DOBD_GAUGE_GIT_COUNT=138 -DOBD_GAUGE_GIT_HASH=\"233b2cce8831\" -DSOC_MMU_PAGE_SIZE=CONFIG_MMU_PAGE_SIZE -DSOC_XTAL_FREQ_MHZ=CONFIG_XTAL_FREQ -D_GLIBCXX_HAVE_POSIX_SEMAPHORE -D_GLIBCXX_USE_POSIX_SEMAPHORE -D_GNU_SOURCE -D_POSIX_READER_WRITER_LOCKS -I/private/tmp/obd-brz-build/config -I/Users/parklu/personProject/obd_brz_gauge/main -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/newlib/platform_include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/freertos/config/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/freertos/config/include/freertos -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/freertos/config/xtensa/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/freertos/FreeRTOS-Kernel/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/freertos/FreeRTOS-Kernel/portable/xtensa/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/freertos/FreeRTOS-Kernel/portable/xtensa/include/freertos -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/freertos/esp_additions/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/include/soc -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/include/soc/esp32s3 -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/dma/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/ldo/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/debug_probe/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/mspi_timing_tuning/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/mspi_timing_tuning/tuning_scheme_impl/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/power_supply/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/port/esp32s3/. -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/port/esp32s3/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/mspi_timing_tuning/port/esp32s3/. -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_hw_support/mspi_timing_tuning/port/esp32s3/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/heap/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/heap/tlsf -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/log/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/soc/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/soc/esp32s3 -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/soc/esp32s3/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/soc/esp32s3/register -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/hal/platform_port/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/hal/esp32s3/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/hal/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_rom/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_rom/esp32s3/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_rom/esp32s3/include/esp32s3 -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_rom/esp32s3 -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_common/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_system/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_system/port/soc -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_system/port/include/private -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/xtensa/esp32s3/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/xtensa/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/xtensa/deprecated_include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/lwip/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/lwip/include/apps -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/lwip/include/apps/sntp -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/lwip/lwip/src/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/lwip/port/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/lwip/port/freertos/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/lwip/port/esp32xx/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/lwip/port/esp32xx/include/arch -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/lwip/port/esp32xx/include/sys -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_http_server/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/http_parser -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_event/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_wifi/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_wifi/include/local -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_wifi/wifi_apps/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_wifi/wifi_apps/nan_app/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_phy/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_phy/esp32s3/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_netif/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/include/esp32c3/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/common/osi/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/common/api/include/api -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/common/btc/profile/esp/blufi/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/common/btc/profile/esp/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/common/hci_log/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/common/ble_log/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/host/bluedroid/api/include/api -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/common/tinycrypt/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bt/common/tinycrypt/port -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_timer/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/mbedtls/port/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/mbedtls/mbedtls/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/mbedtls/mbedtls/library -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/mbedtls/esp_crt_bundle/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/mbedtls/mbedtls/3rdparty/everest/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/mbedtls/mbedtls/3rdparty/p256-m -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/mbedtls/mbedtls/3rdparty/p256-m/p256-m -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/nvs_flash/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_partition/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/app_update/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bootloader_support/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/bootloader_support/bootloader_flash/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_app_format/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_bootloader_format/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/json/cJSON -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/sdmmc/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_sdmmc/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_gpio/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/fatfs/diskio -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/fatfs/src -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/fatfs/vfs -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/wear_levelling/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_sdspi/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_spi/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_pm/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/espcoredump/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/espcoredump/include/port/xtensa -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/spi_flash/include -I/Users/parklu/personProject/obd_brz_gauge/managed_components/joltwallet__littlefs/include -I/Users/parklu/personProject/obd_brz_gauge/managed_components/espressif__esp_lcd_touch/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/driver/deprecated -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/driver/i2c/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/driver/touch_sensor/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/driver/twai/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/driver/touch_sensor/esp32s3/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_ringbuf/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_pcnt/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_gptimer/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_mcpwm/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_ana_cmpr/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_i2s/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_sdio/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_dac/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_rmt/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_tsens/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_sdm/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_i2c/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_uart/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/vfs/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_ledc/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_parlio/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_usb_serial_jtag/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_driver_twai/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_lcd/include -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_lcd/interface -I/Users/parklu/.espressif/v5.5.3/esp-idf/components/esp_lcd/rgb/include -I/Users/parklu/personProject/obd_brz_gauge/managed_components/lvgl__lvgl -I/Users/parklu/personProject/obd_brz_gauge/managed_components/lvgl__lvgl/src -I/Users/parklu/personProject/obd_brz_gauge/managed_components -I/Users/parklu/personProject/obd_brz_gauge/managed_components/lvgl__lvgl/examples -I/Users/parklu/personProject/obd_brz_gauge/managed_components/lvgl__lvgl/demos -I/Users/parklu/personProject/obd_brz_gauge/managed_components/espressif__esp_new_jpeg/include -mlongcalls  -fno-builtin-memcpy -fno-builtin-memset -fno-builtin-bzero -fno-builtin-stpcpy -fno-builtin-strncpy -fdiagnostics-color=always -Wno-format -ffunction-sections -fdata-sections -Wall -Werror=all -Wno-error=unused-function -Wno-error=unused-variable -Wno-error=unused-but-set-variable -Wno-error=deprecated-declarations -Wextra -Wno-error=extra -Wno-unused-parameter -Wno-sign-compare -Wno-enum-conversion -gdwarf-4 -ggdb -mdisable-hardware-atomics -O2 -fmacro-prefix-map=/Users/parklu/personProject/obd_brz_gauge=. -fmacro-prefix-map=/Users/parklu/.espressif/v5.5.3/esp-idf=/IDF -fstrict-volatile-bitfields -fno-jump-tables -fno-tree-switch-conversion -std=gnu17 -Wno-old-style-declaration -o esp-idf/main/CMakeFiles/__idf_main.dir/bsp_obd_dsp/espnow_link.c.obj -c /Users/parklu/personProject/obd_brz_gauge/main/bsp_obd_dsp/espnow_link.c
+
+espnow_link before: standalone exactly matches actual object text/literal/data/rodata bytes and all section sizes.
+espnow_link after: standalone exactly matches actual object text/literal/data/rodata bytes and all section sizes.
+espnow_link changed section contents: ['.text.espnow_link_start_master', '.text.espnow_link_start_slave']
+.text.espnow_link_start_master: only _esp_error_check_failed source line immediate moves by two lines.
+Disassembly of section .text.espnow_link_start_master:
+
+00000000 <espnow_link_start_master>:
+   0:	006136        	entry	a1, 48
+   3:	000071        	l32r	a7, fffc0004 <espnow_link_start_master+0xfffc0004>
+			3: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master
+   6:	07b8      	l32i.n	a11, a7, 0
+   8:	0bdc      	bnez.n	a11, 1c <espnow_link_start_master+0x1c>
+			8: R_XTENSA_SLOT0_OP	.text.espnow_link_start_master+0x1c
+   a:	0000d1        	l32r	a13, fffc000c <espnow_link_start_master+0xfffc000c>
+			a: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x4
+   d:	3e0c      	movi.n	a14, 3
+   f:	0bcd      	mov.n	a12, a11
+  11:	01a0a2        	movi	a10, 1
+  14:	000081        	l32r	a8, fffc0014 <espnow_link_start_master+0xfffc0014>
+			14: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x58
+			14: R_XTENSA_ASM_EXPAND	xQueueGenericCreateStatic
+  17:	0008e0        	callx8	a8
+  1a:	07a9      	s32i.n	a10, a7, 0
+  1c:	000081        	l32r	a8, fffc001c <espnow_link_start_master+0xfffc001c>
+			1c: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x5c
+			1c: R_XTENSA_ASM_EXPAND	vp_manager_active
+  1f:	0008e0        	callx8	a8
+  22:	0a7d      	mov.n	a7, a10
+  24:	000081        	l32r	a8, fffc0024 <espnow_link_start_master+0xfffc0024>
+			24: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x60
+			24: R_XTENSA_ASM_EXPAND	vp_manager_active_id
+  27:	0008e0        	callx8	a8
+  2a:	0b0c      	movi.n	a11, 0
+  2c:	178c      	beqz.n	a7, 31 <espnow_link_start_master+0x31>
+			2c: R_XTENSA_SLOT0_OP	.text.espnow_link_start_master+0x31
+  2e:	2417b2        	l16ui	a11, a7, 72
+  31:	000081        	l32r	a8, fffc0034 <espnow_link_start_master+0xfffc0034>
+			31: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x64
+			31: R_XTENSA_ASM_EXPAND	espnow_profile_hash
+  34:	0008e0        	callx8	a8
+  37:	000071        	l32r	a7, fffc0038 <espnow_link_start_master+0xfffc0038>
+			37: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0xc
+  3a:	000091        	l32r	a9, fffc003c <espnow_link_start_master+0xfffc003c>
+			3a: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x8
+  3d:	002782        	l32i	a8, a7, 0
+  40:	0069a2        	s32i	a10, a9, 0
+  43:	a8fc      	bnez.n	a8, 81 <espnow_link_start_master+0x81>
+			43: R_XTENSA_SLOT0_OP	.text.espnow_link_start_master+0x81
+  45:	04a4b2        	movi	a11, 0x404
+  48:	24a2a2        	movi	a10, 0x224
+  4b:	000081        	l32r	a8, fffc004c <espnow_link_start_master+0xfffc004c>
+			4b: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x68
+			4b: R_XTENSA_ASM_EXPAND	heap_caps_malloc
+  4e:	0008e0        	callx8	a8
+  51:	07a9      	s32i.n	a10, a7, 0
+  53:	aaec      	bnez.n	a10, 81 <espnow_link_start_master+0x81>
+			53: R_XTENSA_SLOT0_OP	.text.espnow_link_start_master+0x81
+  55:	24a2a2        	movi	a10, 0x224
+  58:	000081        	l32r	a8, fffc0058 <espnow_link_start_master+0xfffc0058>
+			58: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x6c
+			58: R_XTENSA_ASM_EXPAND	malloc
+  5b:	0008e0        	callx8	a8
+  5e:	07a9      	s32i.n	a10, a7, 0
+  60:	dadc      	bnez.n	a10, 81 <espnow_link_start_master+0x81>
+			60: R_XTENSA_SLOT0_OP	.text.espnow_link_start_master+0x81
+  62:	000081        	l32r	a8, fffc0064 <espnow_link_start_master+0xfffc0064>
+			62: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x70
+			62: R_XTENSA_ASM_EXPAND	esp_log_timestamp
+  65:	0008e0        	callx8	a8
+  68:	0000b1        	l32r	a11, fffc0068 <espnow_link_start_master+0xfffc0068>
+			68: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x10
+  6b:	0000c1        	l32r	a12, fffc006c <espnow_link_start_master+0xfffc006c>
+			6b: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x14
+  6e:	0add      	mov.n	a13, a10
+  70:	20ebb0        	or	a14, a11, a11
+  73:	01a0a2        	movi	a10, 1
+  76:	000081        	l32r	a8, fffc0078 <espnow_link_start_master+0xfffc0078>
+			76: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x74
+			76: R_XTENSA_ASM_EXPAND	esp_log
+  79:	0008e0        	callx8	a8
+  7c:	003546        	j	155 <espnow_link_start_master+0x155>
+			7c: R_XTENSA_SLOT0_OP	.text.espnow_link_start_master+0x155
+  7f:	00          	.byte	00
+  80:	00          	.byte	00
+  81:	000081        	l32r	a8, fffc0084 <espnow_link_start_master+0xfffc0084>
+			81: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x78
+			81: R_XTENSA_ASM_EXPAND	.text.wifi_espnow_init
+  84:	0008e0        	callx8	a8
+  87:	000081        	l32r	a8, fffc0088 <espnow_link_start_master+0xfffc0088>
+			87: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x18
+  8a:	170c      	movi.n	a7, 1
+  8c:	004872        	s8i	a7, a8, 0
+  8f:	000061        	l32r	a6, fffc0090 <espnow_link_start_master+0xfffc0090>
+			8f: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x20
+  92:	000081        	l32r	a8, fffc0094 <espnow_link_start_master+0xfffc0094>
+			92: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x1c
+  95:	050c      	movi.n	a5, 0
+  97:	fb7c      	movi.n	a11, -1
+  99:	004852        	s8i	a5, a8, 0
+  9c:	20a660        	or	a10, a6, a6
+  9f:	000081        	l32r	a8, fffc00a0 <espnow_link_start_master+0xfffc00a0>
+			9f: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x7c
+			9f: R_XTENSA_ASM_EXPAND	xPortEnterCriticalTimeout
+  a2:	0008e0        	callx8	a8
+  a5:	000041        	l32r	a4, fffc00a8 <espnow_link_start_master+0xfffc00a8>
+			a5: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x24
+  a8:	000031        	l32r	a3, fffc00a8 <espnow_link_start_master+0xfffc00a8>
+			a8: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x28
+  ab:	06ad      	mov.n	a10, a6
+  ad:	004372        	s8i	a7, a3, 0
+  b0:	004452        	s8i	a5, a4, 0
+  b3:	000081        	l32r	a8, fffc00b4 <espnow_link_start_master+0xfffc00b4>
+			b3: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x80
+			b3: R_XTENSA_ASM_EXPAND	vPortExitCritical
+  b6:	0008e0        	callx8	a8
+  b9:	000081        	l32r	a8, fffc00bc <espnow_link_start_master+0xfffc00bc>
+			b9: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x84
+			b9: R_XTENSA_ASM_EXPAND	.text.add_broadcast_peer
+  bc:	0008e0        	callx8	a8
+  bf:	0000a1        	l32r	a10, fffc00c0 <espnow_link_start_master+0xfffc00c0>
+			bf: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x2c
+  c2:	000081        	l32r	a8, fffc00c4 <espnow_link_start_master+0xfffc00c4>
+			c2: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x88
+			c2: R_XTENSA_ASM_EXPAND	esp_now_register_recv_cb
+  c5:	0008e0        	callx8	a8
+  c8:	207aa0        	or	a7, a10, a10
+  cb:	011a16        	beqz	a10, e0 <espnow_link_start_master+0xe0>
+			cb: R_XTENSA_SLOT0_OP	.text.espnow_link_start_master+0xe0
+  ce:	0000e1        	l32r	a14, fffc00d0 <espnow_link_start_master+0xfffc00d0>
+			ce: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x30
+  d1:	0000d1        	l32r	a13, fffc00d4 <espnow_link_start_master+0xfffc00d4>
+			d1: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x34
+  d4:	0000b1        	l32r	a11, fffc00d4 <espnow_link_start_master+0xfffc00d4>
+			d4: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x38
+  d7:	5ea1c2        	movi	a12, 0x15e
+  da:	000081        	l32r	a8, fffc00dc <espnow_link_start_master+0xfffc00dc>
+			da: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x8c
+			da: R_XTENSA_ASM_EXPAND	_esp_error_check_failed
+  dd:	0008e0        	callx8	a8
+  e0:	000081        	l32r	a8, fffc00e0 <espnow_link_start_master+0xfffc00e0>
+			e0: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x4c
+  e3:	0000f1        	l32r	a15, fffc00e4 <espnow_link_start_master+0xfffc00e4>
+			e3: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x3c
+  e6:	0000c1        	l32r	a12, fffc00e8 <espnow_link_start_master+0xfffc00e8>
+			e6: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x40
+  e9:	0000b1        	l32r	a11, fffc00ec <espnow_link_start_master+0xfffc00ec>
+			e9: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x44
+  ec:	0000a1        	l32r	a10, fffc00ec <espnow_link_start_master+0xfffc00ec>
+			ec: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x48
+  ef:	0189      	s32i.n	a8, a1, 0
+  f1:	04a0e2        	movi	a14, 4
+  f4:	20d770        	or	a13, a7, a7
+  f7:	000081        	l32r	a8, fffc00f8 <espnow_link_start_master+0xfffc00f8>
+			f7: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x90
+			f7: R_XTENSA_ASM_EXPAND	xTaskCreatePinnedToCore
+  fa:	0008e0        	callx8	a8
+  fd:	0a2d      	mov.n	a2, a10
+  ff:	351a26        	beqi	a10, 1, 138 <espnow_link_start_master+0x138>
+			ff: R_XTENSA_SLOT0_OP	.text.espnow_link_start_master+0x138
+ 102:	ffafb2        	movi	a11, -1
+ 105:	20a660        	or	a10, a6, a6
+ 108:	000081        	l32r	a8, fffc0108 <espnow_link_start_master+0xfffc0108>
+			108: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x94
+			108: R_XTENSA_ASM_EXPAND	xPortEnterCriticalTimeout
+ 10b:	0008e0        	callx8	a8
+ 10e:	06ad      	mov.n	a10, a6
+ 110:	004372        	s8i	a7, a3, 0
+ 113:	004452        	s8i	a5, a4, 0
+ 116:	000081        	l32r	a8, fffc0118 <espnow_link_start_master+0xfffc0118>
+			116: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x98
+			116: R_XTENSA_ASM_EXPAND	vPortExitCritical
+ 119:	0008e0        	callx8	a8
+ 11c:	000081        	l32r	a8, fffc011c <espnow_link_start_master+0xfffc011c>
+			11c: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x9c
+			11c: R_XTENSA_ASM_EXPAND	esp_log_timestamp
+ 11f:	0008e0        	callx8	a8
+ 122:	0000b1        	l32r	a11, fffc0124 <espnow_link_start_master+0xfffc0124>
+			122: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x10
+ 125:	0000c1        	l32r	a12, fffc0128 <espnow_link_start_master+0xfffc0128>
+			125: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x50
+ 128:	0add      	mov.n	a13, a10
+ 12a:	0bed      	mov.n	a14, a11
+ 12c:	1a0c      	movi.n	a10, 1
+ 12e:	000081        	l32r	a8, fffc0130 <espnow_link_start_master+0xfffc0130>
+			12e: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0xa0
+			12e: R_XTENSA_ASM_EXPAND	esp_log
+ 131:	0008e0        	callx8	a8
+ 134:	000746        	j	155 <espnow_link_start_master+0x155>
+			134: R_XTENSA_SLOT0_OP	.text.espnow_link_start_master+0x155
+ 137:	00          	.byte	00
+ 138:	000081        	l32r	a8, fffc0138 <espnow_link_start_master+0xfffc0138>
+			138: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0xa4
+			138: R_XTENSA_ASM_EXPAND	esp_log_timestamp
+ 13b:	0008e0        	callx8	a8
+ 13e:	0000b1        	l32r	a11, fffc0140 <espnow_link_start_master+0xfffc0140>
+			13e: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x10
+ 141:	0000c1        	l32r	a12, fffc0144 <espnow_link_start_master+0xfffc0144>
+			141: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0x54
+ 144:	0add      	mov.n	a13, a10
+ 146:	0129      	s32i.n	a2, a1, 0
+ 148:	64a0f2        	movi	a15, 100
+ 14b:	0bed      	mov.n	a14, a11
+ 14d:	3a0c      	movi.n	a10, 3
+ 14f:	000081        	l32r	a8, fffc0150 <espnow_link_start_master+0xfffc0150>
+			14f: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_master+0xa8
+			14f: R_XTENSA_ASM_EXPAND	esp_log
+ 152:	0008e0        	callx8	a8
+ 155:	f01d      	retw.n
+
+.text.espnow_link_start_slave: only _esp_error_check_failed source line immediate moves by two lines.
+Disassembly of section .text.espnow_link_start_slave:
+
+00000000 <espnow_link_start_slave>:
+   0:	012136        	entry	a1, 144
+   3:	000081        	l32r	a8, fffc0004 <espnow_link_start_slave+0xfffc0004>
+			3: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_slave+0x54
+			3: R_XTENSA_ASM_EXPAND	vp_manager_active
+   6:	0008e0        	callx8	a8
+   9:	207aa0        	or	a7, a10, a10
+   c:	000081        	l32r	a8, fffc000c <espnow_link_start_slave+0xfffc000c>
+			c: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_slave+0x58
+			c: R_XTENSA_ASM_EXPAND	vp_manager_active_id
+   f:	0008e0        	callx8	a8
+  12:	0b0c      	movi.n	a11, 0
+  14:	178c      	beqz.n	a7, 19 <espnow_link_start_slave+0x19>
+			14: R_XTENSA_SLOT0_OP	.text.espnow_link_start_slave+0x19
+  16:	2417b2        	l16ui	a11, a7, 72
+  19:	000081        	l32r	a8, fffc001c <espnow_link_start_slave+0xfffc001c>
+			19: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_slave+0x5c
+			19: R_XTENSA_ASM_EXPAND	espnow_profile_hash
+  1c:	0008e0        	callx8	a8
+  1f:	000081        	l32r	a8, fffc0020 <espnow_link_start_slave+0xfffc0020>
+			1f: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_slave
+  22:	0a9d      	mov.n	a9, a10
+  24:	006892        	s32i	a9, a8, 0
+  27:	10c1a2        	addi	a10, a1, 16
+  2a:	000081        	l32r	a8, fffc002c <espnow_link_start_slave+0xfffc002c>
+			2a: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_slave+0x60
+			2a: R_XTENSA_ASM_EXPAND	nvs_cfg_snapshot
+  2d:	0008e0        	callx8	a8
+  30:	0000a1        	l32r	a10, fffc0030 <espnow_link_start_slave+0xfffc0030>
+			30: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_slave+0x4
+  33:	ffafb2        	movi	a11, -1
+  36:	000081        	l32r	a8, fffc0038 <espnow_link_start_slave+0xfffc0038>
+			36: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_slave+0x64
+			36: R_XTENSA_ASM_EXPAND	xPortEnterCriticalTimeout
+  39:	0008e0        	callx8	a8
+  3c:	000071        	l32r	a7, fffc003c <espnow_link_start_slave+0xfffc003c>
+			3c: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_slave+0x8
+  3f:	6c0c      	movi.n	a12, 6
+  41:	5fc1b2        	addi	a11, a1, 95
+  44:	07ad      	mov.n	a10, a7
+  46:	000081        	l32r	a8, fffc0048 <espnow_link_start_slave+0xfffc0048>
+			46: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_slave+0x68
+			46: R_XTENSA_ASM_EXPAND	memcpy
+  49:	0008e0        	callx8	a8
+  4c:	000782        	l8ui	a8, a7, 0
+  4f:	190c      	movi.n	a9, 1
+  51:	070c      	movi.n	a7, 0
+  53:	839780        	moveqz	a9, a7, a8
+  56:	000081        	l32r	a8, fffc0058 <espnow_link_start_slave+0xfffc0058>
+			56: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_slave+0xc
+  59:	0000a1        	l32r	a10, fffc005c <espnow_link_start_slave+0xfffc005c>
+			59: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_slave+0x4
+  5c:	004892        	s8i	a9, a8, 0
+  5f:	000081        	l32r	a8, fffc0060 <espnow_link_start_slave+0xfffc0060>
+			5f: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_slave+0x6c
+			5f: R_XTENSA_ASM_EXPAND	vPortExitCritical
+  62:	0008e0        	callx8	a8
+  65:	000081        	l32r	a8, fffc0068 <espnow_link_start_slave+0xfffc0068>
+			65: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_slave+0x70
+			65: R_XTENSA_ASM_EXPAND	.text.wifi_espnow_init
+  68:	0008e0        	callx8	a8
+  6b:	000081        	l32r	a8, fffc006c <espnow_link_start_slave+0xfffc006c>
+			6b: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_slave+0x14
+  6e:	20b770        	or	a11, a7, a7
+  71:	0020c0        	memw
+  74:	004872        	s8i	a7, a8, 0
+  77:	000081        	l32r	a8, fffc0078 <espnow_link_start_slave+0xfffc0078>
+			77: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_slave+0x10
+  7a:	0ca0a2        	movi	a10, 12
+  7d:	004872        	s8i	a7, a8, 0
+  80:	000081        	l32r	a8, fffc0080 <espnow_link_start_slave+0xfffc0080>
+			80: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_slave+0x18
+  83:	004872        	s8i	a7, a8, 0
+  86:	000081        	l32r	a8, fffc0088 <espnow_link_start_slave+0xfffc0088>
+			86: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_slave+0x1c
+  89:	004872        	s8i	a7, a8, 0
+  8c:	000081        	l32r	a8, fffc008c <espnow_link_start_slave+0xfffc008c>
+			8c: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_slave+0x20
+  8f:	004872        	s8i	a7, a8, 0
+  92:	000081        	l32r	a8, fffc0094 <espnow_link_start_slave+0xfffc0094>
+			92: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_slave+0x24
+  95:	0020c0        	memw
+  98:	004872        	s8i	a7, a8, 0
+  9b:	000081        	l32r	a8, fffc009c <espnow_link_start_slave+0xfffc009c>
+			9b: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_slave+0x74
+			9b: R_XTENSA_ASM_EXPAND	signal_store_set
+  9e:	0008e0        	callx8	a8
+  a1:	000081        	l32r	a8, fffc00a4 <espnow_link_start_slave+0xfffc00a4>
+			a1: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_slave+0x78
+			a1: R_XTENSA_ASM_EXPAND	.text.add_broadcast_peer
+  a4:	0008e0        	callx8	a8
+  a7:	0000a1        	l32r	a10, fffc00a8 <espnow_link_start_slave+0xfffc00a8>
+			a7: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_slave+0x28
+  aa:	000081        	l32r	a8, fffc00ac <espnow_link_start_slave+0xfffc00ac>
+			aa: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_slave+0x7c
+			aa: R_XTENSA_ASM_EXPAND	esp_now_register_recv_cb
+  ad:	0008e0        	callx8	a8
+  b0:	208aa0        	or	a8, a10, a10
+  b3:	011a16        	beqz	a10, c8 <espnow_link_start_slave+0xc8>
+			b3: R_XTENSA_SLOT0_OP	.text.espnow_link_start_slave+0xc8
+  b6:	0000e1        	l32r	a14, fffc00b8 <espnow_link_start_slave+0xfffc00b8>
+			b6: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_slave+0x2c
+  b9:	0000d1        	l32r	a13, fffc00bc <espnow_link_start_slave+0xfffc00bc>
+			b9: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_slave+0x30
+  bc:	0000b1        	l32r	a11, fffc00bc <espnow_link_start_slave+0xfffc00bc>
+			bc: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_slave+0x34
+  bf:	4ca2c2        	movi	a12, 0x24c
+  c2:	000081        	l32r	a8, fffc00c4 <espnow_link_start_slave+0xfffc00c4>
+			c2: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_slave+0x80
+			c2: R_XTENSA_ASM_EXPAND	_esp_error_check_failed
+  c5:	0008e0        	callx8	a8
+  c8:	000091        	l32r	a9, fffc00c8 <espnow_link_start_slave+0xfffc00c8>
+			c8: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_slave+0x48
+  cb:	0000f1        	l32r	a15, fffc00cc <espnow_link_start_slave+0xfffc00cc>
+			cb: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_slave+0x38
+  ce:	0000c1        	l32r	a12, fffc00d0 <espnow_link_start_slave+0xfffc00d0>
+			ce: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_slave+0x3c
+  d1:	0000b1        	l32r	a11, fffc00d4 <espnow_link_start_slave+0xfffc00d4>
+			d1: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_slave+0x40
+  d4:	0000a1        	l32r	a10, fffc00d4 <espnow_link_start_slave+0xfffc00d4>
+			d4: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_slave+0x44
+  d7:	08dd      	mov.n	a13, a8
+  d9:	006192        	s32i	a9, a1, 0
+  dc:	04a0e2        	movi	a14, 4
+  df:	000081        	l32r	a8, fffc00e0 <espnow_link_start_slave+0xfffc00e0>
+			df: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_slave+0x84
+			df: R_XTENSA_ASM_EXPAND	xTaskCreatePinnedToCore
+  e2:	0008e0        	callx8	a8
+  e5:	000081        	l32r	a8, fffc00e8 <espnow_link_start_slave+0xfffc00e8>
+			e5: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_slave+0x88
+			e5: R_XTENSA_ASM_EXPAND	esp_log_timestamp
+  e8:	0008e0        	callx8	a8
+  eb:	0000b1        	l32r	a11, fffc00ec <espnow_link_start_slave+0xfffc00ec>
+			eb: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_slave+0x4c
+  ee:	f4a182        	movi	a8, 0x1f4
+  f1:	0000c1        	l32r	a12, fffc00f4 <espnow_link_start_slave+0xfffc00f4>
+			f1: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_slave+0x50
+  f4:	0add      	mov.n	a13, a10
+  f6:	0189      	s32i.n	a8, a1, 0
+  f8:	1f0c      	movi.n	a15, 1
+  fa:	0bed      	mov.n	a14, a11
+  fc:	3a0c      	movi.n	a10, 3
+  fe:	000081        	l32r	a8, fffc0100 <espnow_link_start_slave+0xfffc0100>
+			fe: R_XTENSA_SLOT0_OP	.literal.espnow_link_start_slave+0x8c
+			fe: R_XTENSA_ASM_EXPAND	esp_log
+ 101:	0008e0        	callx8	a8
+ 104:	f01d      	retw.n
+
+espnow_link before sizes:
+/tmp/obd-snapshot-append-20261014/espnow_link-before-standalone.obj  :
+section                                           size   addr
+.literal.ops_invalidate_many                         4      0
+.literal.ops_set_many                                4      0
+.literal.ops_invalidate                              8      0
+.literal.ops_set                                     8      0
+.literal.ops_slot_by_id                              4      0
+.literal.wifi_espnow_init                          128      0
+.literal.add_broadcast_peer                         28      0
+.literal.handle_presence$part$0                     24      0
+.literal.slave_on_data                             100      0
+.literal.master_start_linktest                      40      0
+.literal.recv_cb                                    88      0
+.literal.slave_drop_link                            28      0
+.literal.slave_task                                 88      0
+.literal.master_task                               260      0
+.literal.espnow_link_start_master                  172      0
+.literal.espnow_link_start_slave                   144      0
+.literal.espnow_link_slave_has_data                 12      0
+.literal.espnow_link_get_master_name                 4      0
+.literal.espnow_link_get_bound_master_mac            8      0
+.literal.espnow_link_bind_master                    56      0
+.literal.espnow_link_unbind_master                  56      0
+.literal.espnow_master_online_slaves                12      0
+.literal.espnow_link_trigger_linked_test            48      0
+.literal.espnow_link_broadcast_threshold            28      0
+.literal.espnow_link_linktest_active                24      0
+.literal.espnow_link_linked_en_with_local            8      0
+.literal.espnow_link_linked_en                      12      0
+.literal.espnow_link_apply_synced_threshold         44      0
+.literal.espnow_link_pause_for_ota                 128      0
+.text                                                0      0
+.data                                                0      0
+.bss                                                 0      0
+.text.ops_invalidate_many                           15      0
+.text.ops_set_many                                  18      0
+.text.ops_invalidate                                24      0
+.text.ops_set                                       26      0
+.text.ops_slot_by_id                                16      0
+.rodata.wifi_espnow_init.str1.4                    251      0
+.text.wifi_espnow_init                             360      0
+.rodata.add_broadcast_peer.str1.4                   24      0
+.text.add_broadcast_peer                            71      0
+.text.handle_presence$part$0                       204      0
+.text.slave_on_data                                423      0
+.text.master_start_linktest                         87      0
+.rodata.recv_cb.str1.4                              74      0
+.text.recv_cb                                      351      0
+.text.slave_drop_link                               90      0
+.rodata.slave_task.str1.4                          103      0
+.text.slave_task                                   281      0
+.rodata.master_task.str1.4                          48      0
+.text.master_task                                 1244      0
+.rodata.espnow_link_start_master.str1.4            241      0
+.text.espnow_link_start_master                     343      0
+.rodata.espnow_link_start_slave.str1.4              85      0
+.text.espnow_link_start_slave                      262      0
+.text.espnow_link_slave_has_data                    73      0
+.text.espnow_link_get_master_name                    8      0
+.text.espnow_link_get_bound_master_mac              28      0
+.rodata.espnow_link_bind_master.str1.4              75      0
+.text.espnow_link_bind_master                      155      0
+.rodata.espnow_link_unbind_master.str1.4            69      0
+.text.espnow_link_unbind_master                    118      0
+.text.espnow_master_online_slaves                   65      0
+.rodata.espnow_link_trigger_linked_test.str1.4      52      0
+.text.espnow_link_trigger_linked_test              110      0
+.text.espnow_link_broadcast_threshold               66      0
+.text.espnow_link_linktest_active                   55      0
+.text.espnow_link_linked_en_with_local              28      0
+.text.espnow_link_linked_en                         46      0
+.text.espnow_link_apply_synced_threshold           122      0
+.rodata.espnow_link_pause_for_ota.str1.4           282      0
+.text.espnow_link_pause_for_ota                    280      0
+.rodata.__func__$0                                  24      0
+.rodata.__func__$1                                  19      0
+.rodata.__func__$2                                  17      0
+.rodata.__func__$3                                  25      0
+.rodata.s_apply_ops                                 24      0
+.bss.s_master_name                                  12      0
+.data.s_bound_master_mac_mux                         8      0
+.bss.s_bound_master_mac_active                       1      0
+.bss.s_bound_master_mac                              6      0
+.bss.s_local_profile_hash                            4      0
+.bss.s_tx_seq                                        4      0
+.bss.s_rx_intro_step                                 1      0
+.bss.s_rx_sweep_step                                 1      0
+.bss.s_rx_intro_valid                                1      0
+.bss.s_rx_sweep_valid                                1      0
+.bss.s_rx_veh_ok                                     1      0
+.bss.s_rx_link                                       1      0
+.bss.s_rx_live                                       1      0
+.bss.s_last_rx_us                                    8      0
+.rodata.s_broadcast_mac                              6      0
+.bss.s_tx_v6                                         1      0
+.bss.s_snap                                          4      0
+.bss.s_slaves                                       96      0
+.bss.s_rx_linked_en                                  1      0
+.bss.s_rx_linktest                                   1      0
+.bss.s_master_wake                                   4      0
+.bss.s_master_wake_storage                          84      0
+.bss.s_linktest_start_us                             8      0
+.bss.s_linktest_active                               1      0
+.bss.s_linktest_accepting                            1      0
+.data.s_linktest_mux                                 8      0
+.bss.s_slave_task_handle                             4      0
+.bss.s_master_task_handle                            4      0
+.bss.s_espnow_started                                1      0
+.bss.s_is_master                                     1      0
+.rodata.MASTER_NAME                                  9      0
+.debug_frame                                       712      0
+.debug_info                                      20091      0
+.debug_abbrev                                     1789      0
+.debug_loc                                        5180      0
+.debug_aranges                                     256      0
+.debug_ranges                                     1296      0
+.debug_line                                      16583      0
+.debug_str                                        7743      0
+.comment                                            48      0
+.xtensa.info                                        56      0
+.xt.lit                                            232      0
+.xt.prop                                          3060      0
+Total                                            65280
+
+
+
+before .text.master_task:
+Disassembly of section .text.master_task:
+
+00000000 <master_task>:
+   0:	054136        	entry	a1, 0x2a0
+   3:	080c      	movi.n	a8, 0
+   5:	9e6182        	s32i	a8, a1, 0x278
+   8:	fca182        	movi	a8, 0x1fc
+   b:	808180        	add	a8, a1, a8
+   e:	9a6182        	s32i	a8, a1, 0x268
+  11:	9a2172        	l32i	a7, a1, 0x268
+  14:	07ad      	mov.n	a10, a7
+  16:	000081        	l32r	a8, fffc0018 <master_task+0xfffc0018>
+			16: R_XTENSA_SLOT0_OP	.literal.master_task+0x68
+			16: R_XTENSA_ASM_EXPAND	nvs_cfg_read
+  19:	0008e0        	callx8	a8
+  1c:	0000a1        	l32r	a10, fffc001c <master_task+0xfffc001c>
+			1c: R_XTENSA_SLOT0_OP	.literal.master_task+0x4
+  1f:	fb7c      	movi.n	a11, -1
+  21:	261772        	l16ui	a7, a7, 76
+  24:	000081        	l32r	a8, fffc0024 <master_task+0xfffc0024>
+			24: R_XTENSA_SLOT0_OP	.literal.master_task+0x6c
+			24: R_XTENSA_ASM_EXPAND	xPortEnterCriticalTimeout
+  27:	0008e0        	callx8	a8
+  2a:	000081        	l32r	a8, fffc002c <master_task+0xfffc002c>
+			2a: R_XTENSA_SLOT0_OP	.literal.master_task+0x8
+  2d:	000852        	l8ui	a5, a8, 0
+  30:	0b5516        	beqz	a5, e9 <master_task+0xe9>
+			30: R_XTENSA_SLOT0_OP	.text.master_task+0xe9
+  33:	000081        	l32r	a8, fffc0034 <master_task+0xfffc0034>
+			33: R_XTENSA_SLOT0_OP	.literal.master_task+0x70
+			33: R_XTENSA_ASM_EXPAND	esp_timer_get_time
+  36:	0008e0        	callx8	a8
+  39:	000081        	l32r	a8, fffc003c <master_task+0xfffc003c>
+			39: R_XTENSA_SLOT0_OP	.literal.master_task+0xc
+  3c:	000091        	l32r	a9, fffc003c <master_task+0xfffc003c>
+			3c: R_XTENSA_SLOT0_OP	.literal.master_task+0xc
+  3f:	0888      	l32i.n	a8, a8, 0
+  41:	1998      	l32i.n	a9, a9, 4
+  43:	c04a80        	sub	a4, a10, a8
+  46:	c06b90        	sub	a6, a11, a9
+  49:	629a80        	saltu	a9, a10, a8
+  4c:	c06690        	sub	a6, a6, a9
+  4f:	e8a3c2        	movi	a12, 0x3e8
+  52:	0d0c      	movi.n	a13, 0
+  54:	04ad      	mov.n	a10, a4
+  56:	06bd      	mov.n	a11, a6
+  58:	000081        	l32r	a8, fffc0058 <master_task+0xfffc0058>
+			58: R_XTENSA_SLOT0_OP	.literal.master_task+0x74
+			58: R_XTENSA_ASM_EXPAND	__divdi3
+  5b:	0008e0        	callx8	a8
+  5e:	4bcc      	bnez.n	a11, 66 <master_task+0x66>
+			5e: R_XTENSA_SLOT0_OP	.text.master_task+0x66
+  60:	000081        	l32r	a8, fffc0060 <master_task+0xfffc0060>
+			60: R_XTENSA_SLOT0_OP	.literal.master_task+0x10
+  63:	0ab8a7        	bgeu	a8, a10, 71 <master_task+0x71>
+			63: R_XTENSA_SLOT0_OP	.text.master_task+0x71
+  66:	000091        	l32r	a9, fffc0068 <master_task+0xfffc0068>
+			66: R_XTENSA_SLOT0_OP	.literal.master_task+0x8
+  69:	080c      	movi.n	a8, 0
+  6b:	004982        	s8i	a8, a9, 0
+  6e:	001dc6        	j	e9 <master_task+0xe9>
+			6e: R_XTENSA_SLOT0_OP	.text.master_task+0xe9
+  71:	c8a082        	movi	a8, 200
+  74:	778a      	add.n	a7, a7, a8
+  76:	1c16e6        	bgei	a6, 1, 96 <master_task+0x96>
+			76: R_XTENSA_SLOT0_OP	.text.master_task+0x96
+  79:	46cc      	bnez.n	a6, 81 <master_task+0x81>
+			79: R_XTENSA_SLOT0_OP	.text.master_task+0x81
+  7b:	000081        	l32r	a8, fffc007c <master_task+0xfffc007c>
+			7b: R_XTENSA_SLOT0_OP	.literal.master_task+0x14
+  7e:	0e3847        	bltu	a8, a4, 90 <master_task+0x90>
+			7e: R_XTENSA_SLOT0_OP	.text.master_task+0x90
+  81:	8277a0        	mull	a7, a7, a10
+  84:	000081        	l32r	a8, fffc0084 <master_task+0xfffc0084>
+			84: R_XTENSA_SLOT0_OP	.literal.master_task+0x18
+  87:	a27780        	muluh	a7, a7, a8
+  8a:	417c70        	srli	a7, a7, 12
+  8d:	000646        	j	aa <master_task+0xaa>
+			8d: R_XTENSA_SLOT0_OP	.text.master_task+0xaa
+  90:	000081        	l32r	a8, fffc0090 <master_task+0xfffc0090>
+			90: R_XTENSA_SLOT0_OP	.literal.master_task+0x1c
+  93:	13b847        	bgeu	a8, a4, aa <master_task+0xaa>
+			93: R_XTENSA_SLOT0_OP	.text.master_task+0xaa
+  96:	000081        	l32r	a8, fffc0098 <master_task+0xfffc0098>
+			96: R_XTENSA_SLOT0_OP	.literal.master_task+0x54
+  99:	000091        	l32r	a9, fffc009c <master_task+0xfffc009c>
+			99: R_XTENSA_SLOT0_OP	.literal.master_task+0x18
+  9c:	8a8a      	add.n	a8, a10, a8
+  9e:	828780        	mull	a8, a7, a8
+  a1:	a28890        	muluh	a8, a8, a9
+  a4:	418b80        	srli	a8, a8, 11
+  a7:	c07780        	sub	a7, a7, a8
+  aa:	000081        	l32r	a8, fffc00ac <master_task+0xfffc00ac>
+			aa: R_XTENSA_SLOT0_OP	.literal.master_task
+  ad:	0000a1        	l32r	a10, fffc00b0 <master_task+0xfffc00b0>
+			ad: R_XTENSA_SLOT0_OP	.literal.master_task+0x4
+  b0:	18b877        	bgeu	a8, a7, cc <master_task+0xcc>
+			b0: R_XTENSA_SLOT0_OP	.text.master_task+0xcc
+  b3:	000081        	l32r	a8, fffc00b4 <master_task+0xfffc00b4>
+			b3: R_XTENSA_SLOT0_OP	.literal.master_task+0x78
+			b3: R_XTENSA_ASM_EXPAND	vPortExitCritical
+  b6:	0008e0        	callx8	a8
+  b9:	0000b1        	l32r	a11, fffc00bc <master_task+0xfffc00bc>
+			b9: R_XTENSA_SLOT0_OP	.literal.master_task
+  bc:	1a0c      	movi.n	a10, 1
+  be:	9e6152        	s32i	a5, a1, 0x278
+  c1:	270c      	movi.n	a7, 2
+  c3:	9f61b2        	s32i	a11, a1, 0x27c
+  c6:	9d61a2        	s32i	a10, a1, 0x274
+  c9:	000e46        	j	106 <master_task+0x106>
+			c9: R_XTENSA_SLOT0_OP	.text.master_task+0x106
+  cc:	f48070        	extui	a8, a7, 0, 16
+  cf:	9f6182        	s32i	a8, a1, 0x27c
+  d2:	000081        	l32r	a8, fffc00d4 <master_task+0xfffc00d4>
+			d2: R_XTENSA_SLOT0_OP	.literal.master_task+0x7c
+			d2: R_XTENSA_ASM_EXPAND	vPortExitCritical
+  d5:	0008e0        	callx8	a8
+  d8:	1a0c      	movi.n	a10, 1
+  da:	07bd      	mov.n	a11, a7
+  dc:	9e6152        	s32i	a5, a1, 0x278
+  df:	270c      	movi.n	a7, 2
+  e1:	9d61a2        	s32i	a10, a1, 0x274
+  e4:	000786        	j	106 <master_task+0x106>
+			e4: R_XTENSA_SLOT0_OP	.text.master_task+0x106
+  e7:	00          	.byte	00
+  e8:	00          	.byte	00
+  e9:	0000a1        	l32r	a10, fffc00ec <master_task+0xfffc00ec>
+			e9: R_XTENSA_SLOT0_OP	.literal.master_task+0x4
+  ec:	070c      	movi.n	a7, 0
+  ee:	000081        	l32r	a8, fffc00f0 <master_task+0xfffc00f0>
+			ee: R_XTENSA_SLOT0_OP	.literal.master_task+0x80
+			ee: R_XTENSA_ASM_EXPAND	vPortExitCritical
+  f1:	0008e0        	callx8	a8
+  f4:	9e2182        	l32i	a8, a1, 0x278
+  f7:	589c      	beqz.n	a8, 110 <master_task+0x110>
+			f7: R_XTENSA_SLOT0_OP	.text.master_task+0x110
+  f9:	07bd      	mov.n	a11, a7
+  fb:	07ad      	mov.n	a10, a7
+  fd:	9f6172        	s32i	a7, a1, 0x27c
+ 100:	9d6172        	s32i	a7, a1, 0x274
+ 103:	9e6172        	s32i	a7, a1, 0x278
+ 106:	000081        	l32r	a8, fffc0108 <master_task+0xfffc0108>
+			106: R_XTENSA_SLOT0_OP	.literal.master_task+0x84
+			106: R_XTENSA_ASM_EXPAND	obd_data_rpm_override_set
+ 109:	0008e0        	callx8	a8
+ 10c:	000186        	j	116 <master_task+0x116>
+			10c: R_XTENSA_SLOT0_OP	.text.master_task+0x116
+ 10f:	00          	.byte	00
+ 110:	9f6172        	s32i	a7, a1, 0x27c
+ 113:	9d6172        	s32i	a7, a1, 0x274
+ 116:	000081        	l32r	a8, fffc0118 <master_task+0xfffc0118>
+			116: R_XTENSA_SLOT0_OP	.literal.master_task+0x20
+ 119:	7ca162        	movi	a6, 0x17c
+ 11c:	0838      	l32i.n	a3, a8, 0
+ 11e:	616a      	add.n	a6, a1, a6
+ 120:	03ad      	mov.n	a10, a3
+ 122:	000081        	l32r	a8, fffc0124 <master_task+0xfffc0124>
+			122: R_XTENSA_SLOT0_OP	.literal.master_task+0x88
+			122: R_XTENSA_ASM_EXPAND	espnow_snapshot_init
+ 125:	0008e0        	callx8	a8
+ 128:	000081        	l32r	a8, fffc0128 <master_task+0xfffc0128>
+			128: R_XTENSA_SLOT0_OP	.literal.master_task+0x24
+ 12b:	000091        	l32r	a9, fffc012c <master_task+0xfffc012c>
+			12b: R_XTENSA_SLOT0_OP	.literal.master_task+0x28
+ 12e:	0888      	l32i.n	a8, a8, 0
+ 130:	0998      	l32i.n	a9, a9, 0
+ 132:	0000a1        	l32r	a10, fffc0134 <master_task+0xfffc0134>
+			132: R_XTENSA_SLOT0_OP	.literal.master_task+0x24
+ 135:	881b      	addi.n	a8, a8, 1
+ 137:	0a89      	s32i.n	a8, a10, 0
+ 139:	0389      	s32i.n	a8, a3, 0
+ 13b:	1399      	s32i.n	a9, a3, 4
+ 13d:	06ad      	mov.n	a10, a6
+ 13f:	080c      	movi.n	a8, 0
+ 141:	c90c      	movi.n	a9, 12
+ 143:	058976        	loop	a9, 14c <master_task+0x14c>
+			143: R_XTENSA_SLOT0_OP	.text.master_task+0x14c
+ 146:	0a89      	s32i.n	a8, a10, 0
+ 148:	881b      	addi.n	a8, a8, 1
+ 14a:	aa4b      	addi.n	a10, a10, 4
+ 14c:	fca0c2        	movi	a12, 252
+ 14f:	7ca1a2        	movi	a10, 0x17c
+ 152:	cc1a      	add.n	a12, a12, a1
+ 154:	db0c      	movi.n	a11, 13
+ 156:	a1aa      	add.n	a10, a1, a10
+ 158:	6b6182        	s32i	a8, a1, 0x1ac
+ 15b:	000081        	l32r	a8, fffc015c <master_task+0xfffc015c>
+			15b: R_XTENSA_SLOT0_OP	.literal.master_task+0x8c
+			15b: R_XTENSA_ASM_EXPAND	signal_store_get_many
+ 15e:	0008e0        	callx8	a8
+ 161:	20daa0        	or	a13, a10, a10
+ 164:	209bb0        	or	a9, a11, a11
+ 167:	00a0a2        	movi	a10, 0
+ 16a:	0b6dc7        	bbci	a13, 12, 179 <master_task+0x179>
+			16a: R_XTENSA_SLOT0_OP	.text.master_task+0x179
+ 16d:	4b21a2        	l32i	a10, a1, 0x12c
+ 170:	fecaa2        	addi	a10, a10, -2
+ 173:	40faa0        	nsau	a10, a10
+ 176:	41a5a0        	srli	a10, a10, 5
+ 179:	9a2182        	l32i	a8, a1, 0x268
+ 17c:	986192        	s32i	a9, a1, 0x260
+ 17f:	5b08b2        	l8ui	a11, a8, 91
+ 182:	180c      	movi.n	a8, 1
+ 184:	838bb0        	moveqz	a8, a11, a11
+ 187:	1188e0        	slli	a8, a8, 2
+ 18a:	208870        	or	a8, a8, a7
+ 18d:	2088a0        	or	a8, a8, a10
+ 190:	104382        	s8i	a8, a3, 16
+ 193:	9c61d2        	s32i	a13, a1, 0x270
+ 196:	000081        	l32r	a8, fffc0198 <master_task+0xfffc0198>
+			196: R_XTENSA_SLOT0_OP	.literal.master_task+0x90
+			196: R_XTENSA_ASM_EXPAND	ui_sweep_get_step
+ 199:	0008e0        	callx8	a8
+ 19c:	1243a2        	s8i	a10, a3, 18
+ 19f:	000081        	l32r	a8, fffc01a0 <master_task+0xfffc01a0>
+			19f: R_XTENSA_SLOT0_OP	.literal.master_task+0x94
+			19f: R_XTENSA_ASM_EXPAND	ui_intro_get_step
+ 1a2:	0008e0        	callx8	a8
+ 1a5:	0000b1        	l32r	a11, fffc01a8 <master_task+0xfffc01a8>
+			1a5: R_XTENSA_SLOT0_OP	.literal.master_task+0x2c
+ 1a8:	1343a2        	s8i	a10, a3, 19
+ 1ab:	9c0c      	movi.n	a12, 9
+ 1ad:	14c3a2        	addi	a10, a3, 20
+ 1b0:	000081        	l32r	a8, fffc01b0 <master_task+0xfffc01b0>
+			1b0: R_XTENSA_SLOT0_OP	.literal.master_task+0x98
+			1b0: R_XTENSA_ASM_EXPAND	memcpy
+ 1b3:	0008e0        	callx8	a8
+ 1b6:	982192        	l32i	a9, a1, 0x260
+ 1b9:	fca082        	movi	a8, 252
+ 1bc:	218a      	add.n	a2, a1, a8
+ 1be:	065d      	mov.n	a5, a6
+ 1c0:	f99a      	add.n	a15, a9, a9
+ 1c2:	9b6162        	s32i	a6, a1, 0x26c
+ 1c5:	9c2162        	l32i	a6, a1, 0x270
+ 1c8:	024d      	mov.n	a4, a2
+ 1ca:	986132        	s32i	a3, a1, 0x260
+ 1cd:	996122        	s32i	a2, a1, 0x264
+ 1d0:	070c      	movi.n	a7, 0
+ 1d2:	0e2c      	movi.n	a14, 32
+ 1d4:	092d      	mov.n	a2, a9
+ 1d6:	0f3d      	mov.n	a3, a15
+ 1d8:	fa7c      	movi.n	a10, -1
+ 1da:	30a7a0        	xor	a10, a7, a10
+ 1dd:	400700        	ssr	a7
+ 1e0:	918060        	srl	a8, a6
+ 1e3:	401a00        	ssl	a10
+ 1e6:	a1a300        	sll	a10, a3
+ 1e9:	10c7e0        	and	a12, a7, a14
+ 1ec:	400700        	ssr	a7
+ 1ef:	91b020        	srl	a11, a2
+ 1f2:	208a80        	or	a8, a10, a8
+ 1f5:	938bc0        	movnez	a8, a11, a12
+ 1f8:	1c6807        	bbci	a8, 0, 218 <master_task+0x218>
+			1f8: R_XTENSA_SLOT0_OP	.text.master_task+0x218
+ 1fb:	0588      	l32i.n	a8, a5, 0
+ 1fd:	000091        	l32r	a9, fffc0200 <master_task+0xfffc0200>
+			1fd: R_XTENSA_SLOT0_OP	.literal.master_task+0x30
+ 200:	908880        	addx2	a8, a8, a8
+ 203:	1188c0        	slli	a8, a8, 4
+ 206:	898a      	add.n	a8, a9, a8
+ 208:	04c8      	l32i.n	a12, a4, 0
+ 20a:	0018b2        	l16ui	a11, a8, 0
+ 20d:	9821a2        	l32i	a10, a1, 0x260
+ 210:	000081        	l32r	a8, fffc0210 <master_task+0xfffc0210>
+			210: R_XTENSA_SLOT0_OP	.literal.master_task+0x9c
+			210: R_XTENSA_ASM_EXPAND	espnow_snapshot_put
+ 213:	0008e0        	callx8	a8
+ 216:	0e2c      	movi.n	a14, 32
+ 218:	771b      	addi.n	a7, a7, 1
+ 21a:	554b      	addi.n	a5, a5, 4
+ 21c:	04c442        	addi	a4, a4, 4
+ 21f:	b5a766        	bnei	a7, 12, 1d8 <master_task+0x1d8>
+			21f: R_XTENSA_SLOT0_OP	.text.master_task+0x1d8
+ 222:	982132        	l32i	a3, a1, 0x260
+ 225:	992122        	l32i	a2, a1, 0x264
+ 228:	9b2162        	l32i	a6, a1, 0x26c
+ 22b:	20a052        	movi	a5, 32
+ 22e:	000081        	l32r	a8, fffc0230 <master_task+0xfffc0230>
+			22e: R_XTENSA_SLOT0_OP	.literal.master_task+0xa0
+			22e: R_XTENSA_ASM_EXPAND	signal_store_veh_count
+ 231:	0008e0        	callx8	a8
+ 234:	435a50        	min	a5, a10, a5
+ 237:	151aa6        	blti	a10, 1, 250 <master_task+0x250>
+			237: R_XTENSA_SLOT0_OP	.text.master_task+0x250
+ 23a:	180c      	movi.n	a8, 1
+ 23c:	090c      	movi.n	a9, 0
+ 23e:	538850        	max	a8, a8, a5
+ 241:	088876        	loop	a8, 24d <master_task+0x24d>
+			241: R_XTENSA_SLOT0_OP	.text.master_task+0x24d
+ 244:	11c9a2        	addi	a10, a9, 17
+ 247:	06a9      	s32i.n	a10, a6, 0
+ 249:	991b      	addi.n	a9, a9, 1
+ 24b:	664b      	addi.n	a6, a6, 4
+ 24d:	000586        	j	267 <master_task+0x267>
+			24d: R_XTENSA_SLOT0_OP	.text.master_task+0x267
+ 250:	fca0c2        	movi	a12, 252
+ 253:	7ca1a2        	movi	a10, 0x17c
+ 256:	cc1a      	add.n	a12, a12, a1
+ 258:	20b550        	or	a11, a5, a5
+ 25b:	80a1a0        	add	a10, a1, a10
+ 25e:	000081        	l32r	a8, fffc0260 <master_task+0xfffc0260>
+			25e: R_XTENSA_SLOT0_OP	.literal.master_task+0xa4
+			25e: R_XTENSA_ASM_EXPAND	signal_store_get_many
+ 261:	0008e0        	callx8	a8
+ 264:	001786        	j	2c6 <master_task+0x2c6>
+			264: R_XTENSA_SLOT0_OP	.text.master_task+0x2c6
+ 267:	fca0c2        	movi	a12, 252
+ 26a:	7ca1a2        	movi	a10, 0x17c
+ 26d:	cc1a      	add.n	a12, a12, a1
+ 26f:	05bd      	mov.n	a11, a5
+ 271:	a1aa      	add.n	a10, a1, a10
+ 273:	000081        	l32r	a8, fffc0274 <master_task+0xfffc0274>
+			273: R_XTENSA_SLOT0_OP	.literal.master_task+0xa8
+			273: R_XTENSA_ASM_EXPAND	signal_store_get_many
+ 276:	0008e0        	callx8	a8
+ 279:	dbba      	add.n	a13, a11, a11
+ 27b:	986132        	s32i	a3, a1, 0x260
+ 27e:	0b6d      	mov.n	a6, a11
+ 280:	0a4d      	mov.n	a4, a10
+ 282:	070c      	movi.n	a7, 0
+ 284:	092c      	movi.n	a9, 32
+ 286:	203dd0        	or	a3, a13, a13
+ 289:	fa7c      	movi.n	a10, -1
+ 28b:	30a7a0        	xor	a10, a7, a10
+ 28e:	400700        	ssr	a7
+ 291:	918040        	srl	a8, a4
+ 294:	401a00        	ssl	a10
+ 297:	a1a300        	sll	a10, a3
+ 29a:	10c790        	and	a12, a7, a9
+ 29d:	400700        	ssr	a7
+ 2a0:	91b060        	srl	a11, a6
+ 2a3:	208a80        	or	a8, a10, a8
+ 2a6:	938bc0        	movnez	a8, a11, a12
+ 2a9:	0f6807        	bbci	a8, 0, 2bc <master_task+0x2bc>
+			2a9: R_XTENSA_SLOT0_OP	.text.master_task+0x2bc
+ 2ac:	02c8      	l32i.n	a12, a2, 0
+ 2ae:	9821a2        	l32i	a10, a1, 0x260
+ 2b1:	01d7b2        	addmi	a11, a7, 0x100
+ 2b4:	000081        	l32r	a8, fffc02b4 <master_task+0xfffc02b4>
+			2b4: R_XTENSA_SLOT0_OP	.literal.master_task+0xac
+			2b4: R_XTENSA_ASM_EXPAND	espnow_snapshot_put
+ 2b7:	0008e0        	callx8	a8
+ 2ba:	092c      	movi.n	a9, 32
+ 2bc:	771b      	addi.n	a7, a7, 1
+ 2be:	224b      	addi.n	a2, a2, 4
+ 2c0:	c52757        	blt	a7, a5, 289 <master_task+0x289>
+			2c0: R_XTENSA_SLOT0_OP	.text.master_task+0x289
+ 2c3:	982132        	l32i	a3, a1, 0x260
+ 2c6:	9d2182        	l32i	a8, a1, 0x274
+ 2c9:	b88c      	beqz.n	a8, 2d8 <master_task+0x2d8>
+			2c9: R_XTENSA_SLOT0_OP	.text.master_task+0x2d8
+ 2cb:	9f21c2        	l32i	a12, a1, 0x27c
+ 2ce:	1b0c      	movi.n	a11, 1
+ 2d0:	03ad      	mov.n	a10, a3
+ 2d2:	000081        	l32r	a8, fffc02d4 <master_task+0xfffc02d4>
+			2d2: R_XTENSA_SLOT0_OP	.literal.master_task+0xb0
+			2d2: R_XTENSA_ASM_EXPAND	espnow_snapshot_put
+ 2d5:	0008e0        	callx8	a8
+ 2d8:	000081        	l32r	a8, fffc02d8 <master_task+0xfffc02d8>
+			2d8: R_XTENSA_SLOT0_OP	.literal.master_task+0xb4
+			2d8: R_XTENSA_ASM_EXPAND	esp_timer_get_time
+ 2db:	0008e0        	callx8	a8
+ 2de:	000081        	l32r	a8, fffc02e0 <master_task+0xfffc02e0>
+			2de: R_XTENSA_SLOT0_OP	.literal.master_task+0x34
+ 2e1:	070c      	movi.n	a7, 0
+ 2e3:	4e0c      	movi.n	a14, 4
+ 2e5:	4b8e76        	loop	a14, 334 <master_task+0x334>
+			2e5: R_XTENSA_SLOT0_OP	.text.master_task+0x334
+ 2e8:	28c8      	l32i.n	a12, a8, 8
+ 2ea:	3898      	l32i.n	a9, a8, 12
+ 2ec:	62fac0        	saltu	a15, a10, a12
+ 2ef:	c0db90        	sub	a13, a11, a9
+ 2f2:	209c90        	or	a9, a12, a9
+ 2f5:	c0ddf0        	sub	a13, a13, a15
+ 2f8:	59bc      	beqz.n	a9, 331 <master_task+0x331>
+			2f8: R_XTENSA_SLOT0_OP	.text.master_task+0x331
+ 2fa:	c0cac0        	sub	a12, a10, a12
+ 2fd:	301de6        	bgei	a13, 1, 331 <master_task+0x331>
+			2fd: R_XTENSA_SLOT0_OP	.text.master_task+0x331
+ 300:	4dcc      	bnez.n	a13, 308 <master_task+0x308>
+			300: R_XTENSA_SLOT0_OP	.text.master_task+0x308
+ 302:	000091        	l32r	a9, fffc0304 <master_task+0xfffc0304>
+			302: R_XTENSA_SLOT0_OP	.literal.master_task+0x38
+ 305:	2839c7        	bltu	a9, a12, 331 <master_task+0x331>
+			305: R_XTENSA_SLOT0_OP	.text.master_task+0x331
+ 308:	48c8      	l32i.n	a12, a8, 16
+ 30a:	5898      	l32i.n	a9, a8, 20
+ 30c:	62fac0        	saltu	a15, a10, a12
+ 30f:	c0db90        	sub	a13, a11, a9
+ 312:	209c90        	or	a9, a12, a9
+ 315:	c0ddf0        	sub	a13, a13, a15
+ 318:	771b      	addi.n	a7, a7, 1
+ 31a:	1b2916        	beqz	a9, 4d0 <master_task+0x4d0>
+			31a: R_XTENSA_SLOT0_OP	.text.master_task+0x4d0
+ 31d:	c0cac0        	sub	a12, a10, a12
+ 320:	021da6        	blti	a13, 1, 326 <master_task+0x326>
+			320: R_XTENSA_SLOT0_OP	.text.master_task+0x326
+ 323:	006a46        	j	4d0 <master_task+0x4d0>
+			323: R_XTENSA_SLOT0_OP	.text.master_task+0x4d0
+ 326:	7dcc      	bnez.n	a13, 331 <master_task+0x331>
+			326: R_XTENSA_SLOT0_OP	.text.master_task+0x331
+ 328:	000091        	l32r	a9, fffc0328 <master_task+0xfffc0328>
+			328: R_XTENSA_SLOT0_OP	.literal.master_task+0x38
+ 32b:	02b9c7        	bgeu	a9, a12, 331 <master_task+0x331>
+			32b: R_XTENSA_SLOT0_OP	.text.master_task+0x331
+ 32e:	006786        	j	4d0 <master_task+0x4d0>
+			32e: R_XTENSA_SLOT0_OP	.text.master_task+0x4d0
+ 331:	18c882        	addi	a8, a8, 24
+ 334:	000081        	l32r	a8, fffc0334 <master_task+0xfffc0334>
+			334: R_XTENSA_SLOT0_OP	.literal.master_task+0x3c
+ 337:	000892        	l8ui	a9, a8, 0
+ 33a:	01a082        	movi	a8, 1
+ 33d:	838770        	moveqz	a8, a7, a7
+ 340:	401987        	beq	a9, a8, 384 <master_task+0x384>
+			340: R_XTENSA_SLOT0_OP	.text.master_task+0x384
+ 343:	000091        	l32r	a9, fffc0344 <master_task+0xfffc0344>
+			343: R_XTENSA_SLOT0_OP	.literal.master_task+0x3c
+ 346:	03a062        	movi	a6, 3
+ 349:	004982        	s8i	a8, a9, 0
+ 34c:	000081        	l32r	a8, fffc034c <master_task+0xfffc034c>
+			34c: R_XTENSA_SLOT0_OP	.literal.master_task+0xb8
+			34c: R_XTENSA_ASM_EXPAND	esp_log_timestamp
+ 34f:	0008e0        	callx8	a8
+ 352:	0add      	mov.n	a13, a10
+ 354:	479c      	beqz.n	a7, 36c <master_task+0x36c>
+			354: R_XTENSA_SLOT0_OP	.text.master_task+0x36c
+ 356:	0000e1        	l32r	a14, fffc0358 <master_task+0xfffc0358>
+			356: R_XTENSA_SLOT0_OP	.literal.master_task+0x40
+ 359:	0000c1        	l32r	a12, fffc035c <master_task+0xfffc035c>
+			359: R_XTENSA_SLOT0_OP	.literal.master_task+0x44
+ 35c:	6f0c      	movi.n	a15, 6
+ 35e:	0ebd      	mov.n	a11, a14
+ 360:	06ad      	mov.n	a10, a6
+ 362:	000081        	l32r	a8, fffc0364 <master_task+0xfffc0364>
+			362: R_XTENSA_SLOT0_OP	.literal.master_task+0xbc
+			362: R_XTENSA_ASM_EXPAND	esp_log
+ 365:	0008e0        	callx8	a8
+ 368:	0006c6        	j	387 <master_task+0x387>
+			368: R_XTENSA_SLOT0_OP	.text.master_task+0x387
+ 36b:	00          	.byte	00
+ 36c:	0000e1        	l32r	a14, fffc036c <master_task+0xfffc036c>
+			36c: R_XTENSA_SLOT0_OP	.literal.master_task+0x40
+ 36f:	0000c1        	l32r	a12, fffc0370 <master_task+0xfffc0370>
+			36f: R_XTENSA_SLOT0_OP	.literal.master_task+0x44
+ 372:	5f0c      	movi.n	a15, 5
+ 374:	20bee0        	or	a11, a14, a14
+ 377:	20a660        	or	a10, a6, a6
+ 37a:	000081        	l32r	a8, fffc037c <master_task+0xfffc037c>
+			37a: R_XTENSA_SLOT0_OP	.literal.master_task+0xc0
+			37a: R_XTENSA_ASM_EXPAND	esp_log
+ 37d:	0008e0        	callx8	a8
+ 380:	001846        	j	3e5 <master_task+0x3e5>
+			380: R_XTENSA_SLOT0_OP	.text.master_task+0x3e5
+ 383:	00          	.byte	00
+ 384:	05d716        	beqz	a7, 3e5 <master_task+0x3e5>
+			384: R_XTENSA_SLOT0_OP	.text.master_task+0x3e5
+ 387:	000081        	l32r	a8, fffc0388 <master_task+0xfffc0388>
+			387: R_XTENSA_SLOT0_OP	.literal.master_task+0x20
+ 38a:	08a8      	l32i.n	a10, a8, 0
+ 38c:	000081        	l32r	a8, fffc038c <master_task+0xfffc038c>
+			38c: R_XTENSA_SLOT0_OP	.literal.master_task+0xc4
+			38c: R_XTENSA_ASM_EXPAND	espnow_v6_frame_count
+ 38f:	0008e0        	callx8	a8
+ 392:	0a7d      	mov.n	a7, a10
+ 394:	021ae6        	bgei	a10, 1, 39a <master_task+0x39a>
+			394: R_XTENSA_SLOT0_OP	.text.master_task+0x39a
+ 397:	002286        	j	425 <master_task+0x425>
+			397: R_XTENSA_SLOT0_OP	.text.master_task+0x425
+ 39a:	060c      	movi.n	a6, 0
+ 39c:	000081        	l32r	a8, fffc039c <master_task+0xfffc039c>
+			39c: R_XTENSA_SLOT0_OP	.literal.master_task+0x20
+ 39f:	01cd      	mov.n	a12, a1
+ 3a1:	08a8      	l32i.n	a10, a8, 0
+ 3a3:	06bd      	mov.n	a11, a6
+ 3a5:	faa0d2        	movi	a13, 250
+ 3a8:	000081        	l32r	a8, fffc03a8 <master_task+0xfffc03a8>
+			3a8: R_XTENSA_SLOT0_OP	.literal.master_task+0xc8
+			3a8: R_XTENSA_ASM_EXPAND	espnow_v6_encode
+ 3ab:	0008e0        	callx8	a8
+ 3ae:	0acd      	mov.n	a12, a10
+ 3b0:	01bd      	mov.n	a11, a1
+ 3b2:	0000a1        	l32r	a10, fffc03b4 <master_task+0xfffc03b4>
+			3b2: R_XTENSA_SLOT0_OP	.literal.master_task+0x48
+ 3b5:	023c16        	beqz	a12, 3dc <master_task+0x3dc>
+			3b5: R_XTENSA_SLOT0_OP	.text.master_task+0x3dc
+ 3b8:	000081        	l32r	a8, fffc03b8 <master_task+0xfffc03b8>
+			3b8: R_XTENSA_SLOT0_OP	.literal.master_task+0xcc
+			3b8: R_XTENSA_ASM_EXPAND	esp_now_send
+ 3bb:	0008e0        	callx8	a8
+ 3be:	0a5d      	mov.n	a5, a10
+ 3c0:	8a9c      	beqz.n	a10, 3dc <master_task+0x3dc>
+			3c0: R_XTENSA_SLOT0_OP	.text.master_task+0x3dc
+ 3c2:	000081        	l32r	a8, fffc03c4 <master_task+0xfffc03c4>
+			3c2: R_XTENSA_SLOT0_OP	.literal.master_task+0xd0
+			3c2: R_XTENSA_ASM_EXPAND	esp_log_timestamp
+ 3c5:	0008e0        	callx8	a8
+ 3c8:	0000e1        	l32r	a14, fffc03c8 <master_task+0xfffc03c8>
+			3c8: R_XTENSA_SLOT0_OP	.literal.master_task+0x40
+ 3cb:	0000c1        	l32r	a12, fffc03cc <master_task+0xfffc03cc>
+			3cb: R_XTENSA_SLOT0_OP	.literal.master_task+0x4c
+ 3ce:	0add      	mov.n	a13, a10
+ 3d0:	05fd      	mov.n	a15, a5
+ 3d2:	0ebd      	mov.n	a11, a14
+ 3d4:	2a0c      	movi.n	a10, 2
+ 3d6:	000081        	l32r	a8, fffc03d8 <master_task+0xfffc03d8>
+			3d6: R_XTENSA_SLOT0_OP	.literal.master_task+0xd4
+			3d6: R_XTENSA_ASM_EXPAND	esp_log
+ 3d9:	0008e0        	callx8	a8
+ 3dc:	661b      	addi.n	a6, a6, 1
+ 3de:	431767        	beq	a7, a6, 425 <master_task+0x425>
+			3de: R_XTENSA_SLOT0_OP	.text.master_task+0x425
+ 3e1:	ffedc6        	j	39c <master_task+0x39c>
+			3e1: R_XTENSA_SLOT0_OP	.text.master_task+0x39c
+ 3e4:	00          	.byte	00
+ 3e5:	000081        	l32r	a8, fffc03e8 <master_task+0xfffc03e8>
+			3e5: R_XTENSA_SLOT0_OP	.literal.master_task+0x20
+ 3e8:	faa0c2        	movi	a12, 250
+ 3eb:	08a8      	l32i.n	a10, a8, 0
+ 3ed:	20b110        	or	a11, a1, a1
+ 3f0:	000081        	l32r	a8, fffc03f0 <master_task+0xfffc03f0>
+			3f0: R_XTENSA_SLOT0_OP	.literal.master_task+0xd8
+			3f0: R_XTENSA_ASM_EXPAND	espnow_v5_encode
+ 3f3:	0008e0        	callx8	a8
+ 3f6:	baac      	beqz.n	a10, 425 <master_task+0x425>
+			3f6: R_XTENSA_SLOT0_OP	.text.master_task+0x425
+ 3f8:	0acd      	mov.n	a12, a10
+ 3fa:	0000a1        	l32r	a10, fffc03fc <master_task+0xfffc03fc>
+			3fa: R_XTENSA_SLOT0_OP	.literal.master_task+0x48
+ 3fd:	20b110        	or	a11, a1, a1
+ 400:	000081        	l32r	a8, fffc0400 <master_task+0xfffc0400>
+			400: R_XTENSA_SLOT0_OP	.literal.master_task+0xdc
+			400: R_XTENSA_ASM_EXPAND	esp_now_send
+ 403:	0008e0        	callx8	a8
+ 406:	0a7d      	mov.n	a7, a10
+ 408:	019a16        	beqz	a10, 425 <master_task+0x425>
+			408: R_XTENSA_SLOT0_OP	.text.master_task+0x425
+ 40b:	000081        	l32r	a8, fffc040c <master_task+0xfffc040c>
+			40b: R_XTENSA_SLOT0_OP	.literal.master_task+0xe0
+			40b: R_XTENSA_ASM_EXPAND	esp_log_timestamp
+ 40e:	0008e0        	callx8	a8
+ 411:	0000e1        	l32r	a14, fffc0414 <master_task+0xfffc0414>
+			411: R_XTENSA_SLOT0_OP	.literal.master_task+0x40
+ 414:	0000c1        	l32r	a12, fffc0414 <master_task+0xfffc0414>
+			414: R_XTENSA_SLOT0_OP	.literal.master_task+0x4c
+ 417:	0add      	mov.n	a13, a10
+ 419:	07fd      	mov.n	a15, a7
+ 41b:	0ebd      	mov.n	a11, a14
+ 41d:	2a0c      	movi.n	a10, 2
+ 41f:	000081        	l32r	a8, fffc0420 <master_task+0xfffc0420>
+			41f: R_XTENSA_SLOT0_OP	.literal.master_task+0xe4
+			41f: R_XTENSA_ASM_EXPAND	esp_log
+ 422:	0008e0        	callx8	a8
+ 425:	000081        	l32r	a8, fffc0428 <master_task+0xfffc0428>
+			425: R_XTENSA_SLOT0_OP	.literal.master_task+0xe8
+			425: R_XTENSA_ASM_EXPAND	esp_timer_get_time
+ 428:	0008e0        	callx8	a8
+ 42b:	000021        	l32r	a2, fffc042c <master_task+0xfffc042c>
+			42b: R_XTENSA_SLOT0_OP	.literal.master_task+0x5c
+ 42e:	000051        	l32r	a5, fffc0430 <master_task+0xfffc0430>
+			42e: R_XTENSA_SLOT0_OP	.literal.master_task+0x60
+ 431:	9861a2        	s32i	a10, a1, 0x260
+ 434:	9961b2        	s32i	a11, a1, 0x264
+ 437:	00a062        	movi	a6, 0
+ 43a:	e8a372        	movi	a7, 0x3e8
+ 43d:	0000a1        	l32r	a10, fffc0440 <master_task+0xfffc0440>
+			43d: R_XTENSA_SLOT0_OP	.literal.master_task+0x4
+ 440:	ffafb2        	movi	a11, -1
+ 443:	000081        	l32r	a8, fffc0444 <master_task+0xfffc0444>
+			443: R_XTENSA_SLOT0_OP	.literal.master_task+0xec
+			443: R_XTENSA_ASM_EXPAND	xPortEnterCriticalTimeout
+ 446:	0008e0        	callx8	a8
+ 449:	000081        	l32r	a8, fffc044c <master_task+0xfffc044c>
+			449: R_XTENSA_SLOT0_OP	.literal.master_task+0x8
+ 44c:	0000a1        	l32r	a10, fffc044c <master_task+0xfffc044c>
+			44c: R_XTENSA_SLOT0_OP	.literal.master_task+0x4
+ 44f:	000842        	l8ui	a4, a8, 0
+ 452:	000081        	l32r	a8, fffc0454 <master_task+0xfffc0454>
+			452: R_XTENSA_SLOT0_OP	.literal.master_task+0xf0
+			452: R_XTENSA_ASM_EXPAND	vPortExitCritical
+ 455:	0008e0        	callx8	a8
+ 458:	000091        	l32r	a9, fffc0458 <master_task+0xfffc0458>
+			458: R_XTENSA_SLOT0_OP	.literal.master_task+0x58
+ 45b:	9821a2        	l32i	a10, a1, 0x260
+ 45e:	939240        	movnez	a9, a2, a4
+ 461:	068d      	mov.n	a8, a6
+ 463:	938640        	movnez	a8, a6, a4
+ 466:	4a9a      	add.n	a4, a10, a9
+ 468:	9921a2        	l32i	a10, a1, 0x264
+ 46b:	629490        	saltu	a9, a4, a9
+ 46e:	3a8a      	add.n	a3, a10, a8
+ 470:	339a      	add.n	a3, a3, a9
+ 472:	000081        	l32r	a8, fffc0474 <master_task+0xfffc0474>
+			472: R_XTENSA_SLOT0_OP	.literal.master_task+0xf4
+			472: R_XTENSA_ASM_EXPAND	esp_timer_get_time
+ 475:	0008e0        	callx8	a8
+ 478:	6294a0        	saltu	a9, a4, a10
+ 47b:	c083b0        	sub	a8, a3, a11
+ 47e:	c08890        	sub	a8, a8, a9
+ 481:	c094a0        	sub	a9, a4, a10
+ 484:	82a790        	mull	a10, a7, a9
+ 487:	a2c790        	muluh	a12, a7, a9
+ 48a:	82b780        	mull	a11, a7, a8
+ 48d:	aa5a      	add.n	a10, a10, a5
+ 48f:	bbca      	add.n	a11, a11, a12
+ 491:	62ca50        	saltu	a12, a10, a5
+ 494:	0d0c      	movi.n	a13, 0
+ 496:	bbca      	add.n	a11, a11, a12
+ 498:	0518e6        	bgei	a8, 1, 4a1 <master_task+0x4a1>
+			498: R_XTENSA_SLOT0_OP	.text.master_task+0x4a1
+ 49b:	b72856        	bnez	a8, 11 <master_task+0x11>
+			49b: R_XTENSA_SLOT0_OP	.text.master_task+0x11
+ 49e:	b6f916        	beqz	a9, 11 <master_task+0x11>
+			49e: R_XTENSA_SLOT0_OP	.text.master_task+0x11
+ 4a1:	0000c1        	l32r	a12, fffc04a4 <master_task+0xfffc04a4>
+			4a1: R_XTENSA_SLOT0_OP	.literal.master_task+0x64
+ 4a4:	000081        	l32r	a8, fffc04a4 <master_task+0xfffc04a4>
+			4a4: R_XTENSA_SLOT0_OP	.literal.master_task+0xf8
+			4a4: R_XTENSA_ASM_EXPAND	__udivdi3
+ 4a7:	0008e0        	callx8	a8
+ 4aa:	000081        	l32r	a8, fffc04ac <master_task+0xfffc04ac>
+			4aa: R_XTENSA_SLOT0_OP	.literal.master_task+0x50
+ 4ad:	0abd      	mov.n	a11, a10
+ 4af:	0028a2        	l32i	a10, a8, 0
+ 4b2:	000081        	l32r	a8, fffc04b4 <master_task+0xfffc04b4>
+			4b2: R_XTENSA_SLOT0_OP	.literal.master_task+0xfc
+			4b2: R_XTENSA_ASM_EXPAND	xQueueSemaphoreTake
+ 4b5:	0008e0        	callx8	a8
+ 4b8:	ffe046        	j	43d <master_task+0x43d>
+			4b8: R_XTENSA_SLOT0_OP	.text.master_task+0x43d
+ 4bb:	000091        	l32r	a9, fffc04bc <master_task+0xfffc04bc>
+			4bb: R_XTENSA_SLOT0_OP	.literal.master_task+0x3c
+ 4be:	080c      	movi.n	a8, 0
+ 4c0:	004982        	s8i	a8, a9, 0
+ 4c3:	000081        	l32r	a8, fffc04c4 <master_task+0xfffc04c4>
+			4c3: R_XTENSA_SLOT0_OP	.literal.master_task+0x100
+			4c3: R_XTENSA_ASM_EXPAND	esp_log_timestamp
+ 4c6:	0008e0        	callx8	a8
+ 4c9:	360c      	movi.n	a6, 3
+ 4cb:	0add      	mov.n	a13, a10
+ 4cd:	ffa6c6        	j	36c <master_task+0x36c>
+			4cd: R_XTENSA_SLOT0_OP	.text.master_task+0x36c
+ 4d0:	000081        	l32r	a8, fffc04d0 <master_task+0xfffc04d0>
+			4d0: R_XTENSA_SLOT0_OP	.literal.master_task+0x3c
+ 4d3:	000882        	l8ui	a8, a8, 0
+ 4d6:	f0b816        	beqz	a8, 3e5 <master_task+0x3e5>
+			4d6: R_XTENSA_SLOT0_OP	.text.master_task+0x3e5
+ 4d9:	fff786        	j	4bb <master_task+0x4bb>
+			4d9: R_XTENSA_SLOT0_OP	.text.master_task+0x4bb
+
+espnow_link after sizes:
+/tmp/obd-snapshot-append-20261014/espnow_link-after-standalone.obj  :
+section                                           size   addr
+.literal.ops_invalidate_many                         4      0
+.literal.ops_set_many                                4      0
+.literal.ops_invalidate                              8      0
+.literal.ops_set                                     8      0
+.literal.ops_slot_by_id                              4      0
+.literal.wifi_espnow_init                          128      0
+.literal.add_broadcast_peer                         28      0
+.literal.handle_presence$part$0                     24      0
+.literal.slave_on_data                             100      0
+.literal.master_start_linktest                      40      0
+.literal.recv_cb                                    88      0
+.literal.slave_drop_link                            28      0
+.literal.slave_task                                 88      0
+.literal.master_task                               260      0
+.literal.espnow_link_start_master                  172      0
+.literal.espnow_link_start_slave                   144      0
+.literal.espnow_link_slave_has_data                 12      0
+.literal.espnow_link_get_master_name                 4      0
+.literal.espnow_link_get_bound_master_mac            8      0
+.literal.espnow_link_bind_master                    56      0
+.literal.espnow_link_unbind_master                  56      0
+.literal.espnow_master_online_slaves                12      0
+.literal.espnow_link_trigger_linked_test            48      0
+.literal.espnow_link_broadcast_threshold            28      0
+.literal.espnow_link_linktest_active                24      0
+.literal.espnow_link_linked_en_with_local            8      0
+.literal.espnow_link_linked_en                      12      0
+.literal.espnow_link_apply_synced_threshold         44      0
+.literal.espnow_link_pause_for_ota                 128      0
+.text                                                0      0
+.data                                                0      0
+.bss                                                 0      0
+.text.ops_invalidate_many                           15      0
+.text.ops_set_many                                  18      0
+.text.ops_invalidate                                24      0
+.text.ops_set                                       26      0
+.text.ops_slot_by_id                                16      0
+.rodata.wifi_espnow_init.str1.4                    251      0
+.text.wifi_espnow_init                             360      0
+.rodata.add_broadcast_peer.str1.4                   24      0
+.text.add_broadcast_peer                            71      0
+.text.handle_presence$part$0                       204      0
+.text.slave_on_data                                423      0
+.text.master_start_linktest                         87      0
+.rodata.recv_cb.str1.4                              74      0
+.text.recv_cb                                      351      0
+.text.slave_drop_link                               90      0
+.rodata.slave_task.str1.4                          103      0
+.text.slave_task                                   281      0
+.rodata.master_task.str1.4                          48      0
+.text.master_task                                 1244      0
+.rodata.espnow_link_start_master.str1.4            241      0
+.text.espnow_link_start_master                     343      0
+.rodata.espnow_link_start_slave.str1.4              85      0
+.text.espnow_link_start_slave                      262      0
+.text.espnow_link_slave_has_data                    73      0
+.text.espnow_link_get_master_name                    8      0
+.text.espnow_link_get_bound_master_mac              28      0
+.rodata.espnow_link_bind_master.str1.4              75      0
+.text.espnow_link_bind_master                      155      0
+.rodata.espnow_link_unbind_master.str1.4            69      0
+.text.espnow_link_unbind_master                    118      0
+.text.espnow_master_online_slaves                   65      0
+.rodata.espnow_link_trigger_linked_test.str1.4      52      0
+.text.espnow_link_trigger_linked_test              110      0
+.text.espnow_link_broadcast_threshold               66      0
+.text.espnow_link_linktest_active                   55      0
+.text.espnow_link_linked_en_with_local              28      0
+.text.espnow_link_linked_en                         46      0
+.text.espnow_link_apply_synced_threshold           122      0
+.rodata.espnow_link_pause_for_ota.str1.4           282      0
+.text.espnow_link_pause_for_ota                    280      0
+.rodata.__func__$0                                  24      0
+.rodata.__func__$1                                  19      0
+.rodata.__func__$2                                  17      0
+.rodata.__func__$3                                  25      0
+.rodata.s_apply_ops                                 24      0
+.bss.s_master_name                                  12      0
+.data.s_bound_master_mac_mux                         8      0
+.bss.s_bound_master_mac_active                       1      0
+.bss.s_bound_master_mac                              6      0
+.bss.s_local_profile_hash                            4      0
+.bss.s_tx_seq                                        4      0
+.bss.s_rx_intro_step                                 1      0
+.bss.s_rx_sweep_step                                 1      0
+.bss.s_rx_intro_valid                                1      0
+.bss.s_rx_sweep_valid                                1      0
+.bss.s_rx_veh_ok                                     1      0
+.bss.s_rx_link                                       1      0
+.bss.s_rx_live                                       1      0
+.bss.s_last_rx_us                                    8      0
+.rodata.s_broadcast_mac                              6      0
+.bss.s_tx_v6                                         1      0
+.bss.s_snap                                          4      0
+.bss.s_slaves                                       96      0
+.bss.s_rx_linked_en                                  1      0
+.bss.s_rx_linktest                                   1      0
+.bss.s_master_wake                                   4      0
+.bss.s_master_wake_storage                          84      0
+.bss.s_linktest_start_us                             8      0
+.bss.s_linktest_active                               1      0
+.bss.s_linktest_accepting                            1      0
+.data.s_linktest_mux                                 8      0
+.bss.s_slave_task_handle                             4      0
+.bss.s_master_task_handle                            4      0
+.bss.s_espnow_started                                1      0
+.bss.s_is_master                                     1      0
+.rodata.MASTER_NAME                                  9      0
+.debug_frame                                       712      0
+.debug_info                                      20125      0
+.debug_abbrev                                     1789      0
+.debug_loc                                        5180      0
+.debug_aranges                                     256      0
+.debug_ranges                                     1296      0
+.debug_line                                      16525      0
+.debug_str                                        7774      0
+.comment                                            48      0
+.xtensa.info                                        56      0
+.xt.lit                                            232      0
+.xt.prop                                          3060      0
+Total                                            65287
+
+
+
+after .text.master_task:
+Disassembly of section .text.master_task:
+
+00000000 <master_task>:
+   0:	054136        	entry	a1, 0x2a0
+   3:	080c      	movi.n	a8, 0
+   5:	9e6182        	s32i	a8, a1, 0x278
+   8:	fca182        	movi	a8, 0x1fc
+   b:	808180        	add	a8, a1, a8
+   e:	9a6182        	s32i	a8, a1, 0x268
+  11:	9a2172        	l32i	a7, a1, 0x268
+  14:	07ad      	mov.n	a10, a7
+  16:	000081        	l32r	a8, fffc0018 <master_task+0xfffc0018>
+			16: R_XTENSA_SLOT0_OP	.literal.master_task+0x68
+			16: R_XTENSA_ASM_EXPAND	nvs_cfg_read
+  19:	0008e0        	callx8	a8
+  1c:	0000a1        	l32r	a10, fffc001c <master_task+0xfffc001c>
+			1c: R_XTENSA_SLOT0_OP	.literal.master_task+0x4
+  1f:	fb7c      	movi.n	a11, -1
+  21:	261772        	l16ui	a7, a7, 76
+  24:	000081        	l32r	a8, fffc0024 <master_task+0xfffc0024>
+			24: R_XTENSA_SLOT0_OP	.literal.master_task+0x6c
+			24: R_XTENSA_ASM_EXPAND	xPortEnterCriticalTimeout
+  27:	0008e0        	callx8	a8
+  2a:	000081        	l32r	a8, fffc002c <master_task+0xfffc002c>
+			2a: R_XTENSA_SLOT0_OP	.literal.master_task+0x8
+  2d:	000852        	l8ui	a5, a8, 0
+  30:	0b5516        	beqz	a5, e9 <master_task+0xe9>
+			30: R_XTENSA_SLOT0_OP	.text.master_task+0xe9
+  33:	000081        	l32r	a8, fffc0034 <master_task+0xfffc0034>
+			33: R_XTENSA_SLOT0_OP	.literal.master_task+0x70
+			33: R_XTENSA_ASM_EXPAND	esp_timer_get_time
+  36:	0008e0        	callx8	a8
+  39:	000081        	l32r	a8, fffc003c <master_task+0xfffc003c>
+			39: R_XTENSA_SLOT0_OP	.literal.master_task+0xc
+  3c:	000091        	l32r	a9, fffc003c <master_task+0xfffc003c>
+			3c: R_XTENSA_SLOT0_OP	.literal.master_task+0xc
+  3f:	0888      	l32i.n	a8, a8, 0
+  41:	1998      	l32i.n	a9, a9, 4
+  43:	c04a80        	sub	a4, a10, a8
+  46:	c06b90        	sub	a6, a11, a9
+  49:	629a80        	saltu	a9, a10, a8
+  4c:	c06690        	sub	a6, a6, a9
+  4f:	e8a3c2        	movi	a12, 0x3e8
+  52:	0d0c      	movi.n	a13, 0
+  54:	04ad      	mov.n	a10, a4
+  56:	06bd      	mov.n	a11, a6
+  58:	000081        	l32r	a8, fffc0058 <master_task+0xfffc0058>
+			58: R_XTENSA_SLOT0_OP	.literal.master_task+0x74
+			58: R_XTENSA_ASM_EXPAND	__divdi3
+  5b:	0008e0        	callx8	a8
+  5e:	4bcc      	bnez.n	a11, 66 <master_task+0x66>
+			5e: R_XTENSA_SLOT0_OP	.text.master_task+0x66
+  60:	000081        	l32r	a8, fffc0060 <master_task+0xfffc0060>
+			60: R_XTENSA_SLOT0_OP	.literal.master_task+0x10
+  63:	0ab8a7        	bgeu	a8, a10, 71 <master_task+0x71>
+			63: R_XTENSA_SLOT0_OP	.text.master_task+0x71
+  66:	000091        	l32r	a9, fffc0068 <master_task+0xfffc0068>
+			66: R_XTENSA_SLOT0_OP	.literal.master_task+0x8
+  69:	080c      	movi.n	a8, 0
+  6b:	004982        	s8i	a8, a9, 0
+  6e:	001dc6        	j	e9 <master_task+0xe9>
+			6e: R_XTENSA_SLOT0_OP	.text.master_task+0xe9
+  71:	c8a082        	movi	a8, 200
+  74:	778a      	add.n	a7, a7, a8
+  76:	1c16e6        	bgei	a6, 1, 96 <master_task+0x96>
+			76: R_XTENSA_SLOT0_OP	.text.master_task+0x96
+  79:	46cc      	bnez.n	a6, 81 <master_task+0x81>
+			79: R_XTENSA_SLOT0_OP	.text.master_task+0x81
+  7b:	000081        	l32r	a8, fffc007c <master_task+0xfffc007c>
+			7b: R_XTENSA_SLOT0_OP	.literal.master_task+0x14
+  7e:	0e3847        	bltu	a8, a4, 90 <master_task+0x90>
+			7e: R_XTENSA_SLOT0_OP	.text.master_task+0x90
+  81:	8277a0        	mull	a7, a7, a10
+  84:	000081        	l32r	a8, fffc0084 <master_task+0xfffc0084>
+			84: R_XTENSA_SLOT0_OP	.literal.master_task+0x18
+  87:	a27780        	muluh	a7, a7, a8
+  8a:	417c70        	srli	a7, a7, 12
+  8d:	000646        	j	aa <master_task+0xaa>
+			8d: R_XTENSA_SLOT0_OP	.text.master_task+0xaa
+  90:	000081        	l32r	a8, fffc0090 <master_task+0xfffc0090>
+			90: R_XTENSA_SLOT0_OP	.literal.master_task+0x1c
+  93:	13b847        	bgeu	a8, a4, aa <master_task+0xaa>
+			93: R_XTENSA_SLOT0_OP	.text.master_task+0xaa
+  96:	000081        	l32r	a8, fffc0098 <master_task+0xfffc0098>
+			96: R_XTENSA_SLOT0_OP	.literal.master_task+0x54
+  99:	000091        	l32r	a9, fffc009c <master_task+0xfffc009c>
+			99: R_XTENSA_SLOT0_OP	.literal.master_task+0x18
+  9c:	8a8a      	add.n	a8, a10, a8
+  9e:	828780        	mull	a8, a7, a8
+  a1:	a28890        	muluh	a8, a8, a9
+  a4:	418b80        	srli	a8, a8, 11
+  a7:	c07780        	sub	a7, a7, a8
+  aa:	000081        	l32r	a8, fffc00ac <master_task+0xfffc00ac>
+			aa: R_XTENSA_SLOT0_OP	.literal.master_task
+  ad:	0000a1        	l32r	a10, fffc00b0 <master_task+0xfffc00b0>
+			ad: R_XTENSA_SLOT0_OP	.literal.master_task+0x4
+  b0:	18b877        	bgeu	a8, a7, cc <master_task+0xcc>
+			b0: R_XTENSA_SLOT0_OP	.text.master_task+0xcc
+  b3:	000081        	l32r	a8, fffc00b4 <master_task+0xfffc00b4>
+			b3: R_XTENSA_SLOT0_OP	.literal.master_task+0x78
+			b3: R_XTENSA_ASM_EXPAND	vPortExitCritical
+  b6:	0008e0        	callx8	a8
+  b9:	0000b1        	l32r	a11, fffc00bc <master_task+0xfffc00bc>
+			b9: R_XTENSA_SLOT0_OP	.literal.master_task
+  bc:	1a0c      	movi.n	a10, 1
+  be:	9e6152        	s32i	a5, a1, 0x278
+  c1:	270c      	movi.n	a7, 2
+  c3:	9f61b2        	s32i	a11, a1, 0x27c
+  c6:	9d61a2        	s32i	a10, a1, 0x274
+  c9:	000e46        	j	106 <master_task+0x106>
+			c9: R_XTENSA_SLOT0_OP	.text.master_task+0x106
+  cc:	f48070        	extui	a8, a7, 0, 16
+  cf:	9f6182        	s32i	a8, a1, 0x27c
+  d2:	000081        	l32r	a8, fffc00d4 <master_task+0xfffc00d4>
+			d2: R_XTENSA_SLOT0_OP	.literal.master_task+0x7c
+			d2: R_XTENSA_ASM_EXPAND	vPortExitCritical
+  d5:	0008e0        	callx8	a8
+  d8:	1a0c      	movi.n	a10, 1
+  da:	07bd      	mov.n	a11, a7
+  dc:	9e6152        	s32i	a5, a1, 0x278
+  df:	270c      	movi.n	a7, 2
+  e1:	9d61a2        	s32i	a10, a1, 0x274
+  e4:	000786        	j	106 <master_task+0x106>
+			e4: R_XTENSA_SLOT0_OP	.text.master_task+0x106
+  e7:	00          	.byte	00
+  e8:	00          	.byte	00
+  e9:	0000a1        	l32r	a10, fffc00ec <master_task+0xfffc00ec>
+			e9: R_XTENSA_SLOT0_OP	.literal.master_task+0x4
+  ec:	070c      	movi.n	a7, 0
+  ee:	000081        	l32r	a8, fffc00f0 <master_task+0xfffc00f0>
+			ee: R_XTENSA_SLOT0_OP	.literal.master_task+0x80
+			ee: R_XTENSA_ASM_EXPAND	vPortExitCritical
+  f1:	0008e0        	callx8	a8
+  f4:	9e2182        	l32i	a8, a1, 0x278
+  f7:	589c      	beqz.n	a8, 110 <master_task+0x110>
+			f7: R_XTENSA_SLOT0_OP	.text.master_task+0x110
+  f9:	07bd      	mov.n	a11, a7
+  fb:	07ad      	mov.n	a10, a7
+  fd:	9f6172        	s32i	a7, a1, 0x27c
+ 100:	9d6172        	s32i	a7, a1, 0x274
+ 103:	9e6172        	s32i	a7, a1, 0x278
+ 106:	000081        	l32r	a8, fffc0108 <master_task+0xfffc0108>
+			106: R_XTENSA_SLOT0_OP	.literal.master_task+0x84
+			106: R_XTENSA_ASM_EXPAND	obd_data_rpm_override_set
+ 109:	0008e0        	callx8	a8
+ 10c:	000186        	j	116 <master_task+0x116>
+			10c: R_XTENSA_SLOT0_OP	.text.master_task+0x116
+ 10f:	00          	.byte	00
+ 110:	9f6172        	s32i	a7, a1, 0x27c
+ 113:	9d6172        	s32i	a7, a1, 0x274
+ 116:	000081        	l32r	a8, fffc0118 <master_task+0xfffc0118>
+			116: R_XTENSA_SLOT0_OP	.literal.master_task+0x20
+ 119:	7ca162        	movi	a6, 0x17c
+ 11c:	0838      	l32i.n	a3, a8, 0
+ 11e:	616a      	add.n	a6, a1, a6
+ 120:	03ad      	mov.n	a10, a3
+ 122:	000081        	l32r	a8, fffc0124 <master_task+0xfffc0124>
+			122: R_XTENSA_SLOT0_OP	.literal.master_task+0x88
+			122: R_XTENSA_ASM_EXPAND	espnow_snapshot_init
+ 125:	0008e0        	callx8	a8
+ 128:	000081        	l32r	a8, fffc0128 <master_task+0xfffc0128>
+			128: R_XTENSA_SLOT0_OP	.literal.master_task+0x24
+ 12b:	000091        	l32r	a9, fffc012c <master_task+0xfffc012c>
+			12b: R_XTENSA_SLOT0_OP	.literal.master_task+0x28
+ 12e:	0888      	l32i.n	a8, a8, 0
+ 130:	0998      	l32i.n	a9, a9, 0
+ 132:	0000a1        	l32r	a10, fffc0134 <master_task+0xfffc0134>
+			132: R_XTENSA_SLOT0_OP	.literal.master_task+0x24
+ 135:	881b      	addi.n	a8, a8, 1
+ 137:	0a89      	s32i.n	a8, a10, 0
+ 139:	0389      	s32i.n	a8, a3, 0
+ 13b:	1399      	s32i.n	a9, a3, 4
+ 13d:	06ad      	mov.n	a10, a6
+ 13f:	080c      	movi.n	a8, 0
+ 141:	c90c      	movi.n	a9, 12
+ 143:	058976        	loop	a9, 14c <master_task+0x14c>
+			143: R_XTENSA_SLOT0_OP	.text.master_task+0x14c
+ 146:	0a89      	s32i.n	a8, a10, 0
+ 148:	881b      	addi.n	a8, a8, 1
+ 14a:	aa4b      	addi.n	a10, a10, 4
+ 14c:	fca0c2        	movi	a12, 252
+ 14f:	7ca1a2        	movi	a10, 0x17c
+ 152:	cc1a      	add.n	a12, a12, a1
+ 154:	db0c      	movi.n	a11, 13
+ 156:	a1aa      	add.n	a10, a1, a10
+ 158:	6b6182        	s32i	a8, a1, 0x1ac
+ 15b:	000081        	l32r	a8, fffc015c <master_task+0xfffc015c>
+			15b: R_XTENSA_SLOT0_OP	.literal.master_task+0x8c
+			15b: R_XTENSA_ASM_EXPAND	signal_store_get_many
+ 15e:	0008e0        	callx8	a8
+ 161:	20daa0        	or	a13, a10, a10
+ 164:	209bb0        	or	a9, a11, a11
+ 167:	00a0a2        	movi	a10, 0
+ 16a:	0b6dc7        	bbci	a13, 12, 179 <master_task+0x179>
+			16a: R_XTENSA_SLOT0_OP	.text.master_task+0x179
+ 16d:	4b21a2        	l32i	a10, a1, 0x12c
+ 170:	fecaa2        	addi	a10, a10, -2
+ 173:	40faa0        	nsau	a10, a10
+ 176:	41a5a0        	srli	a10, a10, 5
+ 179:	9a2182        	l32i	a8, a1, 0x268
+ 17c:	986192        	s32i	a9, a1, 0x260
+ 17f:	5b08b2        	l8ui	a11, a8, 91
+ 182:	180c      	movi.n	a8, 1
+ 184:	838bb0        	moveqz	a8, a11, a11
+ 187:	1188e0        	slli	a8, a8, 2
+ 18a:	208870        	or	a8, a8, a7
+ 18d:	2088a0        	or	a8, a8, a10
+ 190:	104382        	s8i	a8, a3, 16
+ 193:	9c61d2        	s32i	a13, a1, 0x270
+ 196:	000081        	l32r	a8, fffc0198 <master_task+0xfffc0198>
+			196: R_XTENSA_SLOT0_OP	.literal.master_task+0x90
+			196: R_XTENSA_ASM_EXPAND	ui_sweep_get_step
+ 199:	0008e0        	callx8	a8
+ 19c:	1243a2        	s8i	a10, a3, 18
+ 19f:	000081        	l32r	a8, fffc01a0 <master_task+0xfffc01a0>
+			19f: R_XTENSA_SLOT0_OP	.literal.master_task+0x94
+			19f: R_XTENSA_ASM_EXPAND	ui_intro_get_step
+ 1a2:	0008e0        	callx8	a8
+ 1a5:	0000b1        	l32r	a11, fffc01a8 <master_task+0xfffc01a8>
+			1a5: R_XTENSA_SLOT0_OP	.literal.master_task+0x2c
+ 1a8:	1343a2        	s8i	a10, a3, 19
+ 1ab:	9c0c      	movi.n	a12, 9
+ 1ad:	14c3a2        	addi	a10, a3, 20
+ 1b0:	000081        	l32r	a8, fffc01b0 <master_task+0xfffc01b0>
+			1b0: R_XTENSA_SLOT0_OP	.literal.master_task+0x98
+			1b0: R_XTENSA_ASM_EXPAND	memcpy
+ 1b3:	0008e0        	callx8	a8
+ 1b6:	982192        	l32i	a9, a1, 0x260
+ 1b9:	fca082        	movi	a8, 252
+ 1bc:	218a      	add.n	a2, a1, a8
+ 1be:	065d      	mov.n	a5, a6
+ 1c0:	f99a      	add.n	a15, a9, a9
+ 1c2:	9b6162        	s32i	a6, a1, 0x26c
+ 1c5:	9c2162        	l32i	a6, a1, 0x270
+ 1c8:	024d      	mov.n	a4, a2
+ 1ca:	986132        	s32i	a3, a1, 0x260
+ 1cd:	996122        	s32i	a2, a1, 0x264
+ 1d0:	070c      	movi.n	a7, 0
+ 1d2:	0e2c      	movi.n	a14, 32
+ 1d4:	092d      	mov.n	a2, a9
+ 1d6:	0f3d      	mov.n	a3, a15
+ 1d8:	fa7c      	movi.n	a10, -1
+ 1da:	30a7a0        	xor	a10, a7, a10
+ 1dd:	400700        	ssr	a7
+ 1e0:	918060        	srl	a8, a6
+ 1e3:	401a00        	ssl	a10
+ 1e6:	a1a300        	sll	a10, a3
+ 1e9:	10c7e0        	and	a12, a7, a14
+ 1ec:	400700        	ssr	a7
+ 1ef:	91b020        	srl	a11, a2
+ 1f2:	208a80        	or	a8, a10, a8
+ 1f5:	938bc0        	movnez	a8, a11, a12
+ 1f8:	1c6807        	bbci	a8, 0, 218 <master_task+0x218>
+			1f8: R_XTENSA_SLOT0_OP	.text.master_task+0x218
+ 1fb:	0588      	l32i.n	a8, a5, 0
+ 1fd:	000091        	l32r	a9, fffc0200 <master_task+0xfffc0200>
+			1fd: R_XTENSA_SLOT0_OP	.literal.master_task+0x30
+ 200:	908880        	addx2	a8, a8, a8
+ 203:	1188c0        	slli	a8, a8, 4
+ 206:	898a      	add.n	a8, a9, a8
+ 208:	04c8      	l32i.n	a12, a4, 0
+ 20a:	0018b2        	l16ui	a11, a8, 0
+ 20d:	9821a2        	l32i	a10, a1, 0x260
+ 210:	000081        	l32r	a8, fffc0210 <master_task+0xfffc0210>
+			210: R_XTENSA_SLOT0_OP	.literal.master_task+0x9c
+			210: R_XTENSA_ASM_EXPAND	espnow_snapshot_append_unique
+ 213:	0008e0        	callx8	a8
+ 216:	0e2c      	movi.n	a14, 32
+ 218:	771b      	addi.n	a7, a7, 1
+ 21a:	554b      	addi.n	a5, a5, 4
+ 21c:	04c442        	addi	a4, a4, 4
+ 21f:	b5a766        	bnei	a7, 12, 1d8 <master_task+0x1d8>
+			21f: R_XTENSA_SLOT0_OP	.text.master_task+0x1d8
+ 222:	982132        	l32i	a3, a1, 0x260
+ 225:	992122        	l32i	a2, a1, 0x264
+ 228:	9b2162        	l32i	a6, a1, 0x26c
+ 22b:	20a052        	movi	a5, 32
+ 22e:	000081        	l32r	a8, fffc0230 <master_task+0xfffc0230>
+			22e: R_XTENSA_SLOT0_OP	.literal.master_task+0xa0
+			22e: R_XTENSA_ASM_EXPAND	signal_store_veh_count
+ 231:	0008e0        	callx8	a8
+ 234:	435a50        	min	a5, a10, a5
+ 237:	151aa6        	blti	a10, 1, 250 <master_task+0x250>
+			237: R_XTENSA_SLOT0_OP	.text.master_task+0x250
+ 23a:	180c      	movi.n	a8, 1
+ 23c:	090c      	movi.n	a9, 0
+ 23e:	538850        	max	a8, a8, a5
+ 241:	088876        	loop	a8, 24d <master_task+0x24d>
+			241: R_XTENSA_SLOT0_OP	.text.master_task+0x24d
+ 244:	11c9a2        	addi	a10, a9, 17
+ 247:	06a9      	s32i.n	a10, a6, 0
+ 249:	991b      	addi.n	a9, a9, 1
+ 24b:	664b      	addi.n	a6, a6, 4
+ 24d:	000586        	j	267 <master_task+0x267>
+			24d: R_XTENSA_SLOT0_OP	.text.master_task+0x267
+ 250:	fca0c2        	movi	a12, 252
+ 253:	7ca1a2        	movi	a10, 0x17c
+ 256:	cc1a      	add.n	a12, a12, a1
+ 258:	20b550        	or	a11, a5, a5
+ 25b:	80a1a0        	add	a10, a1, a10
+ 25e:	000081        	l32r	a8, fffc0260 <master_task+0xfffc0260>
+			25e: R_XTENSA_SLOT0_OP	.literal.master_task+0xa4
+			25e: R_XTENSA_ASM_EXPAND	signal_store_get_many
+ 261:	0008e0        	callx8	a8
+ 264:	001786        	j	2c6 <master_task+0x2c6>
+			264: R_XTENSA_SLOT0_OP	.text.master_task+0x2c6
+ 267:	fca0c2        	movi	a12, 252
+ 26a:	7ca1a2        	movi	a10, 0x17c
+ 26d:	cc1a      	add.n	a12, a12, a1
+ 26f:	05bd      	mov.n	a11, a5
+ 271:	a1aa      	add.n	a10, a1, a10
+ 273:	000081        	l32r	a8, fffc0274 <master_task+0xfffc0274>
+			273: R_XTENSA_SLOT0_OP	.literal.master_task+0xa8
+			273: R_XTENSA_ASM_EXPAND	signal_store_get_many
+ 276:	0008e0        	callx8	a8
+ 279:	dbba      	add.n	a13, a11, a11
+ 27b:	986132        	s32i	a3, a1, 0x260
+ 27e:	0b6d      	mov.n	a6, a11
+ 280:	0a4d      	mov.n	a4, a10
+ 282:	070c      	movi.n	a7, 0
+ 284:	092c      	movi.n	a9, 32
+ 286:	203dd0        	or	a3, a13, a13
+ 289:	fa7c      	movi.n	a10, -1
+ 28b:	30a7a0        	xor	a10, a7, a10
+ 28e:	400700        	ssr	a7
+ 291:	918040        	srl	a8, a4
+ 294:	401a00        	ssl	a10
+ 297:	a1a300        	sll	a10, a3
+ 29a:	10c790        	and	a12, a7, a9
+ 29d:	400700        	ssr	a7
+ 2a0:	91b060        	srl	a11, a6
+ 2a3:	208a80        	or	a8, a10, a8
+ 2a6:	938bc0        	movnez	a8, a11, a12
+ 2a9:	0f6807        	bbci	a8, 0, 2bc <master_task+0x2bc>
+			2a9: R_XTENSA_SLOT0_OP	.text.master_task+0x2bc
+ 2ac:	02c8      	l32i.n	a12, a2, 0
+ 2ae:	9821a2        	l32i	a10, a1, 0x260
+ 2b1:	01d7b2        	addmi	a11, a7, 0x100
+ 2b4:	000081        	l32r	a8, fffc02b4 <master_task+0xfffc02b4>
+			2b4: R_XTENSA_SLOT0_OP	.literal.master_task+0xac
+			2b4: R_XTENSA_ASM_EXPAND	espnow_snapshot_append_unique
+ 2b7:	0008e0        	callx8	a8
+ 2ba:	092c      	movi.n	a9, 32
+ 2bc:	771b      	addi.n	a7, a7, 1
+ 2be:	224b      	addi.n	a2, a2, 4
+ 2c0:	c52757        	blt	a7, a5, 289 <master_task+0x289>
+			2c0: R_XTENSA_SLOT0_OP	.text.master_task+0x289
+ 2c3:	982132        	l32i	a3, a1, 0x260
+ 2c6:	9d2182        	l32i	a8, a1, 0x274
+ 2c9:	b88c      	beqz.n	a8, 2d8 <master_task+0x2d8>
+			2c9: R_XTENSA_SLOT0_OP	.text.master_task+0x2d8
+ 2cb:	9f21c2        	l32i	a12, a1, 0x27c
+ 2ce:	1b0c      	movi.n	a11, 1
+ 2d0:	03ad      	mov.n	a10, a3
+ 2d2:	000081        	l32r	a8, fffc02d4 <master_task+0xfffc02d4>
+			2d2: R_XTENSA_SLOT0_OP	.literal.master_task+0xb0
+			2d2: R_XTENSA_ASM_EXPAND	espnow_snapshot_put
+ 2d5:	0008e0        	callx8	a8
+ 2d8:	000081        	l32r	a8, fffc02d8 <master_task+0xfffc02d8>
+			2d8: R_XTENSA_SLOT0_OP	.literal.master_task+0xb4
+			2d8: R_XTENSA_ASM_EXPAND	esp_timer_get_time
+ 2db:	0008e0        	callx8	a8
+ 2de:	000081        	l32r	a8, fffc02e0 <master_task+0xfffc02e0>
+			2de: R_XTENSA_SLOT0_OP	.literal.master_task+0x34
+ 2e1:	070c      	movi.n	a7, 0
+ 2e3:	4e0c      	movi.n	a14, 4
+ 2e5:	4b8e76        	loop	a14, 334 <master_task+0x334>
+			2e5: R_XTENSA_SLOT0_OP	.text.master_task+0x334
+ 2e8:	28c8      	l32i.n	a12, a8, 8
+ 2ea:	3898      	l32i.n	a9, a8, 12
+ 2ec:	62fac0        	saltu	a15, a10, a12
+ 2ef:	c0db90        	sub	a13, a11, a9
+ 2f2:	209c90        	or	a9, a12, a9
+ 2f5:	c0ddf0        	sub	a13, a13, a15
+ 2f8:	59bc      	beqz.n	a9, 331 <master_task+0x331>
+			2f8: R_XTENSA_SLOT0_OP	.text.master_task+0x331
+ 2fa:	c0cac0        	sub	a12, a10, a12
+ 2fd:	301de6        	bgei	a13, 1, 331 <master_task+0x331>
+			2fd: R_XTENSA_SLOT0_OP	.text.master_task+0x331
+ 300:	4dcc      	bnez.n	a13, 308 <master_task+0x308>
+			300: R_XTENSA_SLOT0_OP	.text.master_task+0x308
+ 302:	000091        	l32r	a9, fffc0304 <master_task+0xfffc0304>
+			302: R_XTENSA_SLOT0_OP	.literal.master_task+0x38
+ 305:	2839c7        	bltu	a9, a12, 331 <master_task+0x331>
+			305: R_XTENSA_SLOT0_OP	.text.master_task+0x331
+ 308:	48c8      	l32i.n	a12, a8, 16
+ 30a:	5898      	l32i.n	a9, a8, 20
+ 30c:	62fac0        	saltu	a15, a10, a12
+ 30f:	c0db90        	sub	a13, a11, a9
+ 312:	209c90        	or	a9, a12, a9
+ 315:	c0ddf0        	sub	a13, a13, a15
+ 318:	771b      	addi.n	a7, a7, 1
+ 31a:	1b2916        	beqz	a9, 4d0 <master_task+0x4d0>
+			31a: R_XTENSA_SLOT0_OP	.text.master_task+0x4d0
+ 31d:	c0cac0        	sub	a12, a10, a12
+ 320:	021da6        	blti	a13, 1, 326 <master_task+0x326>
+			320: R_XTENSA_SLOT0_OP	.text.master_task+0x326
+ 323:	006a46        	j	4d0 <master_task+0x4d0>
+			323: R_XTENSA_SLOT0_OP	.text.master_task+0x4d0
+ 326:	7dcc      	bnez.n	a13, 331 <master_task+0x331>
+			326: R_XTENSA_SLOT0_OP	.text.master_task+0x331
+ 328:	000091        	l32r	a9, fffc0328 <master_task+0xfffc0328>
+			328: R_XTENSA_SLOT0_OP	.literal.master_task+0x38
+ 32b:	02b9c7        	bgeu	a9, a12, 331 <master_task+0x331>
+			32b: R_XTENSA_SLOT0_OP	.text.master_task+0x331
+ 32e:	006786        	j	4d0 <master_task+0x4d0>
+			32e: R_XTENSA_SLOT0_OP	.text.master_task+0x4d0
+ 331:	18c882        	addi	a8, a8, 24
+ 334:	000081        	l32r	a8, fffc0334 <master_task+0xfffc0334>
+			334: R_XTENSA_SLOT0_OP	.literal.master_task+0x3c
+ 337:	000892        	l8ui	a9, a8, 0
+ 33a:	01a082        	movi	a8, 1
+ 33d:	838770        	moveqz	a8, a7, a7
+ 340:	401987        	beq	a9, a8, 384 <master_task+0x384>
+			340: R_XTENSA_SLOT0_OP	.text.master_task+0x384
+ 343:	000091        	l32r	a9, fffc0344 <master_task+0xfffc0344>
+			343: R_XTENSA_SLOT0_OP	.literal.master_task+0x3c
+ 346:	03a062        	movi	a6, 3
+ 349:	004982        	s8i	a8, a9, 0
+ 34c:	000081        	l32r	a8, fffc034c <master_task+0xfffc034c>
+			34c: R_XTENSA_SLOT0_OP	.literal.master_task+0xb8
+			34c: R_XTENSA_ASM_EXPAND	esp_log_timestamp
+ 34f:	0008e0        	callx8	a8
+ 352:	0add      	mov.n	a13, a10
+ 354:	479c      	beqz.n	a7, 36c <master_task+0x36c>
+			354: R_XTENSA_SLOT0_OP	.text.master_task+0x36c
+ 356:	0000e1        	l32r	a14, fffc0358 <master_task+0xfffc0358>
+			356: R_XTENSA_SLOT0_OP	.literal.master_task+0x40
+ 359:	0000c1        	l32r	a12, fffc035c <master_task+0xfffc035c>
+			359: R_XTENSA_SLOT0_OP	.literal.master_task+0x44
+ 35c:	6f0c      	movi.n	a15, 6
+ 35e:	0ebd      	mov.n	a11, a14
+ 360:	06ad      	mov.n	a10, a6
+ 362:	000081        	l32r	a8, fffc0364 <master_task+0xfffc0364>
+			362: R_XTENSA_SLOT0_OP	.literal.master_task+0xbc
+			362: R_XTENSA_ASM_EXPAND	esp_log
+ 365:	0008e0        	callx8	a8
+ 368:	0006c6        	j	387 <master_task+0x387>
+			368: R_XTENSA_SLOT0_OP	.text.master_task+0x387
+ 36b:	00          	.byte	00
+ 36c:	0000e1        	l32r	a14, fffc036c <master_task+0xfffc036c>
+			36c: R_XTENSA_SLOT0_OP	.literal.master_task+0x40
+ 36f:	0000c1        	l32r	a12, fffc0370 <master_task+0xfffc0370>
+			36f: R_XTENSA_SLOT0_OP	.literal.master_task+0x44
+ 372:	5f0c      	movi.n	a15, 5
+ 374:	20bee0        	or	a11, a14, a14
+ 377:	20a660        	or	a10, a6, a6
+ 37a:	000081        	l32r	a8, fffc037c <master_task+0xfffc037c>
+			37a: R_XTENSA_SLOT0_OP	.literal.master_task+0xc0
+			37a: R_XTENSA_ASM_EXPAND	esp_log
+ 37d:	0008e0        	callx8	a8
+ 380:	001846        	j	3e5 <master_task+0x3e5>
+			380: R_XTENSA_SLOT0_OP	.text.master_task+0x3e5
+ 383:	00          	.byte	00
+ 384:	05d716        	beqz	a7, 3e5 <master_task+0x3e5>
+			384: R_XTENSA_SLOT0_OP	.text.master_task+0x3e5
+ 387:	000081        	l32r	a8, fffc0388 <master_task+0xfffc0388>
+			387: R_XTENSA_SLOT0_OP	.literal.master_task+0x20
+ 38a:	08a8      	l32i.n	a10, a8, 0
+ 38c:	000081        	l32r	a8, fffc038c <master_task+0xfffc038c>
+			38c: R_XTENSA_SLOT0_OP	.literal.master_task+0xc4
+			38c: R_XTENSA_ASM_EXPAND	espnow_v6_frame_count
+ 38f:	0008e0        	callx8	a8
+ 392:	0a7d      	mov.n	a7, a10
+ 394:	021ae6        	bgei	a10, 1, 39a <master_task+0x39a>
+			394: R_XTENSA_SLOT0_OP	.text.master_task+0x39a
+ 397:	002286        	j	425 <master_task+0x425>
+			397: R_XTENSA_SLOT0_OP	.text.master_task+0x425
+ 39a:	060c      	movi.n	a6, 0
+ 39c:	000081        	l32r	a8, fffc039c <master_task+0xfffc039c>
+			39c: R_XTENSA_SLOT0_OP	.literal.master_task+0x20
+ 39f:	01cd      	mov.n	a12, a1
+ 3a1:	08a8      	l32i.n	a10, a8, 0
+ 3a3:	06bd      	mov.n	a11, a6
+ 3a5:	faa0d2        	movi	a13, 250
+ 3a8:	000081        	l32r	a8, fffc03a8 <master_task+0xfffc03a8>
+			3a8: R_XTENSA_SLOT0_OP	.literal.master_task+0xc8
+			3a8: R_XTENSA_ASM_EXPAND	espnow_v6_encode
+ 3ab:	0008e0        	callx8	a8
+ 3ae:	0acd      	mov.n	a12, a10
+ 3b0:	01bd      	mov.n	a11, a1
+ 3b2:	0000a1        	l32r	a10, fffc03b4 <master_task+0xfffc03b4>
+			3b2: R_XTENSA_SLOT0_OP	.literal.master_task+0x48
+ 3b5:	023c16        	beqz	a12, 3dc <master_task+0x3dc>
+			3b5: R_XTENSA_SLOT0_OP	.text.master_task+0x3dc
+ 3b8:	000081        	l32r	a8, fffc03b8 <master_task+0xfffc03b8>
+			3b8: R_XTENSA_SLOT0_OP	.literal.master_task+0xcc
+			3b8: R_XTENSA_ASM_EXPAND	esp_now_send
+ 3bb:	0008e0        	callx8	a8
+ 3be:	0a5d      	mov.n	a5, a10
+ 3c0:	8a9c      	beqz.n	a10, 3dc <master_task+0x3dc>
+			3c0: R_XTENSA_SLOT0_OP	.text.master_task+0x3dc
+ 3c2:	000081        	l32r	a8, fffc03c4 <master_task+0xfffc03c4>
+			3c2: R_XTENSA_SLOT0_OP	.literal.master_task+0xd0
+			3c2: R_XTENSA_ASM_EXPAND	esp_log_timestamp
+ 3c5:	0008e0        	callx8	a8
+ 3c8:	0000e1        	l32r	a14, fffc03c8 <master_task+0xfffc03c8>
+			3c8: R_XTENSA_SLOT0_OP	.literal.master_task+0x40
+ 3cb:	0000c1        	l32r	a12, fffc03cc <master_task+0xfffc03cc>
+			3cb: R_XTENSA_SLOT0_OP	.literal.master_task+0x4c
+ 3ce:	0add      	mov.n	a13, a10
+ 3d0:	05fd      	mov.n	a15, a5
+ 3d2:	0ebd      	mov.n	a11, a14
+ 3d4:	2a0c      	movi.n	a10, 2
+ 3d6:	000081        	l32r	a8, fffc03d8 <master_task+0xfffc03d8>
+			3d6: R_XTENSA_SLOT0_OP	.literal.master_task+0xd4
+			3d6: R_XTENSA_ASM_EXPAND	esp_log
+ 3d9:	0008e0        	callx8	a8
+ 3dc:	661b      	addi.n	a6, a6, 1
+ 3de:	431767        	beq	a7, a6, 425 <master_task+0x425>
+			3de: R_XTENSA_SLOT0_OP	.text.master_task+0x425
+ 3e1:	ffedc6        	j	39c <master_task+0x39c>
+			3e1: R_XTENSA_SLOT0_OP	.text.master_task+0x39c
+ 3e4:	00          	.byte	00
+ 3e5:	000081        	l32r	a8, fffc03e8 <master_task+0xfffc03e8>
+			3e5: R_XTENSA_SLOT0_OP	.literal.master_task+0x20
+ 3e8:	faa0c2        	movi	a12, 250
+ 3eb:	08a8      	l32i.n	a10, a8, 0
+ 3ed:	20b110        	or	a11, a1, a1
+ 3f0:	000081        	l32r	a8, fffc03f0 <master_task+0xfffc03f0>
+			3f0: R_XTENSA_SLOT0_OP	.literal.master_task+0xd8
+			3f0: R_XTENSA_ASM_EXPAND	espnow_v5_encode
+ 3f3:	0008e0        	callx8	a8
+ 3f6:	baac      	beqz.n	a10, 425 <master_task+0x425>
+			3f6: R_XTENSA_SLOT0_OP	.text.master_task+0x425
+ 3f8:	0acd      	mov.n	a12, a10
+ 3fa:	0000a1        	l32r	a10, fffc03fc <master_task+0xfffc03fc>
+			3fa: R_XTENSA_SLOT0_OP	.literal.master_task+0x48
+ 3fd:	20b110        	or	a11, a1, a1
+ 400:	000081        	l32r	a8, fffc0400 <master_task+0xfffc0400>
+			400: R_XTENSA_SLOT0_OP	.literal.master_task+0xdc
+			400: R_XTENSA_ASM_EXPAND	esp_now_send
+ 403:	0008e0        	callx8	a8
+ 406:	0a7d      	mov.n	a7, a10
+ 408:	019a16        	beqz	a10, 425 <master_task+0x425>
+			408: R_XTENSA_SLOT0_OP	.text.master_task+0x425
+ 40b:	000081        	l32r	a8, fffc040c <master_task+0xfffc040c>
+			40b: R_XTENSA_SLOT0_OP	.literal.master_task+0xe0
+			40b: R_XTENSA_ASM_EXPAND	esp_log_timestamp
+ 40e:	0008e0        	callx8	a8
+ 411:	0000e1        	l32r	a14, fffc0414 <master_task+0xfffc0414>
+			411: R_XTENSA_SLOT0_OP	.literal.master_task+0x40
+ 414:	0000c1        	l32r	a12, fffc0414 <master_task+0xfffc0414>
+			414: R_XTENSA_SLOT0_OP	.literal.master_task+0x4c
+ 417:	0add      	mov.n	a13, a10
+ 419:	07fd      	mov.n	a15, a7
+ 41b:	0ebd      	mov.n	a11, a14
+ 41d:	2a0c      	movi.n	a10, 2
+ 41f:	000081        	l32r	a8, fffc0420 <master_task+0xfffc0420>
+			41f: R_XTENSA_SLOT0_OP	.literal.master_task+0xe4
+			41f: R_XTENSA_ASM_EXPAND	esp_log
+ 422:	0008e0        	callx8	a8
+ 425:	000081        	l32r	a8, fffc0428 <master_task+0xfffc0428>
+			425: R_XTENSA_SLOT0_OP	.literal.master_task+0xe8
+			425: R_XTENSA_ASM_EXPAND	esp_timer_get_time
+ 428:	0008e0        	callx8	a8
+ 42b:	000021        	l32r	a2, fffc042c <master_task+0xfffc042c>
+			42b: R_XTENSA_SLOT0_OP	.literal.master_task+0x5c
+ 42e:	000051        	l32r	a5, fffc0430 <master_task+0xfffc0430>
+			42e: R_XTENSA_SLOT0_OP	.literal.master_task+0x60
+ 431:	9861a2        	s32i	a10, a1, 0x260
+ 434:	9961b2        	s32i	a11, a1, 0x264
+ 437:	00a062        	movi	a6, 0
+ 43a:	e8a372        	movi	a7, 0x3e8
+ 43d:	0000a1        	l32r	a10, fffc0440 <master_task+0xfffc0440>
+			43d: R_XTENSA_SLOT0_OP	.literal.master_task+0x4
+ 440:	ffafb2        	movi	a11, -1
+ 443:	000081        	l32r	a8, fffc0444 <master_task+0xfffc0444>
+			443: R_XTENSA_SLOT0_OP	.literal.master_task+0xec
+			443: R_XTENSA_ASM_EXPAND	xPortEnterCriticalTimeout
+ 446:	0008e0        	callx8	a8
+ 449:	000081        	l32r	a8, fffc044c <master_task+0xfffc044c>
+			449: R_XTENSA_SLOT0_OP	.literal.master_task+0x8
+ 44c:	0000a1        	l32r	a10, fffc044c <master_task+0xfffc044c>
+			44c: R_XTENSA_SLOT0_OP	.literal.master_task+0x4
+ 44f:	000842        	l8ui	a4, a8, 0
+ 452:	000081        	l32r	a8, fffc0454 <master_task+0xfffc0454>
+			452: R_XTENSA_SLOT0_OP	.literal.master_task+0xf0
+			452: R_XTENSA_ASM_EXPAND	vPortExitCritical
+ 455:	0008e0        	callx8	a8
+ 458:	000091        	l32r	a9, fffc0458 <master_task+0xfffc0458>
+			458: R_XTENSA_SLOT0_OP	.literal.master_task+0x58
+ 45b:	9821a2        	l32i	a10, a1, 0x260
+ 45e:	939240        	movnez	a9, a2, a4
+ 461:	068d      	mov.n	a8, a6
+ 463:	938640        	movnez	a8, a6, a4
+ 466:	4a9a      	add.n	a4, a10, a9
+ 468:	9921a2        	l32i	a10, a1, 0x264
+ 46b:	629490        	saltu	a9, a4, a9
+ 46e:	3a8a      	add.n	a3, a10, a8
+ 470:	339a      	add.n	a3, a3, a9
+ 472:	000081        	l32r	a8, fffc0474 <master_task+0xfffc0474>
+			472: R_XTENSA_SLOT0_OP	.literal.master_task+0xf4
+			472: R_XTENSA_ASM_EXPAND	esp_timer_get_time
+ 475:	0008e0        	callx8	a8
+ 478:	6294a0        	saltu	a9, a4, a10
+ 47b:	c083b0        	sub	a8, a3, a11
+ 47e:	c08890        	sub	a8, a8, a9
+ 481:	c094a0        	sub	a9, a4, a10
+ 484:	82a790        	mull	a10, a7, a9
+ 487:	a2c790        	muluh	a12, a7, a9
+ 48a:	82b780        	mull	a11, a7, a8
+ 48d:	aa5a      	add.n	a10, a10, a5
+ 48f:	bbca      	add.n	a11, a11, a12
+ 491:	62ca50        	saltu	a12, a10, a5
+ 494:	0d0c      	movi.n	a13, 0
+ 496:	bbca      	add.n	a11, a11, a12
+ 498:	0518e6        	bgei	a8, 1, 4a1 <master_task+0x4a1>
+			498: R_XTENSA_SLOT0_OP	.text.master_task+0x4a1
+ 49b:	b72856        	bnez	a8, 11 <master_task+0x11>
+			49b: R_XTENSA_SLOT0_OP	.text.master_task+0x11
+ 49e:	b6f916        	beqz	a9, 11 <master_task+0x11>
+			49e: R_XTENSA_SLOT0_OP	.text.master_task+0x11
+ 4a1:	0000c1        	l32r	a12, fffc04a4 <master_task+0xfffc04a4>
+			4a1: R_XTENSA_SLOT0_OP	.literal.master_task+0x64
+ 4a4:	000081        	l32r	a8, fffc04a4 <master_task+0xfffc04a4>
+			4a4: R_XTENSA_SLOT0_OP	.literal.master_task+0xf8
+			4a4: R_XTENSA_ASM_EXPAND	__udivdi3
+ 4a7:	0008e0        	callx8	a8
+ 4aa:	000081        	l32r	a8, fffc04ac <master_task+0xfffc04ac>
+			4aa: R_XTENSA_SLOT0_OP	.literal.master_task+0x50
+ 4ad:	0abd      	mov.n	a11, a10
+ 4af:	0028a2        	l32i	a10, a8, 0
+ 4b2:	000081        	l32r	a8, fffc04b4 <master_task+0xfffc04b4>
+			4b2: R_XTENSA_SLOT0_OP	.literal.master_task+0xfc
+			4b2: R_XTENSA_ASM_EXPAND	xQueueSemaphoreTake
+ 4b5:	0008e0        	callx8	a8
+ 4b8:	ffe046        	j	43d <master_task+0x43d>
+			4b8: R_XTENSA_SLOT0_OP	.text.master_task+0x43d
+ 4bb:	000091        	l32r	a9, fffc04bc <master_task+0xfffc04bc>
+			4bb: R_XTENSA_SLOT0_OP	.literal.master_task+0x3c
+ 4be:	080c      	movi.n	a8, 0
+ 4c0:	004982        	s8i	a8, a9, 0
+ 4c3:	000081        	l32r	a8, fffc04c4 <master_task+0xfffc04c4>
+			4c3: R_XTENSA_SLOT0_OP	.literal.master_task+0x100
+			4c3: R_XTENSA_ASM_EXPAND	esp_log_timestamp
+ 4c6:	0008e0        	callx8	a8
+ 4c9:	360c      	movi.n	a6, 3
+ 4cb:	0add      	mov.n	a13, a10
+ 4cd:	ffa6c6        	j	36c <master_task+0x36c>
+			4cd: R_XTENSA_SLOT0_OP	.text.master_task+0x36c
+ 4d0:	000081        	l32r	a8, fffc04d0 <master_task+0xfffc04d0>
+			4d0: R_XTENSA_SLOT0_OP	.literal.master_task+0x3c
+ 4d3:	000882        	l8ui	a8, a8, 0
+ 4d6:	f0b816        	beqz	a8, 3e5 <master_task+0x3e5>
+			4d6: R_XTENSA_SLOT0_OP	.text.master_task+0x3e5
+ 4d9:	fff786        	j	4bb <master_task+0x4bb>
+			4d9: R_XTENSA_SLOT0_OP	.text.master_task+0x4bb
+
+normal espnow_v6 size totals: {"before": {".text": 4116, ".literal": 148, ".bss": 0, ".data": 0, ".rodata": 0}, "after": {".text": 4252, ".literal": 148, ".bss": 0, ".data": 0, ".rodata": 0}}
+normal espnow_link size totals: {"before": {".text": 4969, ".literal": 1568, ".bss": 253, ".data": 16, ".rodata": 1428}, "after": {".text": 4969, ".literal": 1568, ".bss": 253, ".data": 16, ".rodata": 1428}}
+normal real ELF collector calls: two append, one general put; no host reference/benchmark symbols.
+{
+  "before_bytes": 2643440,
+  "after_bytes": 2643584,
+  "delta_bytes": 144,
+  "elf_sha256": "750cd7779d500334df379c96b4712213596bab53a7d3a3f95903ff089f29149d",
+  "bin_sha256": "038eb96abf505e43a33e841a8b75bcb2378985d684d951893f2329353c5433d4"
+}
+
+stats espnow_v6 size totals: {"before": {".text": 4116, ".literal": 148, ".bss": 0, ".data": 0, ".rodata": 0}, "after": {".text": 4252, ".literal": 148, ".bss": 0, ".data": 0, ".rodata": 0}}
+stats espnow_link size totals: {"before": {".text": 4969, ".literal": 1568, ".bss": 253, ".data": 16, ".rodata": 1428}, "after": {".text": 4969, ".literal": 1568, ".bss": 253, ".data": 16, ".rodata": 1428}}
+stats real ELF collector calls: two append, one general put; no host reference/benchmark symbols.
+{
+  "before_bytes": 2645536,
+  "after_bytes": 2645680,
+  "delta_bytes": 144,
+  "elf_sha256": "a9a2c6fcca872fbd80a91a85e4d77c3262a311ce8061f5bb9fac8b6d2ae4dd91",
+  "bin_sha256": "01ffba3d462259d720f9e8307dfaf0907e2ebc66841eb98bb4eb2c772d284667"
+}
+
+no-slot espnow_v6 size totals: {"before": {".text": 4116, ".literal": 148, ".bss": 0, ".data": 0, ".rodata": 0}, "after": {".text": 4252, ".literal": 148, ".bss": 0, ".data": 0, ".rodata": 0}}
+no-slot espnow_link size totals: {"before": {".text": 4969, ".literal": 1568, ".bss": 253, ".data": 16, ".rodata": 1428}, "after": {".text": 4969, ".literal": 1568, ".bss": 253, ".data": 16, ".rodata": 1428}}
+no-slot real ELF collector calls: two append, one general put; no host reference/benchmark symbols.
+{
+  "before_bytes": 2580384,
+  "after_bytes": 2580528,
+  "delta_bytes": 144,
+  "elf_sha256": "036b74512fa0dca7a9c2fac25bc571eaa397bc0de93e401be8bcff6e9d1ac782",
+  "bin_sha256": "ca1f58d771eef8a95965db7a00f99320ac2edf03e8b46475aa3e78141818e4b3"
+}
+
+
+Frozen reference and patch verification:
+snapshot_reference.c reproduces original id_is_sys/id_mask_bit/espnow_snapshot_put exactly, except names; collect_reference.inc reproduces original master_collect exactly except name.
+All preexisting codec function source bodies remain byte-identical. Narrow production patch reverse-applied reconstructs three captured baseline files exactly.
+
+host-asan: 9/9 passed, snapshot_append: 1187778 checks, 0 failures, master_collect: 35012 cases, 210616 checks, 0 failures
+
+host-release: 9/9 passed, snapshot_append: 1187778 checks, 0 failures, master_collect: 35012 cases, 210616 checks, 0 failures
+
+Negative controls (temporary implementations, never firmware):
+{
+  "wrong_mask": {
+    "returncode": 1,
+    "assertion_failures": 258392,
+    "sanitizer": false
+  },
+  "capacity_endpoint": {
+    "returncode": -6,
+    "assertion_failures": null,
+    "sanitizer": true
+  },
+  "gear_bounds": {
+    "returncode": 1,
+    "assertion_failures": 4,
+    "sanitizer": false
+  },
+  "wrong_id": {
+    "returncode": 1,
+    "assertion_failures": 464057,
+    "sanitizer": false
+  },
+  "override_append": {
+    "returncode": 1,
+    "assertion_failures": 31650,
+    "sanitizer": false
+  }
+}
+
+Three final firmware builds return 0. No extra SDK task, heap allocation, shared metadata or parallel request path. Device timing/RF/power remain unmeasured.
+
+Final additional checks: EH_ROM_CRC=OFF portable suite 7/7. Contract registry/schema/fixtures and 37 profiles pass. Signal/theme generation and partition/doc layout checks pass. Scoped whitespace, bilingual added headings/commands/tables, preserved prior docs, all 66 CSV rows and samples, final ELF/bin hashes and reverse production patch verified.

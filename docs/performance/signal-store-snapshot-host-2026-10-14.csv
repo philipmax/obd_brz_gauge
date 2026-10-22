@@ -1,0 +1,9 @@
+case,before_ns,after_ns,speedup,checksums_match
+many_1,7.55,6.89,1.096,true
+many_8,16.62,13.21,1.258,true
+many_16,29.37,20.02,1.467,true
+many_48,87.28,56.26,1.551,true
+delivered_1,5.75,5.49,1.047,true
+delivered_8,22.28,19.96,1.116,true
+delivered_16,41.18,33.96,1.213,true
+delivered_48,118.00,107.23,1.100,true

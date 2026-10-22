@@ -1,0 +1,21 @@
+/* Compile the same codec helpers with the portable CRC under private names. */
+#ifdef ESP_PLATFORM
+#undef ESP_PLATFORM
+#endif
+#define espnow_profile_hash portable_espnow_profile_hash
+#define espnow_snapshot_init portable_espnow_snapshot_init
+#define espnow_snapshot_put portable_espnow_snapshot_put
+#define espnow_snapshot_append_unique portable_espnow_snapshot_append_unique
+#define espnow_snapshot_get portable_espnow_snapshot_get
+#define espnow_v5_encode portable_espnow_v5_encode
+#define espnow_v6_frame_count portable_espnow_v6_frame_count
+#define espnow_v6_encode portable_espnow_v6_encode
+#define espnow_classify portable_espnow_classify
+#define espnow_rx_record portable_espnow_rx_record
+#define espnow_v5_decode portable_espnow_v5_decode
+#define espnow_v6_decode portable_espnow_v6_decode
+#define espnow_rx_apply portable_espnow_rx_apply
+#define espnow_hello_encode portable_espnow_hello_encode
+#define espnow_hello_decode portable_espnow_hello_decode
+#define espnow_crc16 portable_espnow_crc16
+#include "../../../main/bsp_obd_dsp/espnow_v6.c"
