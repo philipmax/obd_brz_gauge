@@ -257,6 +257,12 @@ void video_view_set_frame(lv_obj_t *obj, const uint16_t *data, uint16_t w, uint1
     CHECK(!runtime_active || mux_held);
     shown_marker[presented++] = data[0];
 }
+void video_view_set_frame_alpha(lv_obj_t *obj, const uint8_t *data, uint16_t w, uint16_t h)
+{
+    CHECK(obj == &view && data && w == 16 && h == 16 && presented < COUNT_OF(shown_marker));
+    CHECK(!runtime_active || mux_held);
+    shown_marker[presented++] = (uint16_t)data[0] | ((uint16_t)data[1] << 8);
+}
 esp_err_t esp_lcd_panel_draw_bitmap(void *panel, int x0, int y0, int x1, int y1, const void *pixels)
 {
     CHECK(panel == panel_handle && pixels && draw_buf.flushing);

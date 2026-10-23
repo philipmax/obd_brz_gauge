@@ -28,6 +28,8 @@ lv_obj_t *video_view_create(lv_obj_t *parent);
  */
 void video_view_set_frame(lv_obj_t *obj, const uint16_t *rgb565_data,
                           uint16_t width, uint16_t height);
+void video_view_set_frame_alpha(lv_obj_t *obj, const uint8_t *rgb565a_data,
+                                uint16_t width, uint16_t height);
 
 /**
  * Clear frame (show black or placeholder).

@@ -19,6 +19,7 @@ typedef struct {
     const uint8_t *data;
     uint16_t       width;
     uint16_t       height;
+    bool           has_alpha;
 } video_view_state_t;
 
 static void view_event_cb(lv_event_t *e);
@@ -42,7 +43,7 @@ static void frame_area(lv_obj_t *obj, const video_view_state_t *st, lv_area_t *o
 static void view_cover_check(lv_event_t *e, lv_obj_t *obj, const video_view_state_t *st)
 {
     lv_cover_check_info_t *info = lv_event_get_param(e);
-    if (info->res == LV_COVER_RES_MASKED || !st->data) return;   /* keep the class result */
+    if (info->res == LV_COVER_RES_MASKED || !st->data || st->has_alpha) return;
     if (lv_obj_get_style_clip_corner(obj, LV_PART_MAIN)) return;
     lv_area_t fa;
     frame_area(obj, st, &fa);
@@ -75,7 +76,8 @@ static void view_draw(lv_event_t *e, lv_obj_t *obj, const video_view_state_t *st
     const lv_area_t *clip_ori = draw_ctx->clip_area;
     draw_ctx->clip_area = &clip;
     /* Decoded draw: no image cache / decoder lookup per frame. */
-    lv_draw_img_decoded(draw_ctx, &dsc, &fa, st->data, LV_IMG_CF_TRUE_COLOR);
+    lv_draw_img_decoded(draw_ctx, &dsc, &fa, st->data,
+                        st->has_alpha ? LV_IMG_CF_TRUE_COLOR_ALPHA : LV_IMG_CF_TRUE_COLOR);
     draw_ctx->clip_area = clip_ori;
 }
 
@@ -121,19 +123,32 @@ lv_obj_t *video_view_create(lv_obj_t *parent)
     return obj;
 }
 
-void video_view_set_frame(lv_obj_t *obj, const uint16_t *rgb565_data,
-                          uint16_t width, uint16_t height)
+static void view_set_frame(lv_obj_t *obj, const uint8_t *pixel_data,
+                           uint16_t width, uint16_t height, bool has_alpha)
 {
     video_view_state_t *st = view_state(obj);
     if (!st) return;
-    if (!rgb565_data || !width || !height) {
+    if (!pixel_data || !width || !height) {
         video_view_clear(obj);
         return;
     }
-    st->data = (const uint8_t *)rgb565_data;
+    st->data = pixel_data;
     st->width = width;
     st->height = height;
+    st->has_alpha = has_alpha;
     lv_obj_invalidate(obj);
+}
+
+void video_view_set_frame(lv_obj_t *obj, const uint16_t *rgb565_data,
+                          uint16_t width, uint16_t height)
+{
+    view_set_frame(obj, (const uint8_t *)rgb565_data, width, height, false);
+}
+
+void video_view_set_frame_alpha(lv_obj_t *obj, const uint8_t *rgb565a_data,
+                                uint16_t width, uint16_t height)
+{
+    view_set_frame(obj, rgb565a_data, width, height, true);
 }
 
 void video_view_clear(lv_obj_t *obj)
@@ -143,5 +158,6 @@ void video_view_clear(lv_obj_t *obj)
     st->data = NULL;
     st->width = 0;
     st->height = 0;
+    st->has_alpha = false;
     lv_obj_invalidate(obj);
 }

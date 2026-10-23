@@ -141,6 +141,8 @@ typedef struct {
     /* COMPOSITE (fb[0] doubles as the FULLSCREEN whole-frame buffer) */
     uint8_t    *fb[2];             /* PSRAM, 16-aligned */
     uint32_t    fb_cap;
+    uint8_t    *alpha_tmp;         /* one decoded alpha plane for OBV3 */
+    bool        pending_alpha;
     int8_t      front;             /* buffer shown by the view, -1 none (lock) */
     int8_t      pending;           /* decoded, not yet handed over, -1 none (lock) */
 
@@ -191,6 +193,7 @@ static void session_free(vp_session_t *s)
     }
     heap_caps_free(s->fb[0]);
     heap_caps_free(s->fb[1]);
+    heap_caps_free(s->alpha_tmp);
     heap_caps_free(s->ring);
     heap_caps_free(s->timed_index);
     if (s->ev) vEventGroupDelete(s->ev);
@@ -342,6 +345,10 @@ static uint8_t *reader_open(vp_session_t *s, FILE *f)
 
     bool timed = info.version == OBV2_VERSION;
     if (timed && (s->mode != VIDEO_MODE_FULLSCREEN || s->loop)) {
+        heap_caps_free(index);
+        return NULL;
+    }
+    if (info.version == OBV3_VERSION && (s->mode != VIDEO_MODE_COMPOSITE || !s->loop)) {
         heap_caps_free(index);
         return NULL;
     }
@@ -621,6 +628,7 @@ void video_player_ui_step(void)
     if (!s || s->mode != VIDEO_MODE_COMPOSITE || s->paused || s->quit) return;
     taskENTER_CRITICAL(&s->lock);
     int p = s->pending;
+    bool has_alpha = s->pending_alpha;
     if (p >= 0) {
         s->front = (int8_t)p;
         s->pending = -1;
@@ -628,7 +636,8 @@ void video_player_ui_step(void)
     taskEXIT_CRITICAL(&s->lock);
     if (p < 0) return;
     /* Runs in the LVGL task, so no render is reading the old front now. */
-    video_view_set_frame(s->view, (const uint16_t *)s->fb[p], s->info.width, s->info.height);
+    if (has_alpha) video_view_set_frame_alpha(s->view, s->fb[p], s->info.width, s->info.height);
+    else video_view_set_frame(s->view, (const uint16_t *)s->fb[p], s->info.width, s->info.height);
     xEventGroupSetBits(s->ev, EV_WAKE_DECODER);
 }
 
@@ -648,29 +657,66 @@ static bool comp_wait_slot(vp_session_t *s)
 static esp_err_t comp_decode(vp_session_t *s, vp_out_t *o, const uint8_t *jpg, uint32_t len,
                              int *out_b)
 {
+    bool has_alpha = s->info.version == OBV3_VERSION;
+    const uint8_t *alpha_data = NULL;
+    size_t alpha_len = 0;
+    if (has_alpha) {
+        if (len < 13u) return ESP_ERR_INVALID_SIZE;
+        uint32_t jpeg_len = (uint32_t)jpg[0] | ((uint32_t)jpg[1] << 8) |
+                            ((uint32_t)jpg[2] << 16) | ((uint32_t)jpg[3] << 24);
+        uint32_t packed_alpha_len = (uint32_t)jpg[4] | ((uint32_t)jpg[5] << 8) |
+                                    ((uint32_t)jpg[6] << 16) | ((uint32_t)jpg[7] << 24);
+        if (jpeg_len < 4 || packed_alpha_len == 0 || jpeg_len > len - 8u ||
+            packed_alpha_len != len - 8u - jpeg_len) return ESP_ERR_INVALID_SIZE;
+        alpha_data = jpg + 8u + jpeg_len;
+        alpha_len = packed_alpha_len;
+        jpg += 8;
+        len = jpeg_len;
+    }
     media_jpeg_info_t ji;
     esp_err_t err = media_jpeg_begin(o->j, jpg, len, &ji);
     if (err != ESP_OK) return err;
     if (ji.width != s->info.width || ji.height != s->info.height) return ESP_ERR_INVALID_SIZE;
     if (!s->fb[0]) {
         if (ji.block_len < (uint32_t)ji.width * ji.height * 2u) return ESP_ERR_INVALID_SIZE;
-        uint32_t cap = (ji.block_len + 15u) & ~15u;
+        uint64_t required = (uint64_t)ji.width * ji.height * (has_alpha ? 3u : 2u);
+        if (required > UINT32_MAX - 15u) return ESP_ERR_INVALID_SIZE;
+        uint32_t cap = ((uint32_t)required + 15u) & ~15u;
         uint8_t *a = heap_caps_aligned_alloc(16, cap, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
         uint8_t *b = heap_caps_aligned_alloc(16, cap, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-        if (!a || !b) {
+        uint8_t *alpha = has_alpha ? heap_caps_malloc((size_t)ji.width * ji.height, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) : NULL;
+        if (!a || !b || (has_alpha && !alpha)) {
             heap_caps_free(a);
             heap_caps_free(b);
+            heap_caps_free(alpha);
             return ESP_ERR_NO_MEM;
         }
         s->fb_cap = cap;
         s->fb[1] = b;
         s->fb[0] = a;
+        s->alpha_tmp = alpha;
     }
     if (ji.block_len > s->fb_cap) return ESP_ERR_INVALID_SIZE;
     taskENTER_CRITICAL(&s->lock);
     int back = s->front == 0 ? 1 : 0;
     taskEXIT_CRITICAL(&s->lock);
     err = media_jpeg_decode_frame(o->j, s->fb[back], s->fb_cap);
+    if (err == ESP_OK && has_alpha) {
+        size_t pixels = (size_t)ji.width * ji.height;
+        if (!obv3_unpack_alpha(alpha_data, alpha_len, s->alpha_tmp, pixels)) return ESP_ERR_INVALID_SIZE;
+        /* Expand RGB565 to LVGL's packed RGB565+alpha format in place. */
+        for (size_t i = pixels; i > 0; --i) {
+            size_t pixel = i - 1u;
+            s->fb[back][pixel * 3u] = s->fb[back][pixel * 2u];
+            s->fb[back][pixel * 3u + 1u] = s->fb[back][pixel * 2u + 1u];
+            s->fb[back][pixel * 3u + 2u] = s->alpha_tmp[pixel];
+        }
+    }
+    if (err == ESP_OK) {
+        taskENTER_CRITICAL(&s->lock);
+        s->pending_alpha = has_alpha;
+        taskEXIT_CRITICAL(&s->lock);
+    }
     *out_b = back;
     return err;
 }

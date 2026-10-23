@@ -59,10 +59,12 @@ extern "C" {
 #define OBV1_INDEX_ENTRY     8u
 #define OBV1_VERSION         1u
 #define OBV2_VERSION         2u
+#define OBV3_VERSION         3u
 #define OBV2_INDEX_ENTRY     16u
 #define OBV2_TIMESCALE       1000000u
 #define OBV2_RING_MAX        (1280u * 1024u)
 #define OBV1_FRAME_MAX       (48u * 1024u)  /* per-frame cap, make_video.py enforces the same */
+#define OBV3_FRAME_MAX       (256u * 1024u) /* JPEG + PackBits alpha plane */
 #define OBV1_MAX_FRAMES      36000u         /* index: v1 <= 288 KB, v2 <= 576 KB */
 #define OBV1_MAX_DIM         360u
 
@@ -99,7 +101,7 @@ typedef struct {
     uint32_t duration_ms;
     uint32_t index_crc32;
     uint32_t data_crc32;
-    uint16_t version;          /* appended: v1 fixed FPS, v2 per-frame microseconds */
+    uint16_t version;          /* v1 fixed FPS, v2/v3 per-frame microseconds */
 } obv1_info_t;
 
 /* zlib-compatible CRC-32; pass 0 to start, feed the previous result to continue. */
@@ -107,7 +109,7 @@ uint32_t obv1_crc32(uint32_t crc, const void *data, size_t len);
 
 /* Parse and validate the 64-byte header. file_size = total file length
  * (0 = unknown, skips the truncation check of the data region); frame_cap =
- * largest acceptable frame (0 = OBV1_FRAME_MAX). */
+ * largest acceptable frame (0 = format-specific maximum). */
 int obv1_parse_header(const uint8_t *buf, size_t len, uint64_t file_size,
                       uint32_t frame_cap, obv1_info_t *out);
 
@@ -123,11 +125,15 @@ void obv1_index_entry(const uint8_t *index, uint32_t i, uint32_t *offset, uint32
  * Timestamps start at 0 and are contiguous, duration >=16666 us (<=60 fps).
  * duration_ms=ceil(sum(duration_us)/1000). Frames remain baseline JPEG.
  * V1 callers keep the original 8-byte accessor. */
+/* V3 uses the V1 fixed-FPS index; frame data is [u32 jpeg_size][u32 alpha_size]
+ * [baseline JPEG][PackBits alpha plane]. Alpha packets: control 0..127 copies
+ * control+1 literal bytes; 128..255 repeats the next byte (control&127)+3 times. */
 uint32_t obv_index_stride(const obv1_info_t *info);
 void obv_index_frame(const obv1_info_t *info, const uint8_t *index, uint32_t i,
                      uint32_t *offset, uint32_t *size);
 uint32_t obv_frame_time(const uint8_t *index, uint32_t i);
 uint32_t obv_frame_duration(const uint8_t *index, uint32_t i);
+bool obv3_unpack_alpha(const uint8_t *src, size_t src_len, uint8_t *dst, size_t dst_len);
 /* Exact largest one-second compressed window + wrap/headroom; 0 if over budget. */
 uint32_t obv_timed_ring_size(const obv1_info_t *info, const uint8_t *index);
 uint32_t obv_timed_prebuffer(const obv1_info_t *info, const uint8_t *index);

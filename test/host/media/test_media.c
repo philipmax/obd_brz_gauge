@@ -158,7 +158,7 @@ static void test_obv_bad_magic_version_crc(void)
     CHECK_EQ(obv1_parse_header(f.buf, f.len, f.len, 0, &i), OBV1_ERR_MAGIC);
 
     build_obv(&f);
-    wr16(f.buf + 4, 3);
+    wr16(f.buf + 4, 4);
     fix_header_crc(&f);
     CHECK_EQ(obv1_parse_header(f.buf, f.len, f.len, 0, &i), OBV1_ERR_VERSION);
 
@@ -334,6 +334,54 @@ static void test_obv2_timing(void)
     CHECK_EQ(obv1_check_index(&i, f.buf + 64, 47), OBV1_ERR_TRUNCATED);
     f.buf[64] ^= 1;
     CHECK_EQ(obv1_check_index(&i, f.buf + 64, 48), OBV1_ERR_CRC);
+}
+
+static void build_obv3(obv_file_t *f)
+{
+    memset(f, 0, sizeof(*f));
+    uint8_t *h = f->buf;
+    memcpy(h, "OBV1", 4);
+    wr16(h + 4, OBV3_VERSION); wr16(h + 6, OBV1_HEADER_SIZE);
+    wr16(h + 8, 8); wr16(h + 10, 8); wr16(h + 12, 24);
+    h[0x0E] = OBV1_SUB_420; h[0x0F] = OBV1_FLAG_LOOP;
+    wr32(h + 0x10, 1); wr32(h + 0x14, OBV1_HEADER_SIZE);
+    wr32(h + 0x18, OBV1_HEADER_SIZE + OBV1_INDEX_ENTRY);
+    wr32(h + 0x1C, 14); wr32(h + 0x20, 14); wr32(h + 0x24, 42);
+    uint8_t *entry = h + OBV1_HEADER_SIZE;
+    wr32(entry, 0); wr32(entry + 4, 14);
+    uint8_t *frame = h + OBV1_HEADER_SIZE + OBV1_INDEX_ENTRY;
+    wr32(frame, 4); wr32(frame + 4, 2);
+    frame[8] = 0xFF; frame[9] = 0xD8; frame[10] = 0xFF; frame[11] = 0xD9;
+    frame[12] = 0xBD; frame[13] = 0x7F; /* 64 opaque pixels */
+    wr32(h + 0x28, obv1_crc32(0, entry, OBV1_INDEX_ENTRY));
+    wr32(h + 0x2C, obv1_crc32(0, frame, 14));
+    f->len = OBV1_HEADER_SIZE + OBV1_INDEX_ENTRY + 14;
+    fix_header_crc(f);
+}
+
+static void test_obv3_alpha(void)
+{
+    static const uint8_t encoded[] = {0xBD, 0x7F, 0x01, 0x00, 0xFF};
+    uint8_t decoded[66];
+    obv_file_t f;
+    obv1_info_t info;
+    CHECK(obv3_unpack_alpha(encoded, 2, decoded, 64));
+    CHECK_EQ(decoded[0], 0x7F); CHECK_EQ(decoded[63], 0x7F);
+    CHECK(!obv3_unpack_alpha(encoded, 1, decoded, 64));
+    CHECK(!obv3_unpack_alpha(encoded, sizeof(encoded), decoded, 64));
+    CHECK(obv3_unpack_alpha(encoded, sizeof(encoded), decoded, sizeof(decoded)));
+    CHECK_EQ(decoded[64], 0x00); CHECK_EQ(decoded[65], 0xFF);
+
+    build_obv3(&f);
+    CHECK_EQ(obv1_parse_header(f.buf, OBV1_HEADER_SIZE, f.len, 0, &info), OBV1_OK);
+    CHECK_EQ(info.version, OBV3_VERSION);
+    CHECK_EQ(obv1_check_index(&info, f.buf + info.index_offset, f.len - info.index_offset), OBV1_OK);
+    f.buf[0x0F] = 0; fix_header_crc(&f);
+    CHECK_EQ(obv1_parse_header(f.buf, OBV1_HEADER_SIZE, f.len, 0, &info), OBV1_ERR_GEOMETRY);
+    build_obv3(&f);
+    wr32(f.buf + 64, 1); wr32(f.buf + 0x28, obv1_crc32(0, f.buf + 64, 8)); fix_header_crc(&f);
+    CHECK_EQ(obv1_parse_header(f.buf, OBV1_HEADER_SIZE, f.len, 0, &info), OBV1_OK);
+    CHECK_EQ(obv1_check_index(&info, f.buf + 64, f.len - 64), OBV1_ERR_INDEX);
 }
 
 static void test_obv2_prebuffer_budget(void)
@@ -605,6 +653,7 @@ int main(int argc, char **argv)
     test_obv_oversize();
     test_obv_geometry_index();
     test_obv2_timing();
+    test_obv3_alpha();
     test_obv2_prebuffer_budget();
     test_dv_manifest();
     test_dv_stream();

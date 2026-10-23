@@ -49,7 +49,8 @@ int obv1_parse_header(const uint8_t *buf, size_t len, uint64_t file_size,
     if (len < OBV1_HEADER_SIZE) return OBV1_ERR_TRUNCATED;
     if (file_size && file_size < OBV1_HEADER_SIZE) return OBV1_ERR_TRUNCATED;
     if (memcmp(buf, "OBV1", 4) != 0) return OBV1_ERR_MAGIC;
-    if ((rd16(buf + 0x04) != OBV1_VERSION && rd16(buf + 0x04) != OBV2_VERSION) || rd16(buf + 0x06) != OBV1_HEADER_SIZE) {
+    uint16_t version = rd16(buf + 0x04);
+    if ((version != OBV1_VERSION && version != OBV2_VERSION && version != OBV3_VERSION) || rd16(buf + 0x06) != OBV1_HEADER_SIZE) {
         return OBV1_ERR_VERSION;
     }
     if (obv1_crc32(0, buf, 0x3C) != rd32(buf + 0x3C)) return OBV1_ERR_CRC;
@@ -73,7 +74,7 @@ int obv1_parse_header(const uint8_t *buf, size_t len, uint64_t file_size,
 
     if (i.width < 8 || i.height < 8 || i.width > OBV1_MAX_DIM || i.height > OBV1_MAX_DIM ||
         (i.width & 7) || (i.height & 7) ||
-        (i.version == OBV1_VERSION ? (i.fps < 1 || i.fps > 60) :
+        (i.version != OBV2_VERSION ? (i.fps < 1 || i.fps > 60) :
          (i.fps != 0 || rd32(buf + 0x30) != OBV2_TIMESCALE || rd32(buf + 0x34) || rd32(buf + 0x38))) ||
         i.subsampling > OBV1_SUB_420) {
         return OBV1_ERR_GEOMETRY;
@@ -84,13 +85,18 @@ int obv1_parse_header(const uint8_t *buf, size_t len, uint64_t file_size,
         return OBV1_ERR_GEOMETRY;
     }
 
-    uint32_t cap = frame_cap ? frame_cap : OBV1_FRAME_MAX;
-    if (cap > OBV1_FRAME_MAX) cap = OBV1_FRAME_MAX;
+    uint32_t format_cap = i.version == OBV3_VERSION ? OBV3_FRAME_MAX : OBV1_FRAME_MAX;
+    uint32_t cap = frame_cap ? frame_cap : format_cap;
+    if (cap > format_cap) cap = format_cap;
     if (i.max_frame_size < 4 || i.max_frame_size > cap) return OBV1_ERR_FRAME_SIZE;
-    if (i.data_size < 4) return OBV1_ERR_INDEX;
+    if (i.data_size < (i.version == OBV3_VERSION ? 13u : 4u)) return OBV1_ERR_INDEX;
 
     if (file_size && (file_size < (uint64_t)i.data_offset + i.data_size ||
         (i.version == OBV2_VERSION && file_size != (uint64_t)i.data_offset + i.data_size))) return OBV1_ERR_TRUNCATED;
+    if (i.version == OBV3_VERSION &&
+        (i.subsampling != OBV1_SUB_420 || i.flags != OBV1_FLAG_LOOP ||
+         rd32(buf + 0x30) || rd32(buf + 0x34) || rd32(buf + 0x38)))
+        return OBV1_ERR_GEOMETRY;
     if (i.version == OBV2_VERSION &&
         ((i.subsampling != OBV1_SUB_420 && i.subsampling != OBV1_SUB_422) ||
          i.flags != (i.subsampling == OBV1_SUB_422 || !(i.height & 15) ? OBV1_FLAG_BLOCK_SAFE : 0)))
@@ -119,7 +125,9 @@ int obv1_check_index(const obv1_info_t *info, const uint8_t *index, size_t len)
         uint32_t off, size;
         obv_index_frame(info, index, n, &off, &size);
         if (size > info->max_frame_size) return OBV1_ERR_FRAME_SIZE;
-        if (size < 4 || (info->version == OBV2_VERSION ? off != next : off < next) || off > info->data_size || size > info->data_size - off) {
+        if (size < (info->version == OBV3_VERSION ? 13u : 4u) ||
+            (info->version != OBV1_VERSION ? off != next : off < next) ||
+            off > info->data_size || size > info->data_size - off) {
             return OBV1_ERR_INDEX;
         }
         next = off + size;
@@ -132,7 +140,7 @@ int obv1_check_index(const obv1_info_t *info, const uint8_t *index, size_t len)
         }
         if (next != info->data_size) return OBV1_ERR_INDEX;
         if ((end + 999u) / 1000u != info->duration_ms || !obv_timed_ring_size(info, index)) return OBV1_ERR_INDEX;
-    }
+    } else if (info->version == OBV3_VERSION && next != info->data_size) return OBV1_ERR_INDEX;
     return OBV1_OK;
 }
 
@@ -146,6 +154,27 @@ void obv_index_frame(const obv1_info_t *i, const uint8_t *p, uint32_t n, uint32_
 }
 uint32_t obv_frame_time(const uint8_t *p, uint32_t n) { return rd32(p + (size_t)n * 16 + 8); }
 uint32_t obv_frame_duration(const uint8_t *p, uint32_t n) { return rd32(p + (size_t)n * 16 + 12); }
+bool obv3_unpack_alpha(const uint8_t *src, size_t src_len, uint8_t *dst, size_t dst_len)
+{
+    if (!src || !dst || !src_len || !dst_len) return false;
+    size_t in = 0, out = 0;
+    while (in < src_len && out < dst_len) {
+        uint8_t control = src[in++];
+        if (control < 128) {
+            size_t count = (size_t)control + 1u;
+            if (count > src_len - in || count > dst_len - out) return false;
+            memcpy(dst + out, src + in, count);
+            in += count;
+            out += count;
+        } else {
+            size_t count = (size_t)(control & 127u) + 3u;
+            if (in >= src_len || count > dst_len - out) return false;
+            memset(dst + out, src[in++], count);
+            out += count;
+        }
+    }
+    return in == src_len && out == dst_len;
+}
 static uint32_t record_size(const uint8_t *p, uint32_t n)
 { return 8 + ((rd32(p + (size_t)n * 16 + 4) + 3u) & ~3u); }
 uint32_t obv_timed_ring_size(const obv1_info_t *i, const uint8_t *p)

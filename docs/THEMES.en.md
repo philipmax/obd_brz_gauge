@@ -420,13 +420,17 @@ across themes); if neither exists, the poster stays. A `visible` rule can pause 
 Theme directory keys and video keys support up to 64 characters; the player path buffer accommodates
 the complete SD path for a theme video.
 
-Theme videos use the custom **OBV1** container
-(`main/media/obv1_format.h`, produced by `tools/make_video.py`):
-`[64 B header][8 B × frame_count frame index][JPEG frame data]`, width/height
-8..360 and multiples of 8, fps 1..60, up to 36000 frames, each frame ≤48 KB,
-checked by CRC-32. Web boot-animation uploads use OBV2 below. Commands:
+Theme videos use the custom **OBV1/OBV3** containers (`main/media/obv1_format.h`).
+Legacy or external opaque videos use OBV1, stored as
+`[64 B header][8 B × frame_count frame index][JPEG frame data]` (version 1). New editor imports
+use OBV3, with each frame stored as
+`[u32 JPEG size][u32 alpha size][JPEG][PackBits alpha plane]`. Width/height are 8..360
+and multiples of 8; there are up to 36000 frames. OBV1 JPEG frames are ≤48 KB and
+OBV3 frames are ≤256 KiB, checked by CRC-32. Firmware decodes OBV3 only in the composite
+theme player and combines JPEG color with alpha as LVGL RGB565+alpha. OBV1 and existing
+themes remain compatible. Web boot-animation uploads use OBV2 below. Commands:
 
-The theme editor's toolbar Import Video button opens a configuration dialog. It uses the same local decoding workflow as boot animations (browser decoders and an on-demand FFmpeg WebAssembly decoder) for supported common video formats, converts to 360×360, 24 fps OBV1, and creates the poster from the first frame. Source video is not uploaded; encrypted, damaged or unsupported inputs report an error. Existing firmware-supported `.obv` files remain importable and still require a separately selected poster image.
+The theme editor's toolbar Import Video button opens a configuration dialog. Local FFmpeg WebAssembly converts videos to 360×360 at 24 fps while preserving the source alpha channel in a separate PackBits plane in OBV3. Opaque sources also use OBV3, whose constant alpha plane compresses efficiently. Posters are composed as PNG, and the editor canvas and firmware player render per-pixel transparency. Supported encodings depend on the browser FFmpeg build; damaged or unsupported inputs report an error. Source video is not uploaded.
 
 The editor no longer has a separate resource-library entry. Images and videos imported from the toolbar appear directly on the canvas and in the layer list, and are included in the theme ZIP. Images and videos with the same filename can be imported repeatedly: after decoding, the editor allocates a unique internal identifier against the current project (adding `_2`, `_3`, etc. for duplicate video names), preserving existing media and event references. Reimporting after deleting a layer also requires no manual file renaming. Click the theme name at the top to edit metadata; select a text element and use the font-property control to import or manage custom fonts.
 
