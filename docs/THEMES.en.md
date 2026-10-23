@@ -420,6 +420,8 @@ across themes); if neither exists, the poster stays. A `visible` rule can pause 
 Theme directory keys and video keys support up to 64 characters; the player path buffer accommodates
 the complete SD path for a theme video.
 
+Looping theme videos target approximately 2.5 seconds of compressed-frame SD prefetch plus two frames, with a 2 MiB ring ceiling; short clips do not allocate more than the space needed for the complete stream. Before allocating, reserve PSRAM for both display buffers, the OBV3 temporary alpha plane and an additional 512 KiB, reducing the ring when memory is limited. Actual buffered duration depends on compressed bitrate and available memory. Initial playback still starts at approximately 400 ms of buffered frames, a full ring or end of input, rather than waiting for the entire cache to fill. Sustained slow decoding progressively skips frames, up to one presentation every four target frame intervals, while continuing to update the image. It no longer deliberately freezes for five seconds and can progressively recover presentation rate when decoding improves. Longer prefetch absorbs SD read jitter but cannot increase hardware JPEG decoding or alpha-compositing throughput; value-driven videos and OBV2 boot animations retain their existing buffering and timing policies.
+
 Theme videos use the custom **OBV1/OBV3** containers (`main/media/obv1_format.h`).
 Legacy or external opaque videos use OBV1, stored as
 `[64 B header][8 B × frame_count frame index][JPEG frame data]` (version 1). New editor imports

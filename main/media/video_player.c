@@ -69,6 +69,8 @@ extern SemaphoreHandle_t lvgl_mux;   /* app_main.c */
 
 #define VP_RING_MIN          (256u * 1024u)
 #define VP_RING_MAX          (1280u * 1024u)
+#define VP_THEME_RING_MAX    (2u * 1024u * 1024u)
+#define VP_THEME_RESERVE     (512u * 1024u)
 #define VP_REC_HDR           8u
 #define VP_REC_WRAP          0xFFFFFFFFu
 
@@ -76,10 +78,9 @@ extern SemaphoreHandle_t lvgl_mux;   /* app_main.c */
 #define VP_FPS_CAP           24u        /* until decoding is proven fast */
 #define VP_FAST_FRAME_US     26000u
 #define VP_SLOW_FRAME_US     30000u     /* hysteresis: re-cap above this */
-#define VP_LEVEL_FREEZE      3u
+#define VP_LEVEL_MAX         3u        /* every fourth frame; never freeze playback */
 #define VP_LEVEL_UP_SAMPLES  4u
 #define VP_LEVEL_DOWN_US     1000000
-#define VP_FREEZE_RETRY_US   5000000
 #define VP_MAX_DEC_ERRORS    10u
 
 #define VP_FLUSH_WAIT_MS     200u
@@ -292,18 +293,33 @@ static void ring_release(vp_session_t *s, uint32_t rec_len)
 
 /* -------------------------------------------------------------- reader */
 
-static uint32_t ring_size_for(const obv1_info_t *in)
+static uint32_t ring_size_for(const obv1_info_t *in, bool theme_loop)
 {
     uint64_t rec_max = (uint64_t)in->max_frame_size + VP_REC_HDR + 4u;
     uint64_t avg = in->data_size / in->frame_count;
-    uint64_t want = avg * in->fps * 5u / 4u + 2u * rec_max;     /* ~1.25 s + 2 frames */
+    /* Theme loops prefetch ~2.5 s; legacy fullscreen retains ~1.25 s. */
+    uint64_t want = avg * in->fps * 5u / (theme_loop ? 2u : 4u) + 2u * rec_max;
+    uint32_t ceiling = theme_loop ? VP_THEME_RING_MAX : VP_RING_MAX;
     if (want < VP_RING_MIN) want = VP_RING_MIN;
-    if (want > VP_RING_MAX) want = VP_RING_MAX;
+    if (want > ceiling) want = ceiling;
     /* never more than the whole stream (short boot clips) */
     uint64_t whole = (uint64_t)in->data_size + (uint64_t)in->frame_count * (VP_REC_HDR + 4u) + rec_max;
     if (want > whole) want = whole;
     if (want < 2u * rec_max) want = 2u * rec_max;
     return (uint32_t)((want + 3u) & ~(uint64_t)3u);
+}
+
+/* The decoder allocates after hdr_ready. Leave room for both pixel buffers,
+ * the OBV3 alpha plane and other theme/UI work before growing the SD ring. */
+static uint32_t theme_ring_budget(const obv1_info_t *info, uint32_t wanted)
+{
+    size_t pixels = (size_t)info->width * info->height;
+    bool alpha = info->version == OBV3_VERSION;
+    size_t fb = (pixels * (alpha ? 3u : 2u) + 15u) & ~(size_t)15u;
+    size_t reserve = 2u * fb + (alpha ? pixels : 0u) + VP_THEME_RESERVE;
+    size_t free_psram = heap_caps_get_free_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    size_t available = free_psram > reserve ? (free_psram - reserve) & ~(size_t)3u : 0;
+    return available < wanted ? (uint32_t)available : wanted;
 }
 
 /* Open, validate, allocate the ring. Returns the index (PSRAM) or NULL. */
@@ -352,7 +368,9 @@ static uint8_t *reader_open(vp_session_t *s, FILE *f)
         heap_caps_free(index);
         return NULL;
     }
-    uint32_t cap = timed ? obv_timed_ring_size(&info, index) : ring_size_for(&info);
+    bool theme_loop = s->mode == VIDEO_MODE_COMPOSITE && s->loop && !s->value_driven;
+    uint32_t cap = timed ? obv_timed_ring_size(&info, index) : ring_size_for(&info, theme_loop);
+    if (theme_loop) cap = theme_ring_budget(&info, cap);
     if (s->value_driven) cap = 3u * (info.max_frame_size + VP_REC_HDR + 4u);
     uint32_t floor = 2u * (info.max_frame_size + VP_REC_HDR + 4u);
     uint8_t *ring = NULL;
@@ -366,6 +384,8 @@ static uint8_t *reader_open(vp_session_t *s, FILE *f)
         return NULL;
     }
 
+    ESP_LOGI(TAG, "SD ring %lu KiB%s", (unsigned long)(cap / 1024u),
+             theme_loop ? " (theme target 2500 ms)" : "");
     taskENTER_CRITICAL(&s->lock);
     s->info = info;
     s->timed_index = timed ? index : NULL;
@@ -783,10 +803,10 @@ static void pace_sample(vp_session_t *s, vp_pace_t *p, uint32_t proc_us, int64_t
 
     uint64_t base = base_interval_us(s, p);
     uint64_t ema10 = (uint64_t)p->ema * 10u;
-    if (p->level < VP_LEVEL_FREEZE && p->level_samples >= VP_LEVEL_UP_SAMPLES &&
+    if (p->level < VP_LEVEL_MAX && p->level_samples >= VP_LEVEL_UP_SAMPLES &&
         ema10 > base * (p->level + 1u) * 9u) {
         pace_set_level(p, p->level + 1u, now);
-    } else if (p->level > 0 && p->level < VP_LEVEL_FREEZE &&
+    } else if (p->level > 0 &&
                now - p->level_since >= VP_LEVEL_DOWN_US && ema10 <= base * p->level * 9u) {
         pace_set_level(p, p->level - 1u, now);
     }
@@ -887,16 +907,10 @@ static void dec_run(vp_session_t *s, vp_out_t *o)
         }
         int64_t due = p.t0 + due_rel;
 
-        if (p.level >= VP_LEVEL_FREEZE && now - p.level_since >= VP_FREEZE_RETRY_US) {
-            pace_set_level(&p, VP_LEVEL_FREEZE - 1u, now);
-        }
         uint32_t interval = base_interval_us(s, &p) * (p.level + 1u);
-        bool show = p.level < VP_LEVEL_FREEZE && (!p.shown || due_rel + 1000 >= p.next_grid);
+        bool show = !p.shown || due_rel + 1000 >= p.next_grid;
         if (!show) {
-            if (p.level >= VP_LEVEL_FREEZE) {
-                if (!wait_until(s, due)) continue;   /* frozen: consume in real time */
-                s->frames_dropped++;
-            }
+            s->frames_dropped++;
             ring_release(s, rec);
             p.pos++;
             continue;

@@ -24,8 +24,8 @@ static void *allocations[64];
 static unsigned live_allocations;
 static unsigned waits, signal_waits, timed_waits, sets_reader, sets_decoder;
 static unsigned decoded, presented, panel_draws, invalidations, timer_deletes, ui_steps;
-static uint16_t decoded_marker[16], shown_marker[16];
-static int64_t decoded_at[16], now_us;
+static uint16_t decoded_marker[256], shown_marker[256];
+static int64_t decoded_at[256], now_us;
 static unsigned fullscreen_frames;
 static uint16_t fullscreen_marker[16];
 static int64_t fullscreen_at[16];
@@ -79,6 +79,12 @@ static void remember(void *p)
         if (!allocations[i]) { allocations[i] = p; live_allocations++; return; }
     }
     CHECK(false);
+}
+static size_t free_psram = 8u * 1024u * 1024u;
+size_t heap_caps_get_free_size(unsigned caps)
+{
+    CHECK(caps == (MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    return free_psram;
 }
 void *heap_caps_malloc(size_t n, unsigned caps)
 {
@@ -200,7 +206,7 @@ EventBits_t xEventGroupSetBits(EventGroupHandle_t ev, EventBits_t bits)
 EventBits_t xEventGroupWaitBits(EventGroupHandle_t ev, EventBits_t bits, BaseType_t clear,
                               BaseType_t all, TickType_t ticks)
 {
-    CHECK(ev && !all && ++waits < 256);
+    CHECK(ev && !all && ++waits < 2048); /* bounded, including multi-second playback */
     if (bits == EV_DECODER_DONE) {
         CHECK(!clear && (ticks == pdMS_TO_TICKS(1000) || ticks == portMAX_DELAY));
     } else {
@@ -652,6 +658,46 @@ static void test_paced_frames(void)
     /* Composite decodes early then waits to publish; unchanged ms floor gives 41 ms. */
     CHECK(now_us == 41000 && timed_waits == 1 && !s->frames_dropped && !s->underruns);
     CHECK(shown_marker[0] == 1 && shown_marker[1] == 2); finish();
+}
+/* Slow theme decoding must keep presenting, even after adaptive decimation. */
+static void test_theme_ring_size_and_budget(void)
+{
+    obv1_info_t info = { .version = OBV3_VERSION, .width = 360, .height = 360,
+                        .fps = 24, .frame_count = 240, .max_frame_size = 16384,
+                        .data_size = 240u * 16384u };
+    uint32_t legacy = ring_size_for(&info, false), theme = ring_size_for(&info, true);
+    CHECK(theme > legacy && theme >= 24u * 16384u * 5u / 2u);
+    CHECK(theme_ring_budget(&info, theme) == theme);
+    free_psram = 2u * 1024u * 1024u;
+    size_t reserved = 2u * ((360u * 360u * 3u + 15u) & ~15u) + 360u * 360u + VP_THEME_RESERVE;
+    CHECK(theme_ring_budget(&info, VP_THEME_RING_MAX) == ((free_psram - reserved) & ~3u));
+    free_psram = reserved - 1;
+    CHECK(theme_ring_budget(&info, theme) == 0);
+    info.data_size = 240u * 65536u; info.max_frame_size = 65536;
+    CHECK(ring_size_for(&info, true) == VP_THEME_RING_MAX);
+    info.frame_count = 2; info.data_size = 2u * 65536u;
+    CHECK(ring_size_for(&info, true) <= info.data_size + 3u * (65536u + VP_REC_HDR + 4u));
+}
+static void slow_decode(void) { now_us += 120000; }
+static void test_slow_theme_keeps_playing(void)
+{
+    vp_session_t *s = prepared(VIDEO_MODE_COMPOSITE, 4096);
+    for (unsigned i = 1; i <= 240; i++) frame(s, (uint8_t)i);
+    s->eof = true; allow_timed = auto_ui = true; during_decode = slow_decode;
+    run_task(0); service_ui(s);
+    CHECK(s->state == VIDEO_STATE_STOPPED && decoded == presented && decoded > 40);
+    for (unsigned i = 1; i < decoded; i++) CHECK(decoded_at[i] - decoded_at[i - 1] < 500000);
+    finish();
+}
+static void test_slow_pacing_recovers(void)
+{
+    vp_session_t *s = prepared(VIDEO_MODE_COMPOSITE, 64);
+    vp_pace_t pace = {0};
+    for (unsigned i = 0; i < 40; i++) pace_sample(s, &pace, 120000, (int64_t)i * 200000);
+    CHECK(pace.level == 3);
+    for (unsigned i = 40; i < 120; i++) pace_sample(s, &pace, 10000, (int64_t)i * 200000);
+    CHECK(pace.level == 0 && pace.fast);
+    finish();
 }
 static void pause_deadline(vp_session_t *s, EventBits_t bits)
 {
@@ -1166,6 +1212,7 @@ int main(void)
         TEST(test_watermark_data), TEST(test_watermark_eof), TEST(test_watermark_error), TEST(test_watermark_stop),
         TEST(test_watermark_full), TEST(test_ui_handoff), TEST(test_ui_gap),
         TEST(test_ui_pause), TEST(test_ui_stop), TEST(test_paced_frames),
+        TEST(test_theme_ring_size_and_budget), TEST(test_slow_theme_keeps_playing), TEST(test_slow_pacing_recovers),
         TEST(test_deadline_pause), TEST(test_deadline_stop),
         TEST(test_fullscreen_finish), TEST(test_first_frame_waits_for_dma), TEST(test_fullscreen_stop), TEST(test_task_create_failure),
         TEST(test_timed_fullscreen_finish), TEST(test_timed_truncated_prebuffer),
