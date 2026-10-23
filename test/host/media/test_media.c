@@ -372,6 +372,23 @@ static void test_obv3_alpha(void)
     CHECK(obv3_unpack_alpha(encoded, sizeof(encoded), decoded, sizeof(decoded)));
     CHECK_EQ(decoded[64], 0x00); CHECK_EQ(decoded[65], 0xFF);
 
+    /* A complete opaque plane can skip RGB565+alpha expansion. Classification
+     * must reject malformed packets just as the unpacker does. */
+    static const uint8_t opaque[] = {0xBD, 0xFF, 0x01, 0xFF, 0xFF};
+    CHECK(obv3_alpha_is_opaque(opaque, 2, 64));
+    CHECK(obv3_alpha_is_opaque(opaque, sizeof(opaque), 66));
+    CHECK(!obv3_alpha_is_opaque(encoded, sizeof(encoded), 66));
+    static const uint8_t mixed[] = {0xBD, 0xFF, 0x01, 0xFF, 0xFE};
+    CHECK(!obv3_alpha_is_opaque(mixed, sizeof(mixed), 66));
+    CHECK(!obv3_alpha_is_opaque(opaque, 1, 64));
+    CHECK(!obv3_alpha_is_opaque(opaque, sizeof(opaque) - 1, 66));
+    CHECK(!obv3_alpha_is_opaque(opaque, 2, 63));
+    CHECK(!obv3_alpha_is_opaque(opaque, 2, 65));
+    CHECK(!obv3_alpha_is_opaque(opaque, sizeof(opaque), 64));
+    CHECK(!obv3_alpha_is_opaque(NULL, 2, 64));
+    CHECK(!obv3_alpha_is_opaque(opaque, 0, 64));
+    CHECK(!obv3_alpha_is_opaque(opaque, 2, 0));
+
     build_obv3(&f);
     CHECK_EQ(obv1_parse_header(f.buf, OBV1_HEADER_SIZE, f.len, 0, &info), OBV1_OK);
     CHECK_EQ(info.version, OBV3_VERSION);

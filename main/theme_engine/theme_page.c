@@ -73,7 +73,7 @@ typedef struct {
     uint8_t  target;          // some rule action targets it
     uint8_t  bound;           // data_source present
     uint8_t  have_last;       // label/render input cache valid
-    uint8_t  last_sweep_on;   // last non-label binding used the sweep value
+    uint8_t  last_sweep_on;   // last range binding used the sweep value
     uint8_t  rt_on;           // runtime image recolor active
     uint8_t  transform;       // label: zoom / rotation style set
     int16_t  slot;            // signal slot, -1 = unknown key / unbound
@@ -1041,31 +1041,32 @@ static void te_page_update(te_ctx_t *c, te_live_page_t *p)
 
     const bool sweep_on = c->sweep_on;
     const double sweep = c->sweep;
+    const double *binding_values = p->values;
+    double sweep_values[SIG_SLOT_COUNT];
+    if (sweep_on) {
+        memcpy(sweep_values, p->values, sizeof(sweep_values));
+        te_sweep_rule_inputs(sweep, c->sweep_rpm, sweep_values, &changed);
+        binding_values = sweep_values;
+    }
     if (!p->bindings_seeded || !p->binding_items) {
         // The first pass also initializes unbound arcs, bars and pointers.
         for (uint16_t i = 0; i < p->n_items; i++) {
             te_item_t *it = &p->items[i];
             if ((!it->obj && !it->vid) || (it->kind == TR_KIND_IMAGE && !it->el->video_value)) continue;
-            te_update_binding(it, p->values, sweep_on, sweep);
+            te_update_binding(it, binding_values, sweep_on, sweep);
         }
     } else {
         for (uint16_t i = 0; i < p->n_binding_items; i++) {
             te_item_t *it = &p->items[p->binding_items[i]];
-            if (it->obj || it->vid) te_update_binding(it, p->values, sweep_on, sweep);
+            if (it->obj || it->vid) te_update_binding(it, binding_values, sweep_on, sweep);
         }
     }
     p->bindings_seeded = true;
 
     const bool sup = c->suppressed;
     if (p->prog) {
-        const double *rule_values = p->values;
-        double sweep_values[SIG_SLOT_COUNT];
-        if (sweep_on) {
-            memcpy(sweep_values, p->values, sizeof(sweep_values));
-            te_sweep_rule_inputs(sweep, c->sweep_rpm, sweep_values, &changed);
-            rule_values = sweep_values;
-        }
-        tr_inputs_t in = {rule_values, SIG_SLOT_COUNT, 0, changed, (double)(now - p->build_ms)};
+        // Labels and rules share delivered sweep values; live samples stay intact.
+        tr_inputs_t in = {binding_values, SIG_SLOT_COUNT, 0, changed, (double)(now - p->build_ms)};
         const bool had_resolved = p->prog->have_resolved;
         const uint32_t mask = p->prog->resolved_mask;
         const uint32_t exit_mask = p->prog->resolved_exit_mask;

@@ -134,6 +134,8 @@ void obv_index_frame(const obv1_info_t *info, const uint8_t *index, uint32_t i,
 uint32_t obv_frame_time(const uint8_t *index, uint32_t i);
 uint32_t obv_frame_duration(const uint8_t *index, uint32_t i);
 bool obv3_unpack_alpha(const uint8_t *src, size_t src_len, uint8_t *dst, size_t dst_len);
+/* True only for a valid complete plane whose every pixel is 255. */
+bool obv3_alpha_is_opaque(const uint8_t *src, size_t src_len, size_t pixels);
 /* Exact largest one-second compressed window + wrap/headroom; 0 if over budget. */
 uint32_t obv_timed_ring_size(const obv1_info_t *info, const uint8_t *index);
 uint32_t obv_timed_prebuffer(const obv1_info_t *info, const uint8_t *index);

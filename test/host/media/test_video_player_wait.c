@@ -144,7 +144,7 @@ BaseType_t xTaskCreatePinnedToCore(TaskFunction_t fn, const char *name, uint32_t
 {
     CHECK(!handle && fn && arg);
     CHECK((!strcmp(name, "vid_dec") && stack == 6144 && prio == 5 && core == 1) ||
-          (!strcmp(name, "vid_read") && stack == 4096 && prio == 3 && core == 0));
+          (!strcmp(name, "vid_read") && stack == 4096 && prio == 5 && core == 0));
     if (++create_attempts == fail_task_attempt) return pdFAIL;
     CHECK(task_count < COUNT_OF(tasks));
     tasks[task_count++] = (fake_task_t){ fn, arg, false };
@@ -256,6 +256,7 @@ void lv_timer_del(lv_timer_t *timer) { timer_deletes++; heap_caps_free(timer); }
 void lv_timer_set_cb(lv_timer_t *timer, lv_timer_cb_t cb) { CHECK(timer); timer->timer_cb = cb; }
 void lv_timer_pause(lv_timer_t *timer) { CHECK(timer); timer->paused = true; }
 void lv_timer_resume(lv_timer_t *timer) { CHECK(timer); timer->paused = false; }
+void lv_timer_ready(lv_timer_t *timer) { CHECK(timer == &refresh); timer->ready = true; }
 void video_view_clear(lv_obj_t *obj) { CHECK(obj == &view); }
 void video_view_set_frame(lv_obj_t *obj, const uint16_t *data, uint16_t w, uint16_t h)
 {
@@ -510,10 +511,11 @@ static void feed_watermark(vp_session_t *s, EventBits_t bits);
 static void publish_header(vp_session_t *s, EventBits_t bits)
 {
     CHECK(bits == EV_WAKE_DECODER && !s->hdr_ready && !s->eof);
-    FILE *f = fopen(file_path, "rb"); CHECK(f);
-    uint8_t *index = reader_open(s, f);
+    uint8_t buf[VP_SD_BUFFER_BYTES];
+    vp_sd_stream_t f = { .fd = open(file_path, O_RDONLY), .buf = buf }; CHECK(f.fd >= 0);
+    uint8_t *index = reader_open(s, &f);
     CHECK(index && s->hdr_ready && !s->reader_err && !s->frames_buffered);
-    heap_caps_free(index); CHECK(fclose(f) == 0);
+    heap_caps_free(index); CHECK(close(f.fd) == 0);
     on_block = feed_watermark;
 }
 static void header_only(bool early)
@@ -563,6 +565,38 @@ static void watermark_commit(bool early)
     CHECK(decoded == 10 && presented == 10 && s->underruns == 1 && !s->frames_dropped);
     CHECK(actions == 1 && timed_waits == 9 && s->state == VIDEO_STATE_STOPPED);
     for (unsigned i = 0; i < 10; i++) CHECK(decoded_marker[i] == i + 1 && shown_marker[i] == i + 1);
+    finish();
+}
+/* A slow producer must not force another 400 ms refill after startup.
+ * Supply one frame per 80 ms; each must be decoded before the next read. */
+static void slow_reader_frame(vp_session_t *s, EventBits_t bits)
+{
+    CHECK(bits == EV_WAKE_DECODER);
+    if (s->pending >= 0) { service_ui(s); return; }
+    CHECK(!s->used && decoded == 10 + actions && s->started && !s->eof);
+    if (actions == 20) {
+        s->eof = true;
+        xEventGroupSetBits(s->ev, EV_WAKE_DECODER);
+        on_block = NULL;
+        return;
+    }
+    now_us += 80000;
+    frame(s, (uint8_t)(11 + actions));
+    actions++;
+}
+static void test_slow_reader_resumes_each_frame(void)
+{
+    vp_session_t *s = prepared(VIDEO_MODE_COMPOSITE, 512);
+    for (uint8_t i = 1; i <= 10; i++) frame(s, i);
+    allow_timed = auto_ui = true; on_block = slow_reader_frame;
+    run_task(0); service_ui(s);
+    CHECK(s->state == VIDEO_STATE_STOPPED && actions == 20);
+    CHECK(decoded == 30 && presented == 30 && !s->frames_dropped);
+    for (unsigned i = 10; i < decoded; i++) {
+        CHECK(decoded_marker[i] == i + 1 && shown_marker[i] == i + 1);
+        /* The startup tail was decoded ahead of its presentation deadline. */
+        if (i > 10) CHECK(decoded_at[i] - decoded_at[i - 1] == 80000);
+    }
     finish();
 }
 static void test_watermark_commit(void) { watermark_commit(false); }
@@ -629,7 +663,57 @@ static void pending_ui(bool early)
     memset(s->fb[0], 0, 512); ((uint16_t *)s->fb[0])[0] = 6; s->pending = 0;
     if (early) before_wait = ui_handoff; else on_block = ui_handoff;
     CHECK(comp_wait_slot(s)); CHECK(s->pending == -1 && s->front == 0 && presented == 1);
-    CHECK(shown_marker[0] == 6 && signal_waits == 1 && actions == 1); finish();
+    CHECK(shown_marker[0] == 6 && signal_waits == 1 && actions == 1 && refresh.ready); finish();
+}
+static void test_obv3_frame_formats(void)
+{
+    vp_session_t *s = prepared(VIDEO_MODE_COMPOSITE, 64);
+    s->info.version = OBV3_VERSION;
+    vp_out_t out = {0}; CHECK(media_jpeg_open(false, &out.j) == ESP_OK);
+    uint8_t record[] = {4, 0, 0, 0, 4, 0, 0, 0, 17, 17, 17, 17, 255, 255, 251, 255};
+    /* Reuse both buffers across opaque -> translucent -> opaque transitions. */
+    for (unsigned pass = 0; pass < 3; pass++) {
+        bool alpha = pass == 1;
+        record[13] = record[15] = alpha ? 128 : 255;
+        int back = -1;
+        CHECK(comp_decode(s, &out, record, sizeof(record), &back) == ESP_OK);
+        CHECK(s->pending_alpha == alpha && back != s->front);
+        for (unsigned pixel = 0; pixel < 256; pixel++) {
+            unsigned offset = pixel * (alpha ? 3 : 2);
+            CHECK(s->fb[back][offset] == 17 && s->fb[back][offset + 1] == 0);
+            if (alpha) CHECK(s->fb[back][offset + 2] == 128);
+        }
+        refresh.ready = false;
+        comp_publish(s, back); service_ui(s);
+        CHECK(s->front == back && s->pending < 0 && refresh.ready);
+        CHECK(presented == pass + 1 && shown_marker[pass] == 17);
+    }
+    record[15] = 0; /* Still a valid plane, with real transparency. */
+    int back = -1;
+    CHECK(comp_decode(s, &out, record, sizeof(record), &back) == ESP_OK);
+    CHECK(s->pending_alpha);
+    record[14] = 252; /* Plane now expands past 256 pixels. */
+    CHECK(comp_decode(s, &out, record, sizeof(record), &back) == ESP_ERR_INVALID_SIZE);
+    CHECK(s->pending < 0 && presented == 3);
+    media_jpeg_close(out.j); finish();
+}
+static void delayed_ui(vp_session_t *s, EventBits_t bits)
+{
+    CHECK(bits == EV_WAKE_DECODER && s->pending >= 0);
+    now_us += 100000;
+    service_ui(s);
+}
+static void test_ui_wait_rechecks_deadline(void)
+{
+    vp_session_t *s = prepared(VIDEO_MODE_COMPOSITE, 64);
+    frame(s, 0); frame(s, 1); frame(s, 2); s->eof = true;
+    on_block = delayed_ui;
+    vp_out_t out = {0}; CHECK(media_jpeg_open(false, &out.j) == ESP_OK);
+    dec_run(s, &out); media_jpeg_close(out.j);
+    CHECK(decoded == 2 && decoded_marker[0] == 0 && decoded_marker[1] == 2);
+    CHECK(s->frames_dropped == 1 && decoded_at[1] == 100000);
+    service_ui(s); CHECK(presented == 2 && shown_marker[1] == 2);
+    finish();
 }
 static void test_ui_handoff(void) { pending_ui(false); }
 static void test_ui_gap(void) { pending_ui(true); }
@@ -659,7 +743,7 @@ static void test_paced_frames(void)
     CHECK(now_us == 41000 && timed_waits == 1 && !s->frames_dropped && !s->underruns);
     CHECK(shown_marker[0] == 1 && shown_marker[1] == 2); finish();
 }
-/* Slow theme decoding must keep presenting, even after adaptive decimation. */
+/* Theme prefetch must leave enough PSRAM for decoded frames and the UI. */
 static void test_theme_ring_size_and_budget(void)
 {
     obv1_info_t info = { .version = OBV3_VERSION, .width = 360, .height = 360,
@@ -678,7 +762,34 @@ static void test_theme_ring_size_and_budget(void)
     info.frame_count = 2; info.data_size = 2u * 65536u;
     CHECK(ring_size_for(&info, true) <= info.data_size + 3u * (65536u + VP_REC_HDR + 4u));
 }
-static void slow_decode(void) { now_us += 120000; }
+static void slow_decode(void) { now_us += 120000; during_decode = slow_decode; }
+static uint32_t decode_cost_us;
+static void costed_decode(void) { now_us += decode_cost_us; during_decode = costed_decode; }
+/* No startup cap when source FPS is achievable. */
+static void test_native_pacing(void)
+{
+    vp_session_t *s = prepared(VIDEO_MODE_COMPOSITE, 4096); s->info.fps = 60;
+    for (unsigned i = 1; i <= 240; i++) frame(s, (uint8_t)i);
+    s->eof = true; allow_timed = auto_ui = true;
+    decode_cost_us = 10000; during_decode = costed_decode;
+    run_task(0); service_ui(s);
+    CHECK(decoded == 240 && presented == 240 && !s->frames_dropped);
+    CHECK(now_us >= 3980000 && now_us <= 4000000); finish();
+}
+/* A 40 ms decoder can sustain 25 fps; it must not be quantized to half rate. */
+static void test_near_budget_pacing(void)
+{
+    vp_session_t *s = prepared(VIDEO_MODE_COMPOSITE, 4096); s->info.fps = 30;
+    for (unsigned i = 1; i <= 240; i++) frame(s, (uint8_t)i);
+    s->eof = true; allow_timed = auto_ui = true;
+    decode_cost_us = 40000; during_decode = costed_decode;
+    run_task(0); service_ui(s);
+    CHECK(decoded >= 195 && decoded <= 202 && decoded == presented);
+    CHECK(now_us >= 7960000 && now_us <= 8080000);
+    CHECK(!s->underruns);
+    for (unsigned i = 1; i < decoded; i++) CHECK(decoded_at[i] - decoded_at[i - 1] <= 41000);
+    finish();
+}
 static void test_slow_theme_keeps_playing(void)
 {
     vp_session_t *s = prepared(VIDEO_MODE_COMPOSITE, 4096);
@@ -689,14 +800,38 @@ static void test_slow_theme_keeps_playing(void)
     for (unsigned i = 1; i < decoded; i++) CHECK(decoded_at[i] - decoded_at[i - 1] < 500000);
     finish();
 }
+static void recovering_decode(void)
+{
+    now_us += decoded < 20 ? 120000 : 10000;
+    during_decode = recovering_decode;
+}
 static void test_slow_pacing_recovers(void)
 {
-    vp_session_t *s = prepared(VIDEO_MODE_COMPOSITE, 64);
-    vp_pace_t pace = {0};
-    for (unsigned i = 0; i < 40; i++) pace_sample(s, &pace, 120000, (int64_t)i * 200000);
-    CHECK(pace.level == 3);
-    for (unsigned i = 40; i < 120; i++) pace_sample(s, &pace, 10000, (int64_t)i * 200000);
-    CHECK(pace.level == 0 && pace.fast);
+    vp_session_t *s = prepared(VIDEO_MODE_COMPOSITE, 4096);
+    s->info.fps = 30;
+    for (unsigned i = 1; i <= 240; i++) frame(s, (uint8_t)i);
+    s->eof = true; allow_timed = auto_ui = true;
+    during_decode = recovering_decode;
+    run_task(0); service_ui(s);
+    CHECK(decoded > 180 && decoded == presented);
+    /* Recovery follows the source cadence immediately, without waiting for
+     * several one-second adaptive-tier cooldowns. */
+    for (unsigned i = decoded - 60; i < decoded; i++) {
+        CHECK(decoded_marker[i] == decoded_marker[i - 1] + 1);
+        CHECK(decoded_at[i] - decoded_at[i - 1] <= 34000);
+    }
+    finish();
+}
+static void test_target_fps_pacing(void)
+{
+    vp_session_t *s = prepared(VIDEO_MODE_COMPOSITE, 4096);
+    s->info.fps = 30; s->target_fps = 24;
+    for (unsigned i = 1; i <= 240; i++) frame(s, (uint8_t)i);
+    s->eof = true; allow_timed = auto_ui = true;
+    decode_cost_us = 10000; during_decode = costed_decode;
+    run_task(0); service_ui(s);
+    CHECK(decoded == 192 && presented == 192 && s->frames_dropped == 48);
+    CHECK(now_us >= 7960000 && now_us <= 8000000);
     finish();
 }
 static void pause_deadline(vp_session_t *s, EventBits_t bits)
@@ -766,6 +901,64 @@ static void test_timed_fullscreen_finish(void)
     CHECK(fullscreen_at[0] == 0 && fullscreen_at[1] >= 33000 && fullscreen_at[1] <= 33333 &&
           fullscreen_at[2] == 100000);
     CHECK(now_us == 150000); /* hold the last frame's duration, no legacy grace wait */
+    finish();
+}
+/* Model decode cost independently of source cadence. No hardware FPS claim. */
+static vp_session_t *prepared_timed_cfr(void)
+{
+    vp_session_t *s = prepared_timed();
+    heap_caps_free(s->timed_index);
+    s->info.frame_count = 10;
+    s->timed_index = heap_caps_calloc(10, OBV2_INDEX_ENTRY, MALLOC_CAP_SPIRAM);
+    heap_caps_free(s->ring);
+    s->ring_cap = 256;
+    s->ring = heap_caps_malloc(s->ring_cap, MALLOC_CAP_SPIRAM);
+    for (uint32_t n = 0; n < 10; n++) {
+        uint8_t *e = s->timed_index + n * OBV2_INDEX_ENTRY;
+        uint32_t time = n * 33333u;
+        for (unsigned b = 0; b < 4; b++) {
+            e[8 + b] = (uint8_t)(time >> (8 * b));
+            e[12 + b] = (uint8_t)(33333u >> (8 * b));
+        }
+        frame(s, (uint8_t)(n + 1));
+    }
+    s->eof = true;
+    return s;
+}
+static void test_timed_slow_decode_completes(void)
+{
+    vp_session_t *s = prepared_timed_cfr();
+    decode_cost_us = 40000; during_decode = costed_decode;
+    run_task(0);
+    CHECK(s->state == VIDEO_STATE_STOPPED && s->frames_dropped > 0);
+    CHECK(decoded + s->frames_dropped == 10 && fullscreen_frames == decoded);
+    CHECK(fullscreen_marker[0] == 1 && fullscreen_marker[fullscreen_frames - 1] == 10);
+    CHECK(now_us >= 333330 && now_us < 420000);
+    CHECK(!s->used && !s->frames_buffered);
+    finish();
+}
+static void timed_stall(void)
+{
+    if (decoded == 2) now_us += 250000;
+    during_decode = timed_stall;
+}
+static void test_timed_stall_catches_up(void)
+{
+    vp_session_t *s = prepared_timed_cfr(); during_decode = timed_stall;
+    run_task(0);
+    CHECK(s->state == VIDEO_STATE_STOPPED && s->frames_dropped >= 6);
+    CHECK(decoded + s->frames_dropped == 10);
+    CHECK(fullscreen_marker[0] == 1 && fullscreen_marker[fullscreen_frames - 1] == 10);
+    /* FreeRTOS waits round down to whole milliseconds. */
+    CHECK(now_us >= 333000 && now_us <= 333330);
+    CHECK(!s->used && !s->frames_buffered);
+    finish();
+}
+static void test_timed_decode_error_remains_fatal(void)
+{
+    vp_session_t *s = prepared_timed_cfr(); fail_decode = true;
+    run_task(0);
+    CHECK(s->state == VIDEO_STATE_ERROR && !fullscreen_frames && !s->started);
     finish();
 }
 static void test_timed_truncated_prebuffer(void)
@@ -968,7 +1161,7 @@ static void test_runtime_timer_deadlines(void)
     CHECK(!live_allocations && !presented && !timer_deletes);
 }
 static void observe_first_frame(void)
-{ CHECK(presented == 1 && shown_marker[0] == 11 && test_session->pending < 0); }
+{ CHECK(presented == 1 && shown_marker[0] == 11 && test_session->pending < 0 && refresh.ready); }
 static void test_runtime_before_registration(void)
 {
     vp_session_t *s = prepared(VIDEO_MODE_COMPOSITE, 64);
@@ -1198,24 +1391,55 @@ static void test_value_decoder_error(void)
     finish();
 }
 
+/* Exercise read-ahead beyond one DMA block, frame-padding seeks within the
+ * cache, a backwards loop seek, and EOF. These are real POSIX file reads. */
+static void test_sd_bulk_read_ahead(void)
+{
+    size_t len = VP_SD_BUFFER_BYTES * 2u + 83u;
+    uint8_t *expected = malloc(len), *actual = malloc(len), *buf = malloc(VP_SD_BUFFER_BYTES);
+    CHECK(expected && actual && buf);
+    for (size_t i = 0; i < len; i++) expected[i] = (uint8_t)(i * 37u + i / 251u);
+    char path[] = "/tmp/obd-sd-stream-XXXXXX";
+    int fd = mkstemp(path); CHECK(fd >= 0); CHECK(unlink(path) == 0);
+    CHECK(write(fd, expected, len) == (ssize_t)len); CHECK(lseek(fd, 0, SEEK_SET) == 0);
+    vp_sd_stream_t f = { .fd = fd, .buf = buf };
+    CHECK(sd_stream_read(&f, actual, 37) == 37 && !memcmp(expected, actual, 37));
+    off_t physical = lseek(fd, 0, SEEK_CUR);
+    CHECK(physical == VP_SD_BUFFER_BYTES);
+    CHECK(sd_stream_seek(&f, 40)); /* skip frame padding without dropping read-ahead */
+    CHECK(lseek(fd, 0, SEEK_CUR) == physical);
+    CHECK(sd_stream_read(&f, actual, len - 40) == len - 40);
+    CHECK(!memcmp(expected + 40, actual, len - 40));
+    CHECK(sd_stream_read(&f, actual, 1) == 0);
+    CHECK(sd_stream_seek(&f, 12));
+    CHECK(sd_stream_read(&f, actual, len - 12) == len - 12);
+    CHECK(!memcmp(expected + 12, actual, len - 12));
+    CHECK(sd_stream_seek(&f, len + 100)); CHECK(sd_stream_read(&f, actual, 1) == 0);
+    CHECK(close(fd) == 0); free(expected); free(actual); free(buf);
+}
+
 typedef struct { const char *name; void (*fn)(void); } test_t;
 int main(void)
 {
     const test_t tests[] = {
 #define TEST(f) { #f, f }
+        TEST(test_sd_bulk_read_ahead),
         TEST(test_full_reader_release), TEST(test_full_reader_gap), TEST(test_full_reader_stop),
         TEST(test_composite_stop_waits_for_decoder),
         TEST(test_paused_resume), TEST(test_paused_gap), TEST(test_paused_stop),
         TEST(test_header_real_reader), TEST(test_header_reader_error), TEST(test_header_stop),
         TEST(test_header_publication), TEST(test_header_gap),
-        TEST(test_watermark_commit), TEST(test_watermark_commit_gap),
+        TEST(test_watermark_commit), TEST(test_watermark_commit_gap), TEST(test_slow_reader_resumes_each_frame),
         TEST(test_watermark_data), TEST(test_watermark_eof), TEST(test_watermark_error), TEST(test_watermark_stop),
-        TEST(test_watermark_full), TEST(test_ui_handoff), TEST(test_ui_gap),
+        TEST(test_watermark_full), TEST(test_ui_handoff), TEST(test_ui_gap), TEST(test_obv3_frame_formats), TEST(test_ui_wait_rechecks_deadline),
         TEST(test_ui_pause), TEST(test_ui_stop), TEST(test_paced_frames),
+        TEST(test_near_budget_pacing), TEST(test_native_pacing), TEST(test_target_fps_pacing),
         TEST(test_theme_ring_size_and_budget), TEST(test_slow_theme_keeps_playing), TEST(test_slow_pacing_recovers),
         TEST(test_deadline_pause), TEST(test_deadline_stop),
         TEST(test_fullscreen_finish), TEST(test_first_frame_waits_for_dma), TEST(test_fullscreen_stop), TEST(test_task_create_failure),
         TEST(test_timed_fullscreen_finish), TEST(test_timed_truncated_prebuffer),
+        TEST(test_timed_slow_decode_completes), TEST(test_timed_stall_catches_up),
+        TEST(test_timed_decode_error_remains_fatal),
         TEST(test_path_limit), TEST(test_value_reader_seek), TEST(test_value_decoder_latest), TEST(test_value_decoder_error),
         TEST(test_ui_event_pause_loading), TEST(test_ui_event_pause_pending), TEST(test_ui_event_pause_late_publish),
         TEST(test_ui_event_pause_decode), TEST(test_ui_event_pause_publish), TEST(test_ui_event_pause_stop),

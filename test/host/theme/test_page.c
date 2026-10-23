@@ -64,7 +64,9 @@ int te_page_find(const char *s)
         if (!strcmp(g_te->pages[i].id, s)) return i;
     return -1;
 }
-lv_font_t *te_font_get(const char *s) { (void)s; return NULL; }
+static lv_font_t custom_font;
+lv_font_t *te_font_get(const char *s)
+{ return s && !strcmp(s, "custom_font") ? &custom_font : NULL; }
 tl_defaults_t te_layout_defaults(void) { return (tl_defaults_t){0}; }
 void te_release_locked(void) { tic_clear(&g_te->cache); }
 void storage_theme_key(const char *s, char *out, size_t n) { snprintf(out, n, "%s", s); }
@@ -326,6 +328,52 @@ static void test_transitions(void)
     a.ctx.suppressed = b.ctx.suppressed = true;
     clock_ms = 516; update_pair(&a, &b);
     destroy_fixture(&a); destroy_fixture(&b);
+}
+
+// Bound text must use the same simulated samples as rules, with either a
+// custom font or the built-in font, and return to unchanged live data afterward.
+static void test_sweep_label_values(void)
+{
+    for (int slot = SIG_OBD_FIRST; slot < SIG_OBD_FIRST + SIG_OBD_COUNT; slot++) {
+        fixture_t f;
+        samples[0] = samples[1] = NAN;
+        samples[slot] = NAN;
+        init_fixture(&f, true);
+        g_te = &f.ctx;
+        te_item_t *it = &f.items[2];
+        it->slot = slot;
+        f.page.used_mask |= UINT64_C(1) << slot;
+        custom_font = *LV_FONT_DEFAULT;
+        f.elements[2].font_asset = "custom_font";
+        lv_obj_del(it->obj);
+        te_create_label(f.page.scr, it);
+        TH_CHECK(lv_obj_get_style_text_font(it->obj, 0) == &custom_font);
+        te_page_update(&f.ctx, &f.page);
+        for (unsigned step = 0; step <= 4; step++) {
+            double expected[SIG_SLOT_COUNT] = {0};
+            uint64_t changed = 0;
+            theme_set_sweep((float)step / 4, (uint16_t)(step * 2000));
+            te_sweep_rule_inputs((double)step / 4, (uint16_t)(step * 2000), expected, &changed);
+            te_page_update(&f.ctx, &f.page);
+            char text[TE_LABEL_MAX];
+            theme_ov_label_text(it->ov, "%.0f", 1, expected[slot], text, sizeof(text));
+            TH_CHECK(!strcmp(lv_label_get_text(it->obj), text));
+            TH_CHECK(isnan(samples[slot]));
+            TH_CHECK(!strcmp(lv_label_get_text(f.items[3].obj), "BASE"));
+        }
+        samples[slot] = 42;
+        theme_set_sweep(-1, 0);
+        te_page_update(&f.ctx, &f.page);
+        TH_CHECK(!strcmp(lv_label_get_text(it->obj), "42"));
+        // Repeat with a valid but unchanged live sample to catch stale caches.
+        theme_set_sweep(0.5f, 4000);
+        te_page_update(&f.ctx, &f.page);
+        theme_set_sweep(-1, 0);
+        te_page_update(&f.ctx, &f.page);
+        TH_CHECK(!strcmp(lv_label_get_text(it->obj), "42"));
+        destroy_fixture(&f);
+        g_te = NULL;
+    }
 }
 
 static void test_video_layer_order(void)
@@ -613,7 +661,7 @@ int main(void)
     drv.draw_buf = &draw; drv.flush_cb = flush;
     lv_disp_t *disp = lv_disp_drv_register(&drv);
     test_sweep_rule_inputs(); test_sweep_color_preserves_track(); test_transitions();
-    test_video_layer_order(); test_sweep_video_opacity(); test_replay();
+    test_sweep_label_values(); test_video_layer_order(); test_sweep_video_opacity(); test_replay();
     test_staged_boot_page(); test_value_video_binding();
     lv_disp_remove(disp);
     return th_report("theme_page");

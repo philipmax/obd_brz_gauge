@@ -2,7 +2,7 @@
  * video_player.c — OBV1 MJPEG playback engine (see video_player.h).
  *
  * One session at a time. Two tasks share a PSRAM ring:
- *   reader  (core 0, prio 3): header + index, then frame records from SD
+ *   reader  (core 0, prio 5): header + index, then frame records from SD
  *   decoder (core 1, prio 5): paces, decodes and presents
  *
  * FULLSCREEN: LVGL's refresh timer is paused and the decoder writes the
@@ -22,9 +22,9 @@
  * the end wrap implicitly. Skipped tail bytes count as used until consumed.
  *
  * Pacing: frame i is due at t0 + i / fps (t0 rebased after buffering, pause
- * and catch-up). Presentation is capped at 24 fps until decoding is proven
- * <= 26 ms, frames more than one period late are dropped, and a slow decoder
- * steps down to every 2nd / 3rd frame, then freezes (retry after 5 s).
+ * and catch-up). Native cadence is preserved unless target_fps is specified.
+ * Only frames more than one source period late are dropped; decode cost does
+ * not impose an additional coarse frame-rate tier.
  *
  * Lifetime: the session is refcounted (API, reader, decoder); the last
  * reference frees it, so stop() never waits for the reader's SD I/O. In
@@ -38,12 +38,14 @@
 #include "app_obd_dsp/lvgl_runtime.h"
 #include "media/video_player.h"
 
+#include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
 
 #include "bsp_obd_dsp/lcd_driver/ST77916.h"
-#include "bsp_obd_dsp/sd_card.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_memory_utils.h"
@@ -71,16 +73,12 @@ extern SemaphoreHandle_t lvgl_mux;   /* app_main.c */
 #define VP_RING_MAX          (1280u * 1024u)
 #define VP_THEME_RING_MAX    (2u * 1024u * 1024u)
 #define VP_THEME_RESERVE     (512u * 1024u)
+#define VP_SD_BUFFER_BYTES   (16u * 1024u)
 #define VP_REC_HDR           8u
 #define VP_REC_WRAP          0xFFFFFFFFu
 
 #define VP_WATERMARK_MS      400u
-#define VP_FPS_CAP           24u        /* until decoding is proven fast */
-#define VP_FAST_FRAME_US     26000u
-#define VP_SLOW_FRAME_US     30000u     /* hysteresis: re-cap above this */
-#define VP_LEVEL_MAX         3u        /* every fourth frame; never freeze playback */
-#define VP_LEVEL_UP_SAMPLES  4u
-#define VP_LEVEL_DOWN_US     1000000
+#define VP_STATS_US          5000000
 #define VP_MAX_DEC_ERRORS    10u
 
 #define VP_FLUSH_WAIT_MS     200u
@@ -92,6 +90,13 @@ extern SemaphoreHandle_t lvgl_mux;   /* app_main.c */
 #define EV_WAKE_READER       BIT0
 #define EV_WAKE_DECODER      BIT1
 #define EV_DECODER_DONE      BIT2
+
+typedef struct {
+    uint64_t bytes;
+    uint64_t total_us;
+    uint64_t max_us;
+    uint32_t frames;
+} vp_io_stats_t;
 
 typedef struct {
     /* config, fixed after start */
@@ -147,6 +152,13 @@ typedef struct {
     int8_t      front;             /* buffer shown by the view, -1 none (lock) */
     int8_t      pending;           /* decoded, not yet handed over, -1 none (lock) */
 
+    /* Reader updates / decoder snapshots under lock; excludes ring-space waits. */
+    vp_io_stats_t io;
+    int64_t ui_last_us;
+    uint64_t ui_gap_us;
+    uint64_t ui_gap_max_us;
+    uint32_t ui_intervals;
+
     /* Decoder-task-only counters, emitted in the periodic debug log. */
     uint32_t frames_dropped;
     uint32_t underruns;
@@ -166,16 +178,13 @@ typedef struct {
 typedef struct {
     int64_t  t0;                /* wall clock of stream time 0 */
     uint64_t pos;               /* records consumed */
-    int64_t  next_grid;         /* stream time of the next allowed presentation */
-    int64_t  level_since;
+    uint64_t last_slot;         /* last presented target_fps time bucket */
     int64_t  fps_t;
     uint32_t fps_n;
     uint32_t ema;
     uint32_t samples;
-    uint32_t level_samples;
+    uint32_t ui_ema;
     uint32_t late_run;
-    uint8_t  level;             /* 0..2: show every (level+1)th frame, 3: freeze */
-    bool     fast;              /* decode proven <= 26 ms: no 24 fps cap */
     bool     shown;
     bool     buffering;
     bool     rebase;
@@ -322,17 +331,60 @@ static uint32_t theme_ring_budget(const obv1_info_t *info, uint32_t wanted)
     return available < wanted ? (uint32_t)available : wanted;
 }
 
+/* Keep read-ahead across frame padding and small seeks. The target's
+ * size-optimized stdio copies/refills inefficiently; feed FatFS bulk reads
+ * directly into internal DMA memory, then copy committed payloads to PSRAM. */
+typedef struct {
+    int fd;
+    uint8_t *buf;
+    off_t begin;
+    size_t used, pos;
+} vp_sd_stream_t;
+
+static bool sd_stream_seek(vp_sd_stream_t *f, off_t target)
+{
+    if (target >= f->begin && (uint64_t)(target - f->begin) <= f->used) {
+        f->pos = (size_t)(target - f->begin);
+        return true;
+    }
+    if (lseek(f->fd, target, SEEK_SET) != target) return false;
+    f->begin = target;
+    f->used = f->pos = 0;
+    return true;
+}
+
+static size_t sd_stream_read(vp_sd_stream_t *f, void *dst, size_t len)
+{
+    size_t got = 0;
+    while (got < len) {
+        if (f->pos == f->used) {
+            ssize_t n;
+            do { n = read(f->fd, f->buf, VP_SD_BUFFER_BYTES); }
+            while (n < 0 && errno == EINTR);
+            if (n <= 0) break;
+            f->begin += (off_t)f->used;
+            f->used = (size_t)n;
+            f->pos = 0;
+        }
+        size_t n = len - got;
+        if (n > f->used - f->pos) n = f->used - f->pos;
+        memcpy((uint8_t *)dst + got, f->buf + f->pos, n);
+        f->pos += n;
+        got += n;
+    }
+    return got;
+}
+
 /* Open, validate, allocate the ring. Returns the index (PSRAM) or NULL. */
-static uint8_t *reader_open(vp_session_t *s, FILE *f)
+static uint8_t *reader_open(vp_session_t *s, vp_sd_stream_t *f)
 {
     uint32_t hdr_words[OBV1_HEADER_SIZE / 4];
     uint8_t *hdr = (uint8_t *)hdr_words;
     obv1_info_t info;
 
-    if (fseek(f, 0, SEEK_END) != 0) return NULL;
-    long fsize = ftell(f);
-    if (fsize <= 0 || fseek(f, 0, SEEK_SET) != 0) return NULL;
-    if (sd_card_read(f, hdr, OBV1_HEADER_SIZE) != OBV1_HEADER_SIZE) {
+    off_t fsize = lseek(f->fd, 0, SEEK_END);
+    if (fsize <= 0 || lseek(f->fd, 0, SEEK_SET) != 0) return NULL;
+    if (sd_stream_read(f, hdr, OBV1_HEADER_SIZE) != OBV1_HEADER_SIZE) {
         ESP_LOGW(TAG, "%s: short header", s->path);
         return NULL;
     }
@@ -347,7 +399,7 @@ static uint8_t *reader_open(vp_session_t *s, FILE *f)
         ESP_LOGE(TAG, "no PSRAM for index (%u B)", (unsigned)ilen);
         return NULL;
     }
-    if (fseek(f, (long)info.index_offset, SEEK_SET) != 0 || sd_card_read(f, index, ilen) != ilen) {
+    if (!sd_stream_seek(f, (off_t)info.index_offset) || sd_stream_read(f, index, ilen) != ilen) {
         ESP_LOGW(TAG, "%s: short index", s->path);
         heap_caps_free(index);
         return NULL;
@@ -415,12 +467,16 @@ static void reader_task(void *arg)
 {
     vp_session_t *s = arg;
     uint8_t *index = NULL;
-    FILE *f = fopen(s->path, "rb");
-    if (!f) ESP_LOGW(TAG, "cannot open %s", s->path);
-    else index = reader_open(s, f);
+    vp_sd_stream_t file = { .fd = open(s->path, O_RDONLY) };
+    if (file.fd < 0) ESP_LOGW(TAG, "cannot open %s", s->path);
+    else {
+        file.buf = heap_caps_aligned_alloc(16, VP_SD_BUFFER_BYTES,
+                                           MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+        if (!file.buf) ESP_LOGW(TAG, "cannot allocate SD read buffer for %s", s->path);
+        else index = reader_open(s, &file);
+    }
 
     bool ok = index != NULL;
-    long fpos = -1;
     uint32_t i = 0;
     uint32_t sent_revision = UINT32_MAX, revision = 0;
     while (ok && !s->quit) {
@@ -440,26 +496,34 @@ static void reader_task(void *arg)
         uint32_t need = VP_REC_HDR + ((size + 3u) & ~3u);
         if (!ring_reserve(s, need, &at, &waste)) break;
 
-        long target = (long)s->info.data_offset + (long)off;
-        if (fpos != target && fseek(f, target, SEEK_SET) != 0) {
+        int64_t read_start = esp_timer_get_time();
+        off_t target = (off_t)s->info.data_offset + (off_t)off;
+        if (!sd_stream_seek(&file, target)) {
             ok = false;
             break;
         }
         uint32_t *h = (uint32_t *)(s->ring + at);
         h[0] = i;
         h[1] = size;
-        if (sd_card_read(f, s->ring + at + VP_REC_HDR, size) != size) {
+        if (sd_stream_read(&file, s->ring + at + VP_REC_HDR, size) != size) {
             ESP_LOGW(TAG, "%s: read failed at frame %lu", s->path, (unsigned long)i);
             ok = false;
             break;
         }
-        fpos = target + (long)size;
+        uint64_t read_us = (uint64_t)(esp_timer_get_time() - read_start);
+        taskENTER_CRITICAL(&s->lock);
+        s->io.bytes += size;
+        s->io.total_us += read_us;
+        if (read_us > s->io.max_us) s->io.max_us = read_us;
+        s->io.frames++;
+        taskEXIT_CRITICAL(&s->lock);
         ring_commit(s, at, need, waste);
         sent_revision = revision;
         i++;
     }
 
-    if (f) fclose(f);
+    if (file.fd >= 0) close(file.fd);
+    heap_caps_free(file.buf);
     if (index != s->timed_index) heap_caps_free(index);
     if (!s->quit) {
         if (ok) s->eof = true;
@@ -650,6 +714,14 @@ void video_player_ui_step(void)
     int p = s->pending;
     bool has_alpha = s->pending_alpha;
     if (p >= 0) {
+        int64_t now = esp_timer_get_time();
+        if (s->ui_last_us) {
+            uint64_t gap = (uint64_t)(now - s->ui_last_us);
+            s->ui_gap_us += gap;
+            if (gap > s->ui_gap_max_us) s->ui_gap_max_us = gap;
+            s->ui_intervals++;
+        }
+        s->ui_last_us = now;
         s->front = (int8_t)p;
         s->pending = -1;
     }
@@ -658,6 +730,10 @@ void video_player_ui_step(void)
     /* Runs in the LVGL task, so no render is reading the old front now. */
     if (has_alpha) video_view_set_frame_alpha(s->view, s->fb[p], s->info.width, s->info.height);
     else video_view_set_frame(s->view, (const uint16_t *)s->fb[p], s->info.width, s->info.height);
+    /* Invalidation resumes the timer but does not make its next deadline due.
+     * A frame wake must render in this handler pass, not wait another 16 ms. */
+    lv_timer_t *refresh = _lv_disp_get_refr_timer(lv_disp_get_default());
+    if (refresh) lv_timer_ready(refresh);
     xEventGroupSetBits(s->ev, EV_WAKE_DECODER);
 }
 
@@ -723,12 +799,22 @@ static esp_err_t comp_decode(vp_session_t *s, vp_out_t *o, const uint8_t *jpg, u
     err = media_jpeg_decode_frame(o->j, s->fb[back], s->fb_cap);
     if (err == ESP_OK && has_alpha) {
         size_t pixels = (size_t)ji.width * ji.height;
+        /* Opaque videos also use OBV3. Keep those frames in RGB565 so LVGL
+         * can cover the background and avoid per-pixel alpha compositing. */
+        has_alpha = !obv3_alpha_is_opaque(alpha_data, alpha_len, pixels);
+    }
+    if (err == ESP_OK && has_alpha) {
+        size_t pixels = (size_t)ji.width * ji.height;
         if (!obv3_unpack_alpha(alpha_data, alpha_len, s->alpha_tmp, pixels)) return ESP_ERR_INVALID_SIZE;
         /* Expand RGB565 to LVGL's packed RGB565+alpha format in place. */
         for (size_t i = pixels; i > 0; --i) {
             size_t pixel = i - 1u;
-            s->fb[back][pixel * 3u] = s->fb[back][pixel * 2u];
-            s->fb[back][pixel * 3u + 1u] = s->fb[back][pixel * 2u + 1u];
+            /* At pixel 1 the first destination byte overlaps the second
+             * source byte, so read both before writing either. */
+            uint8_t lo = s->fb[back][pixel * 2u];
+            uint8_t hi = s->fb[back][pixel * 2u + 1u];
+            s->fb[back][pixel * 3u] = lo;
+            s->fb[back][pixel * 3u + 1u] = hi;
             s->fb[back][pixel * 3u + 2u] = s->alpha_tmp[pixel];
         }
     }
@@ -772,52 +858,42 @@ static bool watermark_reached(vp_session_t *s, uint32_t frames)
     return ok || fin;
 }
 
-/* Presentation interval at level 0: file rate, capped by target_fps and by
- * 24 fps until decoding is proven fast. */
-static uint32_t base_interval_us(const vp_session_t *s, const vp_pace_t *p)
-{
-    uint32_t cap = s->target_fps ? s->target_fps : s->info.fps;
-    if (!p->fast && cap > VP_FPS_CAP) cap = VP_FPS_CAP;
-    uint32_t iv = 1000000u / cap;
-    uint32_t frame_us = 1000000u / s->info.fps;
-    return iv > frame_us ? iv : frame_us;
-}
-
-static void pace_set_level(vp_pace_t *p, uint8_t level, int64_t now)
-{
-    ESP_LOGI(TAG, "decode %lu us avg: level %u -> %u", (unsigned long)p->ema, p->level, level);
-    p->level = level;
-    p->level_since = now;
-    p->level_samples = 0;
-}
-
-static void pace_sample(vp_session_t *s, vp_pace_t *p, uint32_t proc_us, int64_t now)
+/* Diagnostics describe decoder publication, not measured panel refresh FPS. */
+static void pace_sample(vp_session_t *s, vp_pace_t *p, uint32_t proc_us,
+                        uint32_t ui_wait_us, int64_t now)
 {
     p->ema = p->samples ? (uint32_t)(((uint64_t)p->ema * 7u + proc_us) / 8u) : proc_us;
+    p->ui_ema = p->samples ? (uint32_t)(((uint64_t)p->ui_ema * 7u + ui_wait_us) / 8u) : ui_wait_us;
     p->samples++;
-    p->level_samples++;
-    if (p->samples >= 8) {
-        if (p->ema <= VP_FAST_FRAME_US) p->fast = true;
-        else if (p->ema > VP_SLOW_FRAME_US) p->fast = false;
-    }
-
-    uint64_t base = base_interval_us(s, p);
-    uint64_t ema10 = (uint64_t)p->ema * 10u;
-    if (p->level < VP_LEVEL_MAX && p->level_samples >= VP_LEVEL_UP_SAMPLES &&
-        ema10 > base * (p->level + 1u) * 9u) {
-        pace_set_level(p, p->level + 1u, now);
-    } else if (p->level > 0 &&
-               now - p->level_since >= VP_LEVEL_DOWN_US && ema10 <= base * p->level * 9u) {
-        pace_set_level(p, p->level - 1u, now);
-    }
-
     p->fps_n++;
     int64_t span = now - p->fps_t;
-    if (span >= 1000000) {
-        uint32_t fps = (uint32_t)(((int64_t)p->fps_n * 1000000 + span / 2) / span);
-        ESP_LOGD(TAG, "%lu fps, decode %lu us, dropped %lu, underruns %lu",
-                 (unsigned long)fps, (unsigned long)p->ema,
+    if (span >= VP_STATS_US) {
+        vp_io_stats_t io;
+        uint64_t ui_gap_us, ui_gap_max_us;
+        uint32_t ui_intervals;
+        taskENTER_CRITICAL(&s->lock);
+        io = s->io;
+        memset(&s->io, 0, sizeof(s->io));
+        ui_gap_us = s->ui_gap_us;
+        ui_gap_max_us = s->ui_gap_max_us;
+        ui_intervals = s->ui_intervals;
+        s->ui_gap_us = s->ui_gap_max_us = 0;
+        s->ui_intervals = 0;
+        taskEXIT_CRITICAL(&s->lock);
+        uint32_t fps10 = (uint32_t)(((int64_t)p->fps_n * 10000000 + span / 2) / span);
+        ESP_LOGI(TAG, "queued %lu.%lu fps, decode %lu us, UI wait %lu us, dropped %lu, underruns %lu",
+                 (unsigned long)(fps10 / 10u), (unsigned long)(fps10 % 10u),
+                 (unsigned long)p->ema, (unsigned long)p->ui_ema,
                  (unsigned long)s->frames_dropped, (unsigned long)s->underruns);
+        ESP_LOGI(TAG, "SD %lu KiB/s, frame read avg/max %lu/%lu us (%lu frames, %lu KiB)",
+                 (unsigned long)(io.total_us ? io.bytes * 1000000u / (io.total_us * 1024u) : 0),
+                 (unsigned long)(io.frames ? io.total_us / io.frames : 0),
+                 (unsigned long)io.max_us, (unsigned long)io.frames,
+                 (unsigned long)(io.bytes / 1024u));
+        if (s->mode == VIDEO_MODE_COMPOSITE)
+            ESP_LOGI(TAG, "UI frame gap avg/max %lu/%lu us (%lu intervals)",
+                     (unsigned long)(ui_intervals ? ui_gap_us / ui_intervals : 0),
+                     (unsigned long)ui_gap_max_us, (unsigned long)ui_intervals);
         p->fps_n = 0;
         p->fps_t = now;
     }
@@ -865,7 +941,8 @@ static void dec_run(vp_session_t *s, vp_out_t *o)
     const int64_t frame_us = 1000000 / fps;
     const uint32_t wm = (fps * VP_WATERMARK_MS + 999u) / 1000u;
     const uint32_t late_limit = fps / 2u ? fps / 2u : 1u;
-    vp_pace_t p = {.buffering = true, .level_since = esp_timer_get_time()};
+    const uint32_t cap = s->target_fps && s->target_fps < fps ? s->target_fps : fps;
+    vp_pace_t p = {.buffering = true};
     uint32_t err_run = 0;
 
     while (!s->quit) {
@@ -875,7 +952,11 @@ static void dec_run(vp_session_t *s, vp_out_t *o)
             continue;
         }
         if (p.buffering) {
-            if (!watermark_reached(s, wm)) {
+            /* Keep the startup cushion, but resume a starved theme as soon as
+             * one frame arrives. Refilling 400 ms after every underrun causes
+             * repeated play/freeze bursts when SD throughput is below source FPS. */
+            uint32_t resume_wm = p.shown && s->mode == VIDEO_MODE_COMPOSITE ? 1u : wm;
+            if (!watermark_reached(s, resume_wm)) {
                 wait_ev(s, EV_WAKE_DECODER, portMAX_DELAY);
                 continue;
             }
@@ -907,14 +988,25 @@ static void dec_run(vp_session_t *s, vp_out_t *o)
         }
         int64_t due = p.t0 + due_rel;
 
-        uint32_t interval = base_interval_us(s, &p) * (p.level + 1u);
-        bool show = !p.shown || due_rel + 1000 >= p.next_grid;
+        /* Target buckets distribute an explicit FPS cap over the source
+         * timeline, without rounding 30 -> 24 down to every second frame. */
+        uint64_t slot = p.pos * cap / fps;
+        bool show = !p.shown || slot != p.last_slot;
         if (!show) {
             s->frames_dropped++;
             ring_release(s, rec);
             p.pos++;
             continue;
         }
+        uint32_t ui_wait_us = 0;
+        if (s->mode == VIDEO_MODE_COMPOSITE) {
+            int64_t t = esp_timer_get_time();
+            if (!comp_wait_slot(s)) continue;
+            now = esp_timer_get_time();
+            ui_wait_us = (uint32_t)(now - t);
+        }
+        /* UI rendering may have held the slot long enough to miss this frame.
+         * Check after that wait so stale records do not consume decode time. */
         if (p.shown && now > due + frame_us) {
             if (++p.late_run < late_limit) {
                 s->frames_dropped++;
@@ -935,7 +1027,6 @@ static void dec_run(vp_session_t *s, vp_out_t *o)
             proc_us = (uint32_t)(esp_timer_get_time() - t);
             PERF_RECORD(PERF_VIDEO_FULLSCREEN, proc_us, 1);
         } else {
-            if (!comp_wait_slot(s)) continue;
             int64_t t = esp_timer_get_time();
             int b = 0;
             err = comp_decode(s, o, jpg, size, &b);
@@ -969,14 +1060,15 @@ static void dec_run(vp_session_t *s, vp_out_t *o)
             if (!s->paused) s->state = VIDEO_STATE_PLAYING;
             ESP_LOGI(TAG, "first frame %lld ms after start", (long long)((now - s->t_start) / 1000));
         }
-        p.next_grid = p.next_grid + interval > due_rel ? p.next_grid + interval : due_rel + interval;
-        pace_sample(s, &p, proc_us, now);
+        p.last_slot = slot;
+        pace_sample(s, &p, proc_us, ui_wait_us, now);
     }
 }
 
 /* Timed boot frames keep their source cadence. The legacy/theme policy above
- * is deliberately separate: no FPS cap, adaptive decimation or clock rebasing.
- * Pauses shift the timeline; SD stalls count as lateness, not hidden slow motion. */
+ * is deliberately separate: no target FPS cap or clock rebasing.
+ * Pauses shift the timeline; expired frames are released without decoding so
+ * SD/decode stalls do not accumulate delay or abort an otherwise valid file. */
 static bool timed_wait(vp_session_t *s, int64_t *origin, uint32_t rel)
 {
     while (!s->quit) {
@@ -1005,7 +1097,6 @@ static void dec_timed(vp_session_t *s, vp_out_t *o)
     int64_t origin = esp_timer_get_time();
     ESP_LOGI(TAG, "OBV2 prebuffer ready: %lu frames, %lld ms after start",
              (unsigned long)prebuffer, (long long)((origin - s->t_start) / 1000));
-    uint32_t late = 0;
     for (uint32_t n = 0; n < s->info.frame_count && !s->quit; n++) {
         uint32_t size, rec;
         const uint8_t *jpg;
@@ -1018,6 +1109,14 @@ static void dec_timed(vp_session_t *s, vp_out_t *o)
         uint32_t time = obv_frame_time(s->timed_index, n);
         uint32_t duration = obv_frame_duration(s->timed_index, n);
         if (!timed_wait(s, &origin, time)) return;
+        /* Keep the first/last image. Skip only frames whose entire display
+         * interval has already elapsed; never rewrite a committed ring record. */
+        if (n && n + 1 < s->info.frame_count &&
+            esp_timer_get_time() >= origin + time + duration) {
+            ring_release(s, rec);
+            s->frames_dropped++;
+            continue;
+        }
         int64_t begin = esp_timer_get_time();
         esp_err_t err = fs_present(s, o, jpg, size);
         int64_t presented_at = esp_timer_get_time();
@@ -1033,20 +1132,14 @@ static void dec_timed(vp_session_t *s, vp_out_t *o)
             ESP_LOGI(TAG, "OBV2 first frame on LCD: %lld ms after start, decode/present %lld us",
                      (long long)((presented_at - s->t_start) / 1000),
                      (long long)(presented_at - begin));
-        } else if (esp_timer_get_time() > origin + time + duration) {
-            if (++late >= 3) {
-                ESP_LOGE(TAG, "source cadence exceeds SD/decode/panel speed at frame %lu", (unsigned long)n);
-                s->state = VIDEO_STATE_ERROR;
-                return;
-            }
-        } else late = 0;
+        }
     }
     uint32_t last = s->info.frame_count - 1;
     uint32_t end = obv_frame_time(s->timed_index, last) + obv_frame_duration(s->timed_index, last);
     if (timed_wait(s, &origin, end)) {
         s->state = VIDEO_STATE_STOPPED;
-        ESP_LOGI(TAG, "OBV2 playback completed: %lu frames, %lld ms on timeline",
-                 (unsigned long)s->info.frame_count,
+        ESP_LOGI(TAG, "OBV2 playback completed: %lu frames, %lu skipped, %lld ms on timeline",
+                 (unsigned long)s->info.frame_count, (unsigned long)s->frames_dropped,
                  (long long)((esp_timer_get_time() - origin) / 1000));
     }
 }
@@ -1214,7 +1307,10 @@ esp_err_t video_player_start(const video_config_t *config)
 
     bool ok = spawn(s, decoder_task, "vid_dec", VP_DECODER_STACK, 5, 1);
     if (!ok) xEventGroupSetBits(s->ev, EV_DECODER_DONE);
-    ok = ok && spawn(s, reader_task, "vid_read", VP_READER_STACK, 3, 0);
+    /* Keep SD completion/read-ahead above LVGL (prio 4). Otherwise continuous
+     * composite redraws starve the reader despite adequate card bandwidth.
+     * Ring-space waits still block this task whenever prefetch is full. */
+    ok = ok && spawn(s, reader_task, "vid_read", VP_READER_STACK, 5, 0);
     if (!ok) {
         session_halt(s);
         session_unref(s);

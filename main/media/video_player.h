@@ -7,7 +7,8 @@
  *   - Theme composite: whole-frame decode to PSRAM, rendered via video_view
  *
  * Ring buffer architecture:
- *   Read task (core0, prio 3) → PSRAM ring (1.25MB) → Decode task (core1, prio 5)
+ *   Read task (core0, prio 5) → PSRAM ring → Decode task (core1, prio 5)
+ *   Looping themes: up to 2 MiB; other modes use their own ring budgets.
  */
 
 #include <stdint.h>
@@ -48,7 +49,7 @@ typedef struct {
     video_mode_t mode;
     video_source_t source;
     const char *path;           /* SD path, or NULL for flash */
-    uint8_t target_fps;         /* 24 or 30 */
+    uint8_t target_fps;         /* 0: source FPS; otherwise an explicit upper limit */
     bool loop;
     lv_obj_t *video_view;       /* For composite mode only */
     bool value_driven;         /* OBV1 composite: decode requested position, no clock */

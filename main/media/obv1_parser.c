@@ -154,26 +154,47 @@ void obv_index_frame(const obv1_info_t *i, const uint8_t *p, uint32_t n, uint32_
 }
 uint32_t obv_frame_time(const uint8_t *p, uint32_t n) { return rd32(p + (size_t)n * 16 + 8); }
 uint32_t obv_frame_duration(const uint8_t *p, uint32_t n) { return rd32(p + (size_t)n * 16 + 12); }
-bool obv3_unpack_alpha(const uint8_t *src, size_t src_len, uint8_t *dst, size_t dst_len)
+/* Decode and/or classify with the same strict packet/plane validation. */
+static bool alpha_plane(const uint8_t *src, size_t src_len, uint8_t *dst,
+                        size_t dst_len, bool *opaque)
 {
-    if (!src || !dst || !src_len || !dst_len) return false;
+    if (!src || !src_len || !dst_len) return false;
+    bool all_opaque = true;
     size_t in = 0, out = 0;
     while (in < src_len && out < dst_len) {
         uint8_t control = src[in++];
         if (control < 128) {
             size_t count = (size_t)control + 1u;
             if (count > src_len - in || count > dst_len - out) return false;
-            memcpy(dst + out, src + in, count);
+            if (opaque && all_opaque) {
+                for (size_t n = 0; n < count; n++) {
+                    if (src[in + n] != 255) { all_opaque = false; break; }
+                }
+            }
+            if (dst) memcpy(dst + out, src + in, count);
             in += count;
             out += count;
         } else {
             size_t count = (size_t)(control & 127u) + 3u;
             if (in >= src_len || count > dst_len - out) return false;
-            memset(dst + out, src[in++], count);
+            uint8_t value = src[in++];
+            if (value != 255) all_opaque = false;
+            if (dst) memset(dst + out, value, count);
             out += count;
         }
     }
-    return in == src_len && out == dst_len;
+    if (in != src_len || out != dst_len) return false;
+    if (opaque) *opaque = all_opaque;
+    return true;
+}
+bool obv3_unpack_alpha(const uint8_t *src, size_t src_len, uint8_t *dst, size_t dst_len)
+{
+    return dst && alpha_plane(src, src_len, dst, dst_len, NULL);
+}
+bool obv3_alpha_is_opaque(const uint8_t *src, size_t src_len, size_t pixels)
+{
+    bool opaque = false;
+    return alpha_plane(src, src_len, NULL, pixels, &opaque) && opaque;
 }
 static uint32_t record_size(const uint8_t *p, uint32_t n)
 { return 8 + ((rd32(p + (size_t)n * 16 + 4) + 3u) & ~3u); }
