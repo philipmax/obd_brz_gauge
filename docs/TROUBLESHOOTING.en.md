@@ -41,12 +41,13 @@ Still misbehaving ──→ Step 4, last resorts
 
 ### Protocol auto-detection
 
-With the protocol set to **0 (auto)**, every connection triggers a probe:
+With the protocol set to **0 (auto)** and no reusable protocol in the current
+session or NVS, the gauge runs a probe:
 
 ```
 init (ATZ → ATE0 → ATL0 → ATS1 → ATH0 → ATAT1 → ATST … → 01 00 capability probe)
    ↓
-try protocols 1-11 in order: ATSP<n> → send 01 0C (read RPM)
+try protocols 1-12 in order: ATSP<n> → send 01 0C (read RPM)
    ├─ valid response → save protocol to NVS, start normal polling
    └─ 2 s timeout → next protocol
    ↓
@@ -54,9 +55,10 @@ all failed → fall back to protocol 6, log
 "Protocol auto-detect FAILED, using fallback protocol 6"
 ```
 
-- 2 s per protocol × 11 = 22 s worst case, usually 3–8 s
+- 2 s per protocol × 12 = 24 s worst case, usually 3–8 s
 - During detection only RPM is probed; no garbage reaches the display
-- Success is saved; reconnects skip detection (unless protocol is 0)
+- Success is saved; later reconnects reuse the detected protocol when available
+  instead of waiting for a full probe every time
 - Force re-detection: set protocol 0 → disconnect → reconnect
 
 ### Selecting a protocol manually
@@ -86,7 +88,8 @@ Standard ELM327 protocol numbers (`ATSP`):
 | 8 | ISO 15765-4 CAN 11-bit 250k | a few |
 | 9 | ISO 15765-4 CAN 29-bit 250k | a few |
 | 10 | SAE J1939 CAN | commercial vehicles |
-| 11 | Auto (build on the currently detected protocol) | special cases |
+| 11 | User-defined CAN protocol 1 | special adapters |
+| 12 | User-defined CAN protocol 2 | special adapters |
 
 Manual trial procedure: switch protocol → reconnect the adapter → wait 3–5 s
 and see whether RPM shows a value (idle typically 600–1200). If RPM works the

@@ -1126,16 +1126,17 @@ static void test_detect(void)
     check_log(f, mark, k_up, (int)(sizeof(k_up) / sizeof(k_up[0])), "re-init");
     fake_stop(f, p);
 
-    /* nothing answers: fall back to ATSP6 without persisting it */
+    /* nothing answers: try every explicit ELM protocol, then fall back to ATSP6 without persisting it */
     f = fake_reset();
     p = compile_q(P_HEAD("t.det2", "{'proto':0}") "'signals':[" S_RPM "]}");
     VT_CHECK(p != NULL);
     if (!p) return;
     f->detect_proto = 99;
     fake_start(f, p, 0);
-    sim(f, 3000);
+    sim(f, 30000);
     VT_CHECK(find_cmd(f, "ATSPB", 0) > 0);
-    VT_CHECK(find_cmd(f, "ATSP6", find_cmd(f, "ATSPB", 0)) > 0);
+    VT_CHECK(find_cmd(f, "ATSPC", find_cmd(f, "ATSPB", 0)) > 0);
+    VT_CHECK(find_cmd(f, "ATSP6", find_cmd(f, "ATSPC", 0)) > 0);
     VT_CHECK_INT(f->proto_detected, 0);
     fake_stop(f, p);
 

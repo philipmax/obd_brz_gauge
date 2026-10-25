@@ -43,7 +43,7 @@
 #define ENG_DETECT_SETTLE   200
 #define ENG_DETECT_SP_DELAY 50
 #define ENG_DETECT_FALLBACK 6
-#define ENG_DETECT_LAST     11
+#define ENG_DETECT_LAST     12
 #define ENG_WARM_COUNT      3
 #define ENG_WARM_DELAY      150
 #define ENG_MA_STOP_MS      300
