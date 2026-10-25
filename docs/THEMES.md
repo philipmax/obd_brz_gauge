@@ -352,7 +352,7 @@ WiFi OTA 同样直接安装到 SD。旧 Flash 主题只作为升级迁移源，�
 主题视频容器使用自定义的 **OBV1/OBV3**（`main/media/obv1_format.h`）。
 旧版或外部普通视频 OBV1 使用 `[64B 头][8B × 帧数 的帧索引][JPEG 帧数据]`（版本 1）；编辑器新导入的视频统一使用 OBV3，
 每帧数据为 `[u32 JPEG 大小][u32 alpha 大小][JPEG][PackBits alpha 平面]`。宽高 8..360 且是 8 的倍数，
-最多 36000 帧，OBV1 JPEG 帧 ≤48 KB、OBV3 帧 ≤256 KiB，用 CRC-32 校验。固件只在主题合成播放器中
+最多 36000 帧，OBV1 JPEG 帧 ≤128 KiB、OBV3 帧 ≤256 KiB，用 CRC-32 校验。固件只在主题合成播放器中
 解码 OBV3，并把 JPEG 颜色和 alpha 合成为 LVGL RGB565+alpha；OBV1 和已有主题保持兼容。
 开机动画网页上传使用下方的 OBV2；制作命令：
 
@@ -403,7 +403,8 @@ python3 tools/make_video.py legacy INPUT -o bootmedia/slot_a [--raw bootmedia.ra
 网页本地和社区新上传的开机动画使用 **OBV2**，主题视频继续使用 OBV1。OBV2 沿用 `OBV1` magic 和 64B 头，
 `version=2`、`fps=0`、`timescale=1000000`；16B 索引项为 `offset,size,timestamp_us,duration_us`。
 时间戳从 0 连续递增，单帧间隔 ≥16666 µs，`duration_ms` 为总时长向上取整，最多 36000 帧，
-单帧 ≤48 KiB、文件 ≤256 MiB，一秒压缩帧窗口加环绕余量 ≤1.25 MiB。头、索引和帧数据各有 CRC-32。
+单帧 ≤128 KiB、文件 ≤256 MiB，一秒压缩帧窗口加环绕余量 ≤1.25 MiB。头、索引和帧数据各有 CRC-32。
+超过 48 KiB 的帧需要升级到支持 128 KiB 上限的固件；原有小帧动画仍可使用。
 浏览器将视频转为 360×360 Q90 baseline JPEG 4:2:0，默认保留源帧时间轴；USB 本地导入保持比例、不裁切，
 社区上传按裁剪、缩放和起止时间设置处理，并可显式选择帧率。预算超限时直接报错。固件预读约一秒的压缩帧，SD 顺序读取；360×360/4:2:0 使用整帧解码、双 DMA 缓冲分条推屏，
 满足 MCU 对齐和解码自检的素材可使用块解码。OBV2 仅支持非循环全屏开机播放；解码或读卡暂时落后时，仅跳过显示区间已经完全过期的中间帧，

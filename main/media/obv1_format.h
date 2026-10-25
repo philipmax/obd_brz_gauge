@@ -63,7 +63,7 @@ extern "C" {
 #define OBV2_INDEX_ENTRY     16u
 #define OBV2_TIMESCALE       1000000u
 #define OBV2_RING_MAX        (1280u * 1024u)
-#define OBV1_FRAME_MAX       (48u * 1024u)  /* per-frame cap, make_video.py enforces the same */
+#define OBV1_FRAME_MAX       (128u * 1024u)  /* per-frame cap, make_video.py enforces the same */
 #define OBV3_FRAME_MAX       (256u * 1024u) /* JPEG + PackBits alpha plane */
 #define OBV1_MAX_FRAMES      36000u         /* index: v1 <= 288 KB, v2 <= 576 KB */
 #define OBV1_MAX_DIM         360u

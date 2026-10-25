@@ -7,6 +7,10 @@ cleanups live in the git history.
 
 ---
 
+## Increase the video JPEG frame limit
+
+- Raise the OBV1 / OBV2 JPEG frame limit from 48 KiB to 128 KiB and update the offline converter. Retain the OBV2 1.25 MiB one-second window plus wrap headroom and the OBV3 256 KiB combined-frame cap. Frames above the old limit require updated firmware; existing animations remain compatible.
+
 ## Unify and validate firmware and Android releases
 
 - Watch `main` for firmware releases by default and accept development-branch artifacts after fast-forward or normal merges; the build branch need not match the watched branch. Validate artifacts before updating the manifest, and match the complete NUL-terminated build tag. Legacy raw boot media is optional and stale published copies are removed when absent. Automatic source commits exclude both CHANGELOG files, and pushes explicitly target origin and the current release branch.

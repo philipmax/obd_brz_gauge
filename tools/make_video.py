@@ -51,7 +51,7 @@ OBV2_VERSION = 2
 OBV1_HEADER_SIZE = 64
 OBV1_INDEX_ENTRY = 8
 OBV2_INDEX_ENTRY = 16
-OBV1_FRAME_MAX = 48 * 1024
+OBV1_FRAME_MAX = 128 * 1024
 OBV1_MAX_FRAMES = 36000
 OBV1_MAX_DIM = 360
 OBV1_FLAG_BLOCK_SAFE = 0x01
@@ -639,7 +639,7 @@ def add_obv_opts(p, fps, quality, sub):
     p.add_argument('--sub', choices=('422', '420', '444', 'gray'), default=sub,
                    help='chroma subsampling (4:2:2 / 4:2:0 allow block decode)')
     p.add_argument('--max-frame', type=int, default=OBV1_FRAME_MAX,
-                   help='per-frame byte cap (<= 49152)')
+                   help=f'per-frame byte cap (<= {OBV1_FRAME_MAX})')
     p.add_argument('--fit', choices=('contain', 'cover'), default='contain')
     p.add_argument('--shift-up', type=int, default=0, help='move content up N px')
     p.add_argument('--duration', type=float, default=0.0, help='trim/loop to N seconds')

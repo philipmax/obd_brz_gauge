@@ -172,6 +172,49 @@ static void test_obv_bad_magic_version_crc(void)
     CHECK_EQ(obv1_check_index(&i, f.buf + 64, NFR * 8), OBV1_ERR_CRC);
 }
 
+/* Header/index boundaries without allocating a fake 128 KiB JPEG payload. */
+static void test_obv_large_frames(void)
+{
+    CHECK_EQ(OBV1_FRAME_MAX, 128u * 1024u);
+    const uint32_t sizes[] = {48u * 1024u + 1u, 128u * 1024u, 128u * 1024u + 1u};
+    for (unsigned version = 1; version <= 2; version++) {
+        for (unsigned n = 0; n < sizeof(sizes) / sizeof(sizes[0]); n++) {
+            obv_file_t f;
+            build_obv(&f);
+            uint8_t *h = f.buf, *index = h + OBV1_HEADER_SIZE;
+            uint32_t stride = version == 2 ? OBV2_INDEX_ENTRY : OBV1_INDEX_ENTRY;
+            uint32_t data_off = OBV1_HEADER_SIZE + stride;
+            wr16(h + 4, (uint16_t)version);
+            wr16(h + 12, version == 2 ? 0 : 1);
+            wr32(h + 16, 1);
+            wr32(h + 24, data_off);
+            wr32(h + 28, sizes[n]);
+            wr32(h + 32, sizes[n]);
+            wr32(h + 36, 1000);
+            memset(index, 0, stride);
+            wr32(index + 4, sizes[n]);
+            if (version == 2) {
+                wr32(h + 48, OBV2_TIMESCALE);
+                wr32(index + 12, 1000000);
+            }
+            wr32(h + 40, obv1_crc32(0, index, stride));
+            fix_header_crc(&f);
+            obv1_info_t info;
+            uint64_t file_size = (uint64_t)data_off + sizes[n];
+            if (sizes[n] <= OBV1_FRAME_MAX) {
+                CHECK_EQ(obv1_parse_header(h, 64, file_size, 0, &info), OBV1_OK);
+                CHECK_EQ(obv1_check_index(&info, index, stride), OBV1_OK);
+                CHECK_EQ(info.max_frame_size, sizes[n]);
+                CHECK_EQ(obv1_parse_header(h, 64, file_size, OBV1_FRAME_MAX, &info), OBV1_OK);
+                CHECK_EQ(obv1_parse_header(h, 64, file_size, 48u * 1024u, &info), OBV1_ERR_FRAME_SIZE);
+            } else {
+                CHECK_EQ(obv1_parse_header(h, 64, file_size, 0, &info), OBV1_ERR_FRAME_SIZE);
+                CHECK_EQ(obv1_parse_header(h, 64, file_size, sizes[n], &info), OBV1_ERR_FRAME_SIZE);
+            }
+        }
+    }
+}
+
 static void test_obv_oversize(void)
 {
     obv_file_t f;
@@ -668,6 +711,7 @@ int main(int argc, char **argv)
     test_obv_truncated();
     test_obv_bad_magic_version_crc();
     test_obv_oversize();
+    test_obv_large_frames();
     test_obv_geometry_index();
     test_obv2_timing();
     test_obv3_alpha();

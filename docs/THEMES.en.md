@@ -429,7 +429,7 @@ Legacy or external opaque videos use OBV1, stored as
 `[64 B header][8 B × frame_count frame index][JPEG frame data]` (version 1). New editor imports
 use OBV3, with each frame stored as
 `[u32 JPEG size][u32 alpha size][JPEG][PackBits alpha plane]`. Width/height are 8..360
-and multiples of 8; there are up to 36000 frames. OBV1 JPEG frames are ≤48 KB and
+and multiples of 8; there are up to 36000 frames. OBV1 JPEG frames are ≤128 KiB and
 OBV3 frames are ≤256 KiB, checked by CRC-32. Firmware decodes OBV3 only in the composite
 theme player and combines JPEG color with alpha as LVGL RGB565+alpha. OBV1 and existing
 themes remain compatible. Web boot-animation uploads use OBV2 below. Commands:
@@ -481,7 +481,7 @@ Needs Pillow (`pip install Pillow`); video inputs also need ffmpeg.
 Local web boot animation and new community uploads use **OBV2**; theme videos continue to use OBV1. OBV2 keeps the `OBV1` magic and 64 B header,
 with `version=2`, `fps=0`, and `timescale=1000000`; each 16 B index entry is `offset,size,timestamp_us,duration_us`.
 Timestamps start at 0 and are contiguous, frame intervals are ≥16666 µs, and `duration_ms` rounds the total duration up.
-Limits are 36000 frames, ≤48 KiB per frame, ≤256 MiB per file, and ≤1.25 MiB for a sliding one-second compressed window plus wrap headroom.
+Limits are 36000 frames, ≤128 KiB per frame, ≤256 MiB per file, and ≤1.25 MiB for a sliding one-second compressed window plus wrap headroom. Frames larger than 48 KiB require firmware with the 128 KiB frame limit; existing smaller-frame animations remain compatible.
 Header, index, and frame data each have CRC-32. The browser converts videos to 360×360 Q90 baseline JPEG 4:2:0, retaining the source timeline by default.
 Local USB import preserves aspect ratio without cropping; community uploads apply crop, zoom and trim settings and allow an explicit frame rate. Budget overflow is reported. Firmware prebuffers about one second of compressed frames and reads SD sequentially.
 360×360/4:2:0 uses whole-frame decoding and two DMA strip buffers for display output; MCU-aligned assets with a passing decoder self-test can use block decoding.
