@@ -126,6 +126,7 @@ static bool                  s_task_started;
 static StreamBufferHandle_t  s_rx;
 static vp_engine_t          *s_engine;
 static bool                  s_engine_up;
+static uint16_t              s_obd_demand_mask;
 static volatile bool         s_quiet;          /* engine must not touch signal_store */
 static volatile int64_t      s_reconnect_us;   /* engine asked for a reconnect */
 static volatile uint32_t     s_rx_dropped;
@@ -143,6 +144,15 @@ static void wake_task(void)
 static bool mac_nonzero(const uint8_t *m)
 {
     return m && (m[0] | m[1] | m[2] | m[3] | m[4] | m[5]) != 0;
+}
+
+static uint16_t obd_demand_mask_get(void)
+{
+    uint16_t mask;
+    portENTER_CRITICAL(&s_lock);
+    mask = s_obd_demand_mask;
+    portEXIT_CRITICAL(&s_lock);
+    return mask;
 }
 
 static bool is_target(const uint8_t *bda)
@@ -755,6 +765,7 @@ static bool engine_create(void)
         ESP_LOGE(TAG, "vp_engine_create failed (profile %s)", vp_manager_active_id());
         return false;
     }
+    vp_engine_set_obd_demand_mask(s_engine, obd_demand_mask_get());
     ESP_LOGI(TAG, "engine ready: profile %s, protocol %u%s", vp_manager_active_id(), cfg.proto,
              cfg.proto ? "" : " (auto)");
     return true;
@@ -863,6 +874,7 @@ static void obd_task(void *arg)
         }
         PERF_BEGIN(perf_elm_start);
         rx_drain();
+        vp_engine_set_obd_demand_mask(s_engine, obd_demand_mask_get());
         wait_ms = vp_engine_run(s_engine);
         PERF_END(PERF_ELM_RUN, perf_elm_start, 1);
 
@@ -972,6 +984,16 @@ void elm327_ble_connect_by_addr(const uint8_t mac[6], const char *name)
 bool elm327_ble_is_connected(void)
 {
     return s_connected;
+}
+
+void elm327_ble_set_obd_demand_mask(uint16_t mask)
+{
+    bool changed;
+    portENTER_CRITICAL(&s_lock);
+    changed = s_obd_demand_mask != mask;
+    s_obd_demand_mask = mask;
+    portEXIT_CRITICAL(&s_lock);
+    if (changed) wake_task();
 }
 
 void elm327_ble_disconnect(void)

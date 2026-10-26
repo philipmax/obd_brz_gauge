@@ -87,6 +87,10 @@ uint8_t theme_page_default_index(void);
  */
 void theme_tick(void);
 
+/** Resolve the standard OBD signals used by a live theme page's bindings/rules.
+ * Returns false only when the theme lock is busy; on false, `mask` is untouched. */
+bool theme_page_obd_demand_mask(lv_obj_t *screen, uint16_t *mask);
+
 /**
  * Gauge sweep (boot / connect animation): ratio in [0,1] drives every binding
  * to min + ratio * (max - min) of its own display range; < 0 turns it off.

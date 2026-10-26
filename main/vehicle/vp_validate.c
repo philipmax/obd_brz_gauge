@@ -507,11 +507,12 @@ bool vp_at_check(const char *cmd, vp_at_ctx_t ctx, char *norm, size_t norm_cap,
         const char *p = a + 2;
         if (ctx == VP_AT_CTX_REQUEST) {
             reason = "protocol selection is connection setup only";
-        } else if (p[0] == 'A') {
-            p++;
-            ok = p[1] == '\0' && ((p[0] >= '1' && p[0] <= '9') || (p[0] >= 'A' && p[0] <= 'C'));
+        } else if (p[1] == '\0') {
+            ok = (p[0] >= '0' && p[0] <= '9') || (p[0] >= 'A' && p[0] <= 'C');
+        } else if (p[0] == 'A' && p[2] == '\0') {
+            ok = (p[1] >= '1' && p[1] <= '9') || (p[1] >= 'A' && p[1] <= 'C');
         } else {
-            ok = p[1] == '\0' && ((p[0] >= '0' && p[0] <= '9') || (p[0] >= 'A' && p[0] <= 'C'));
+            ok = false;
         }
         if (!ok && !reason) reason = "protocol not 0-9/A-C";
     } else if (ctx == VP_AT_CTX_INIT && init_setup(a)) {

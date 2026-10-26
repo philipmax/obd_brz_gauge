@@ -54,6 +54,10 @@ void elm327_ble_connect_by_addr(const uint8_t mac[6], const char *name);
 // Adapter link state.
 bool elm327_ble_is_connected(void);
 
+// Limit standard OBD polling to signals currently required by the UI. RPM is
+// always polled by the engine; profile veh.* signals remain enabled for slaves.
+void elm327_ble_set_obd_demand_mask(uint16_t mask);
+
 // Unbind the adapter and drop the link (no auto-reconnect until the next
 // elm327_ble_connect_by_addr() or reboot).
 void elm327_ble_disconnect(void);

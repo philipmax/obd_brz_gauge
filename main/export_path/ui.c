@@ -444,10 +444,14 @@ static uint32_t ui_refresh_period_ms_for_screen(lv_obj_t *scr,
 }
 
 static uint16_t ui_data_mask_for_screen(lv_obj_t *scr, const nvs_user_cfg_t *cfg,
-                                        bool need_rpm, uint8_t needle_source)
+                                        uint8_t needle_source)
 {
-    uint16_t mask = need_rpm ? (1u << SIG_OBD_RPM) : 0;
-    if (scr == ui_ScreenPageNeedle) {
+    uint16_t mask = (uint16_t)(1u << SIG_OBD_RPM);
+    if (scr == ui_ScreenPageGear) {
+        mask |= (uint16_t)(1u << SIG_OBD_GEAR);
+    } else if (scr == ui_ScreenPageSpeed) {
+        mask |= (uint16_t)(1u << SIG_OBD_SPEED);
+    } else if (scr == ui_ScreenPageNeedle) {
         mask |= ui_data_mask_for_item(needle_source);
     } else if (scr == ui_ScreenPageOilPressure) {
         mask |= ui_data_mask_for_item(cfg->chart_source_idx % DISP_ITEM_COUNT);
@@ -560,6 +564,16 @@ void my_timerMain(lv_timer_t * timer)
     const uint8_t needle_source = user_cfg.needle_source_idx < DISP_ITEM_COUNT ?
                                  user_cfg.needle_source_idx : DISP_ITEM_CLT;
 
+    static uint16_t last_obd_demand_mask = (uint16_t)(1u << SIG_OBD_RPM);
+    uint16_t obd_demand_mask = ui_data_mask_for_screen(scr, &user_cfg, needle_source);
+    if (scr == ui_ScreenPageThemeGauge) {
+        if (!theme_page_obd_demand_mask(scr, &obd_demand_mask))
+            obd_demand_mask = last_obd_demand_mask;
+        obd_demand_mask |= (uint16_t)(1u << SIG_OBD_RPM);
+    }
+    last_obd_demand_mask = obd_demand_mask;
+    elm327_ble_set_obd_demand_mask(obd_demand_mask);
+
     if (!IN_SWEEP && live_data_screen) {
         if (scr == ui_ScreenPageGear || scr == ui_ScreenPageRpm ||
             scr == ui_ScreenPageSpeed) {
@@ -574,9 +588,7 @@ void my_timerMain(lv_timer_t * timer)
             if (!s_gear_unknown) eGear = motion.gear;
         } else {
             obd_data_snapshot_t obd;
-            const uint16_t requested = ui_data_mask_for_screen(scr, &user_cfg,
-                rpm_warn_possible || rpm_flash_active || rpm_link_ramp_active, needle_source);
-            obd_data_get_snapshot_mask(&obd, requested);
+            obd_data_get_snapshot_mask(&obd, obd_demand_mask);
             clt       = obd.coolant_temp;
             iat       = obd.intake_temp;
             oil       = obd.oil_temp;      // real oil temperature °C (SSM 22 10 17), -100=invalid

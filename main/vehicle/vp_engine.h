@@ -32,7 +32,10 @@
  *    deterministic order and reuses the accepted protocol on reconnect;
  *  - rounds: the current request of every due signal (round / slow every
  *    div rounds / period_ms), each distinct request once, in signal order;
- *    "every" signals are inserted after each slot; gap_ms after each slot;
+ *    "every" requests run before each slot's regular request to minimize
+ *    their latency; gap_ms after each slot;
+ *  - a Mode 01 NRC 0x11 / 0x12 on physical 11-bit CAN retries that request
+ *    once on functional header 7DF;
  *    on_demand is polled like round;
  *  - ATSH / ATCRA / ATCEA / ATCAF0 are sent only when the adapter state
  *    differs from what the next request needs (lazy restore);
@@ -139,6 +142,11 @@ void vp_engine_destroy(vp_engine_t *e);
 /* Adapter reachable (notify ready) / gone. */
 void vp_engine_link_up(vp_engine_t *e);
 void vp_engine_link_down(vp_engine_t *e);
+
+/* Limit standard obd.* request polling to these signal slots. RPM is always
+ * enabled; registered veh.* signals remain enabled for multi-gauge broadcast.
+ * The engine remains single-owner: call this from the task that runs it. */
+void vp_engine_set_obd_demand_mask(vp_engine_t *e, uint16_t mask);
 
 /* Bytes received from the adapter (any chunking). */
 void vp_engine_on_rx(vp_engine_t *e, const uint8_t *data, size_t len);

@@ -14,6 +14,7 @@
 #define KEY_CFG               "settings"
 #define KEY_CHART_ALARM       "chartalarm"
 #define CHART_ALARM_N         12   // = DISP_ITEM_COUNT; indexed by disp_item_t (ui_disp_item.h). Never shrink: a shorter buffer fails to load the stored 24B blob
+#define CHART_ALARM_LEGACY_N  11   // blob size before AFR became a selectable display source
 #define CHART_ALARM_OFF       32767 // "off" sentinel for alarm thresholds (unreachable, avoids false alarms)
 #define KEY_MG_EXTRA          "mgextra"   // multi-gauge boot animation settings
 #define KEY_CFG_VERSION       "cfgver"    // config version (missing = v0)
@@ -75,10 +76,20 @@ esp_err_t nvs_storage_init(void)
     // persisted once after the repair pass below (bug #19).
     bool cfg_fresh = (load_blob(NS_CFG, KEY_CFG, &s_cfg, sizeof(s_cfg)) == ESP_ERR_NVS_NOT_FOUND);
 
-    {   // Chart alarm thresholds: load if present in NVS; otherwise keep static defaults (don't overwrite to 0).
-        nvs_handle_t h; size_t sz = sizeof(s_chart_alarm);
+    {   // Chart alarm thresholds: load current blobs or preserve the pre-AFR 11-slot layout.
+        nvs_handle_t h; size_t sz = 0;
         if (nvs_open(NS_CFG, NVS_READONLY, &h) == ESP_OK) {
-            nvs_get_blob(h, KEY_CHART_ALARM, s_chart_alarm, &sz);
+            if (nvs_get_blob(h, KEY_CHART_ALARM, NULL, &sz) == ESP_OK) {
+                if (sz == sizeof(s_chart_alarm)) {
+                    nvs_get_blob(h, KEY_CHART_ALARM, s_chart_alarm, &sz);
+                } else if (sz == CHART_ALARM_LEGACY_N * sizeof(int16_t)) {
+                    int16_t legacy[CHART_ALARM_LEGACY_N];
+                    if (nvs_get_blob(h, KEY_CHART_ALARM, legacy, &sz) == ESP_OK) {
+                        memcpy(s_chart_alarm, legacy, sizeof(legacy));
+                        s_chart_alarm[DISP_ITEM_AFR] = CHART_ALARM_OFF;
+                    }
+                }
+            }
             nvs_close(h);
         }
         // Older firmware lacked the AFR initializer and persisted 0 with the whole array. The UI

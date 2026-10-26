@@ -1131,6 +1131,30 @@ void theme_tick(void)
     te_unlock();
 }
 
+bool theme_page_obd_demand_mask(lv_obj_t *screen, uint16_t *mask)
+{
+    te_ctx_t *c = g_te;
+    uint16_t result = 0;
+
+    if (!mask) return false;
+    if (!c) {
+        *mask = 0;
+        return true;
+    }
+    if (!te_trylock()) return false;
+    if (screen) {
+        for (te_live_page_t *p = c->live; p; p = p->next) {
+            if (p->scr == screen) {
+                result = (uint16_t)(p->used_mask & ((UINT64_C(1) << SIG_OBD_COUNT) - 1u));
+                break;
+            }
+        }
+    }
+    te_unlock();
+    *mask = result;
+    return true;
+}
+
 void theme_set_sweep(float ratio, uint16_t rpm)
 {
     te_ctx_t *c = g_te;

@@ -421,8 +421,17 @@ executed; update `rpn` to change decoding. CAN sources can directly change
 with `rate: "every"`. Templates use `round` for requested signals: RPM 100 ms;
 speed/gear/load/throttle/boost 200 ms; AFR/oil pressure 500 ms;
 temperatures/voltage 1000 ms. Firmware sends requests one at a time, so actual
-frequency depends on response time. Set protocol, ATST timeout and request gaps
-in `bus`; a profile has one protocol.
+frequency depends on response time. A `rate: "every"` signal is polled before
+each regular slot to reduce the wait for fast signals such as RPM; it is still
+limited by BLE/ELM round trips, `gap_ms` and other fast signals. If a Mode 01
+request receives NRC `7F 01 11` or `7F 01 12` on a physical CAN header, firmware
+retries it on functional header `7DF` and keeps that fallback for the connection.
+Set protocol, ATST timeout and request gaps in `bus`; a profile has one protocol.
+
+At runtime, only standard `obd.*` signals bound or displayed on the current gauge
+page are polled. RPM is always polled so its warning flash can work on other pages.
+Ratio-derived gear also polls speed. Profile `veh.*` signals are not filtered by
+the local page; the master keeps collecting and broadcasting them to slave gauges.
 
 Copy a template outside the pack before editing. Match the filename when changing
 the ID and increment `rev` on updates. Check personal files with the existing

@@ -38,6 +38,7 @@
 
 #define ENG_DEF_TIMEOUT     2500
 #define ENG_DEF_DETECT      2000
+#define ENG_DRAIN_TIMEOUT   1500
 #define ENG_DEF_LINK_HOLD   3000
 #define ENG_DEF_VBAT        5000
 #define ENG_DEF_HEAL        10000
@@ -80,7 +81,7 @@ static const uint8_t k_detect_protocols[] = {
 #define ENG_ST_UNKNOWN      (-2)
 #define ENG_CEA_OFF_VAL     0x100u        /* step value for "ATCEA" (off) */
 
-enum { K_AT = 0, K_INIT, K_STATE, K_DETECT, K_WARM, K_TESTER, K_RV, K_REQ, K_MA,
+enum { K_AT = 0, K_INIT, K_STATE, K_DETECT, K_DRAIN, K_WARM, K_TESTER, K_RV, K_REQ, K_MA,
        K_REQ_AT,
        K_ISO_FC, K_ISO_WAIT, K_DELAY, K_ELM_CHECK };
 enum { ST_HDR = 0, ST_RX, ST_CEA, ST_CAF, ST_CFC };
@@ -198,6 +199,8 @@ struct vp_engine {
     bool     chain_failed;
     uint8_t  every_sig[VP_MAX_EVERY_SIGNALS];
     uint8_t  n_every;
+    uint32_t functional_fallback_mask;
+    uint16_t obd_demand_mask;
     bool     req_sent;
     uint32_t round_no;
     uint32_t last_req_ms;
@@ -672,7 +675,7 @@ static size_t response_lines(vp_engine_t *e, eng_line_t *ln, size_t cap, bool *a
     const char *s = e->rxbuf;
     const char *end = e->rxbuf + e->rx_len;
 
-    *any_num = false;
+    if (any_num) *any_num = false;
     while (s < end && nl < cap) {
         const char *le = s;
         size_t got = 0;
@@ -687,7 +690,7 @@ static size_t response_lines(vp_engine_t *e, eng_line_t *ln, size_t cap, bool *a
                 ln[nl].off = (uint16_t)used;
                 ln[nl].n = (uint8_t)(got > 255 ? 255 : got);
                 ln[nl].num = num;
-                *any_num |= num;
+                if (any_num) *any_num |= num;
                 used += got;
                 nl++;
             }
@@ -696,6 +699,23 @@ static size_t response_lines(vp_engine_t *e, eng_line_t *ln, size_t cap, bool *a
         if (used >= sizeof(e->lines)) break;
     }
     return nl;
+}
+
+static bool resp_mode01_unsupported(vp_engine_t *e, uint8_t service)
+{
+    eng_line_t ln[ENG_MAX_LINES];
+    size_t nl, i, j;
+
+    if (service != 0x01u) return false;
+    nl = response_lines(e, ln, ENG_MAX_LINES, NULL);
+    for (i = 0; i < nl; i++) {
+        const uint8_t *b = e->lines + ln[i].off;
+        for (j = 0; j + 2 < ln[i].n; j++) {
+            if (b[j] == 0x7Fu && b[j + 1] == service &&
+                (b[j + 2] == 0x11u || b[j + 2] == 0x12u)) return true;
+        }
+    }
+    return false;
 }
 
 static void iso_reset(vp_engine_t *e)
@@ -1255,6 +1275,28 @@ static bool sig_driven(const vp_engine_t *e, int i)
            e->sig[i].src_count > 0;
 }
 
+static bool signal_demanded(const vp_engine_t *e, int i)
+{
+    int slot;
+
+    if (!sig_driven(e, i)) return false;
+    slot = e->sigs[i].slot;
+    if (slot >= SIG_VEH_BASE) return true;
+    if (slot < SIG_OBD_FIRST || slot >= SIG_OBD_FIRST + SIG_OBD_COUNT) return false;
+    if (e->obd_demand_mask & (UINT16_C(1) << (unsigned)slot)) return true;
+
+    /* Ratio-derived gear needs speed in addition to the always-on RPM. */
+    if (slot == SIG_OBD_SPEED && e->sig_gear >= 0 &&
+        (e->obd_demand_mask & (UINT16_C(1) << SIG_OBD_GEAR))) {
+        const vp_signal_t *gear = &e->sig[e->sig_gear];
+        if (gear->derive == VP_DERIVE_RATIO ||
+            (gear->fallback == VP_DERIVE_RATIO && e->sigs[e->sig_gear].fallback_on)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static void req_index_append(vp_engine_t *e, uint16_t r, uint16_t si)
 {
     uint8_t source = (uint8_t)si;
@@ -1282,7 +1324,7 @@ static void req_complete(vp_engine_t *e, int r, bool match, const uint8_t *d,
         uint16_t si;
         float v;
 
-        if (i < 0 || i >= e->p->n_sig || !sig_driven(e, i)) continue;
+        if (i < 0 || i >= e->p->n_sig || !signal_demanded(e, i)) continue;
         si = (uint16_t)(e->sig[i].src_first + e->sigs[i].cur);
         if (si != source) continue;
         if (match && src_eval(e, si, d, n, &v)) {
@@ -1355,7 +1397,7 @@ static void can_frame(vp_engine_t *e, uint32_t id, const uint8_t *d, size_t n, u
         int i = rule->sig;
         float v;
 
-        if (rule->can_id != id || i >= e->p->n_sig || !sig_driven(e, i)) continue;
+        if (rule->can_id != id || i >= e->p->n_sig || !signal_demanded(e, i)) continue;
         cur_abs = (uint16_t)(e->sig[i].src_first + e->sigs[i].cur);
         if (si > cur_abs) continue;
         if (!src_eval(e, si, d, n, &v)) {
@@ -1425,7 +1467,7 @@ static void ma_done(vp_engine_t *e, uint32_t now)
         e->mon_ok = false;
         for (i = 0; i < e->p->n_sig; i++) {
             const vp_source_t *s;
-            if (!sig_driven(e, i)) continue;
+            if (!signal_demanded(e, i)) continue;
             s = cur_src(e, i);
             if (s->kind == VP_SRC_CAN) advance_source(e, i, now);
         }
@@ -1434,7 +1476,7 @@ static void ma_done(vp_engine_t *e, uint32_t now)
     for (i = 0; i < e->p->n_sig; i++) {
         eng_sig_t *g = &e->sigs[i];
         const vp_source_t *s;
-        if (!sig_driven(e, i)) continue;
+        if (!signal_demanded(e, i)) continue;
         s = cur_src(e, i);
         if (s->kind != VP_SRC_CAN) {
             g->can_seen = false;
@@ -1864,8 +1906,9 @@ static void detect_next(vp_engine_t *e)
          (unsigned)e->detect_attempt, (unsigned)ENG_DETECT_ATTEMPTS);
 }
 
-static void detect_done(vp_engine_t *e, const eng_step_t *s, bool answered)
+static void detect_done(vp_engine_t *e, const eng_step_t *s, int how)
 {
+    bool answered = how == DONE_PROMPT;
     uint8_t expect[8];
     size_t expect_len = 0;
     const uint8_t *d;
@@ -1876,6 +1919,20 @@ static void detect_done(vp_engine_t *e, const eng_step_t *s, bool answered)
      * 010C makes a valid adapter look absent for profiles that intentionally
      * omit the optional RPM PID.  Positive OBD responses retain the request
      * parameters (0100 -> 4100, 0902 -> 4902, 22F190 -> 62F190). */
+    if (!answered && how == DONE_TIMEOUT) {
+        eng_step_t *drain;
+        q_clear(e);
+        drain = q_push(e, K_DRAIN, "", 0);
+        if (drain) {
+            drain->timeout_ms = ENG_DRAIN_TIMEOUT;
+            elog(e, "protocol probe timed out, interrupting ELM before next candidate");
+        } else {
+            e->phase = e->st.phase = VP_ENGINE_PH_RECONNECT;
+            if (e->sink.reconnect) e->sink.reconnect(e->sink.ctx);
+            else e->phase = e->st.phase = VP_ENGINE_PH_DOWN;
+        }
+        return;
+    }
     if (!vp_parse_hex_bytes(e->p->check_connection[0] ? e->p->check_connection : "0100",
                             false, expect, sizeof(expect), &expect_len)) {
         q_clear(e);
@@ -1959,7 +2016,8 @@ static void enter_run(vp_engine_t *e, uint32_t now)
 
 static bool poll_candidate(const vp_engine_t *e, int i)
 {
-    if (!sig_driven(e, i) || e->sig[i].rate == VP_RATE_EVERY) return false;
+    if (!sig_driven(e, i) || e->sig[i].rate == VP_RATE_EVERY ||
+        !signal_demanded(e, i)) return false;
     return cur_src(e, i)->kind == VP_SRC_REQ;
 }
 
@@ -1987,13 +2045,24 @@ static size_t every_reqs(const vp_engine_t *e, uint8_t *out)
     for (k = 0; k < e->n_every; k++) {
         int i = e->every_sig[k];
         const vp_source_t *s;
-        if (!sig_driven(e, i)) continue;
+        if (!sig_driven(e, i) || !signal_demanded(e, i)) continue;
         s = cur_src(e, i);
         if (s->kind != VP_SRC_REQ) continue;
         for (j = 0; j < n && out[j] != s->ref; j++) {}
         if (j == n) out[n++] = (uint8_t)s->ref;
     }
     return n;
+}
+
+static bool request_demanded(const vp_engine_t *e, uint8_t r)
+{
+    uint8_t source;
+    if (r >= e->p->n_req) return false;
+    for (source = e->req_head[r]; source != ENG_INDEX_NONE; source = e->req_next[source]) {
+        int i = (int)e->src[source].sig;
+        if (i >= 0 && i < e->p->n_sig && signal_demanded(e, i)) return true;
+    }
+    return false;
 }
 
 static void start_round(vp_engine_t *e, uint32_t now)
@@ -2031,13 +2100,17 @@ static bool build_slot(vp_engine_t *e)
 
     e->slot_n = 0;
     e->slot_pos = 0;
-    if (e->round_pos < e->round_n) {
+    while (e->round_pos < e->round_n) {
         uint8_t main_req = e->round_req[e->round_pos++];
-        e->slot_req[e->slot_n++] = main_req;
+        if (!request_demanded(e, main_req)) continue;
+        for (k = 0; k < nev; k++) e->slot_req[e->slot_n++] = ev[k];
         for (k = 0; k < nev; k++) {
-            if (ev[k] != main_req) e->slot_req[e->slot_n++] = ev[k];
+            if (ev[k] == main_req) break;
         }
-    } else if (e->round_n == 0 && !e->every_done) {
+        if (k == nev) e->slot_req[e->slot_n++] = main_req;
+        break;
+    }
+    if (e->round_n == 0 && e->slot_n == 0 && !e->every_done) {
         e->every_done = true;
         for (k = 0; k < nev; k++) e->slot_req[e->slot_n++] = ev[k];
     }
@@ -2048,6 +2121,10 @@ static bool build_slot(vp_engine_t *e)
 static bool push_state_for(vp_engine_t *e, uint8_t r)
 {
     const vp_request_t *q = &e->req[r];
+    bool functional_fallback = (e->functional_fallback_mask & (UINT32_C(1) << r)) != 0;
+    uint32_t want_hdr = functional_fallback ? 0x7DFu : q->hdr;
+    bool want_hdr_explicit = functional_fallback ||
+                             ((q->rsv & VP_REQ_RSV_HDR_EXPLICIT) != 0);
     uint32_t want_rx = (q->flags & VP_REQ_F_RX) ? q->rx : e->base_rx;
     int16_t want_cea = (q->flags & VP_REQ_F_CEA) ? (int16_t)q->cea : (int16_t)ENG_CEA_OFF;
     int8_t want_caf0 = (q->flags & (VP_REQ_F_RAW | VP_REQ_F_MULTI)) ? 1 : 0;
@@ -2055,16 +2132,15 @@ static bool push_state_for(vp_engine_t *e, uint8_t r)
     bool defer_same_header = e->pending_after_req >= 0 &&
                              request_header_same(&e->req[e->pending_after_req], q);
 
-    if (e->hdr != q->hdr || e->hdr_explicit !=
-        ((q->rsv & VP_REQ_RSV_HDR_EXPLICIT) != 0)) {
+    if (e->hdr != want_hdr || e->hdr_explicit != want_hdr_explicit) {
         /* ISO 9141 / KWP use protocol-specific K-line addressing, not CAN
          * headers. Imported profiles may explicitly carry a CAN-style 7E0;
          * keep native ELM addressing for these protocols regardless. */
         if (e->run_proto >= 3 && e->run_proto <= 5) {
-            e->hdr = q->hdr;
-            e->hdr_explicit = (q->rsv & VP_REQ_RSV_HDR_EXPLICIT) != 0;
+            e->hdr = want_hdr;
+            e->hdr_explicit = want_hdr_explicit;
         } else {
-            push_state(e, ST_HDR, q->hdr, r);
+            push_state(e, ST_HDR, want_hdr, r);
             return true;
         }
     }
@@ -2355,7 +2431,8 @@ static void step_done(vp_engine_t *e, uint32_t now, int how)
             e->hdr = ok ? s.val : ENG_ID_UNKNOWN;
             if (ok) {
                 e->hdr_explicit = s.req >= 0 &&
-                    (e->req[s.req].rsv & VP_REQ_RSV_HDR_EXPLICIT) != 0;
+                    (((e->functional_fallback_mask & (UINT32_C(1) << s.req)) != 0) ||
+                     (e->req[s.req].rsv & VP_REQ_RSV_HDR_EXPLICIT) != 0);
             }
             break;
         case ST_RX:  e->rx = ok ? s.val : ENG_ID_UNKNOWN; break;
@@ -2396,7 +2473,19 @@ static void step_done(vp_engine_t *e, uint32_t now, int how)
         if (!strcmp(s.cmd, "ATAR")) e->rx = answered && resp_ok(e) ? 0 : ENG_ID_UNKNOWN;
         break;
     case K_DETECT:
-        detect_done(e, &s, answered);
+        detect_done(e, &s, how);
+        break;
+    case K_DRAIN:
+        if (answered || resp_stopped(e)) {
+            detect_next(e);
+        } else {
+            elog(e, "ELM did not return a prompt after interrupt; reconnecting");
+            q_clear(e);
+            e->phase = VP_ENGINE_PH_RECONNECT;
+            e->st.phase = e->phase;
+            if (e->sink.reconnect) e->sink.reconnect(e->sink.ctx);
+            else e->phase = e->st.phase = VP_ENGINE_PH_DOWN;
+        }
         break;
     case K_ELM_CHECK:
         elm_check_done(e, now, answered);
@@ -2410,6 +2499,19 @@ static void step_done(vp_engine_t *e, uint32_t now, int how)
          * source of ECU data and link health. */
         break;
     case K_REQ:
+        if (answered && !(e->req[s.req].flags & (VP_REQ_F_RAW | VP_REQ_F_MULTI)) &&
+            (e->run_proto == 6 || e->run_proto == 7) &&
+            e->req[s.req].hdr >= 0x7E0u && e->req[s.req].hdr <= 0x7E7u &&
+            !(e->functional_fallback_mask & (UINT32_C(1) << s.req)) &&
+            resp_mode01_unsupported(e, e->req[s.req].service)) {
+            e->functional_fallback_mask |= UINT32_C(1) << s.req;
+            if (e->slot_pos > 0) e->slot_pos--;
+            elog(e, "Mode 01 request %u rejected on physical header, retrying functional 7DF",
+                 (unsigned)s.req);
+            iso_reset(e);
+            if (s.req == e->chain_req) e->chain_req = -1;
+            break;
+        }
         if (answered && (e->req[s.req].flags & VP_REQ_F_MULTI)) {
             bool complete = false;
             bool need_fc = false;
@@ -2485,6 +2587,7 @@ static void step_send(vp_engine_t *e, const eng_step_t *s, uint32_t now)
     char norm[VP_AT_MAX_LEN + 1];
     const char *cmd = s->cmd;
     bool is_at = s->kind != K_REQ && s->kind != K_DETECT && s->kind != K_WARM &&
+                 s->kind != K_DRAIN &&
                  s->kind != K_TESTER &&
                  s->kind != K_ISO_FC && s->kind != K_ISO_WAIT && s->kind != K_DELAY &&
                  !(s->kind == K_INIT && vp_init_raw_command(s->cmd));
@@ -2636,6 +2739,7 @@ static void reset_runtime(vp_engine_t *e, uint32_t now)
     e->cfc0 = ENG_ST_UNKNOWN;
     iso_reset(e);
     e->in_round = false;
+    e->functional_fallback_mask = 0;
     e->round_n = e->round_pos = 0;
     e->slot_n = e->slot_pos = 0;
     e->pending_after_req = -1;
@@ -2696,6 +2800,7 @@ vp_engine_t *vp_engine_create(const vp_profile_t *p, const vp_engine_sink_t *sin
     e->link = SIG_LINK_NONE;
     e->mon_ok = true;
     e->sig_gear = -1;
+    e->obd_demand_mask = (UINT16_C(1) << SIG_OBD_COUNT) - 1u;
     memset(e->req_head, ENG_INDEX_NONE, sizeof(e->req_head));
     memset(e->req_tail, ENG_INDEX_NONE, sizeof(e->req_tail));
     memset(e->req_next, ENG_INDEX_NONE, sizeof(e->req_next));
@@ -2790,6 +2895,12 @@ void vp_engine_link_down(vp_engine_t *e)
     if (e->sink.on_elm_link) e->sink.on_elm_link(e->sink.ctx, false);
 }
 
+void vp_engine_set_obd_demand_mask(vp_engine_t *e, uint16_t mask)
+{
+    if (!e) return;
+    e->obd_demand_mask = (uint16_t)(mask | (UINT16_C(1) << SIG_OBD_RPM));
+}
+
 void vp_engine_on_rx(vp_engine_t *e, const uint8_t *data, size_t len)
 {
     size_t i;
@@ -2831,6 +2942,10 @@ uint32_t vp_engine_run(vp_engine_t *e)
             if (e->cur.kind == K_MA) {
                 uint32_t w = 1;
                 if (!ma_poll(e, now, &w)) return w;
+                continue;
+            }
+            if (e->cur.kind == K_DRAIN && resp_stopped(e)) {
+                step_done(e, now, DONE_PROMPT);
                 continue;
             }
             if (e->prompt) {
