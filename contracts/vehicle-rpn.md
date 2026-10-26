@@ -35,7 +35,7 @@ schema 故意比设备严：未知字段在 schema 里是错误（设备只给 `
 | `origin`、`meta`、`notes` | 否 | 仅供参考，设备忽略 |
 | `aliases` | 否 | 本 profile 也可代表的其他 id（如合并掉的重复车型） |
 | `requires.elm` | 否 | 能力列表，只认 `ATMA`、`ATCEA` |
-| `bus` | 否（可省略或为 `{}`） | `proto` 0..12（省略/0 = 沿用已保存或已探测协议，无可用协议时自动检测；1..12 → `ATSP1`..`ATSPC`）、`hdr`（缺省 `7E0`）、`atst` 2..255（缺省 0x19）、`gap_ms` 0..1000（缺省 30）、`init`（≤ 8 条额外 AT，见第 5 节） |
+| `bus` | 否（可省略或为 `{}`） | `proto` 0..12（省略/0 = 使用 `ATSP0` 让适配器自动选择协议；1..12 → `ATSP1`..`ATSPC`）、`hdr`（缺省 `7E0`）、`atst` 2..255（缺省 0x19）、`gap_ms` 0..1000（缺省 30）、`check_connection`（缺省 `0100`）、可选 `tester_present`/`tester_present_every_ms`、`init`（≤ 16 条额外 AT，见第 5 节） |
 | `drivetrain` | 否 | `fd` 0.1..30、`tire_m` 0.1..1、`gears`（≤ 8 个，0.05..30）、`tol` 0..0.5、`speed_scale` 0.5..2；比值推算挡位需要 `fd`+`tire_m`+至少 1 个齿比 |
 | `monitor` | 否 | `mode`：`probe`（需 `every_ms` 250..60000、`window_ms` 10..200）或 `continuous`（不能再有请求源）；`stale_ms` 0..60000；必须声明 `requires.elm: ["ATMA"]` |
 | `luts` | 否 | ≤ 8 张查找表，见 2.4 |
@@ -93,11 +93,13 @@ schema 故意比设备严：未知字段在 schema 里是错误（设备只给 `
 
 | 字段 | 取值 |
 |------|------|
-| `req` | 紧凑十六进制（不带空格，大小写均可）：`01`/`09`/`21` + 1 字节，`22` + 2 字节 |
+| `req` | 紧凑十六进制（不带空格，大小写均可）：`03` 无参数；`01`/`02`/`06`/`07`/`09`/`0A`/`1A`/`21` + 1 字节；`22`/`23` + 2 字节 |
 | `raw` | 裸 CAN 载荷 1..8 字节（可用单个空格分隔），见第 4 节；必须同时写 `hdr`，不能带 `cea`；同时写了 `req` 时 `req` 必须等于裸帧里的服务载荷 |
 | `hdr` | 本请求的头，覆盖 `bus.hdr`（请求后固件恢复） |
 | `rx` | 接收过滤 → `ATCRA`（请求后恢复） |
 | `cea` | 1 个字节 → `ATCEA`；需要 `requires.elm` 含 `ATCEA`，且头必须是物理寻址 |
+| `before` | 当前请求发送前执行的 0..4 条请求级 AT 命令；只允许第 5 节的 request-local 白名单 |
+| `after` | 当前请求完成后挂起的 0..4 条请求级 AT 命令；Car Scanner 语义是在下一次请求发生头切换时执行 |
 | `len` | 1..64，公式可寻址的数据字节数（响应不足则样本失败） |
 | `multiframe` | 响应可能是多帧（ISO-TP 重组） |
 | `byte_from_end` | 1..64，需 `multiframe: true`：公式只看响应**最后 n 个字节**，且只能用 `["X"]`（= 倒数第 n 个字节） |
@@ -202,13 +204,13 @@ CAN 监听源（有 `can`，profile 必须有 `monitor`）：
 
 ## 4. 服务号与寻址白名单
 
-profile 不能直接写 AT 命令（`bus.init` 的受限白名单除外，见第 5 节），只能写结构化字段，由固件拼出命令。
+profile 不能任意写 AT 命令；`bus.init` 和请求源的 `before`/`after` 都只能使用受限白名单，其他连接行为仍由固件根据结构化字段拼出命令。
 
 | 项 | 允许 | 拒绝（错误码） |
 |----|------|----------------|
-| 服务号（`req`，或裸帧里的服务） | `01`、`09`、`21`（各带 1 字节参数）、`22`（带 2 字节 DID） | 其他一切，如 `02/03/04/07/08/0A/10/11/14/19/23/27/28/2A/2C/2E/2F/31/34-37/3B/3D/3E/85/86/87`（`E_SERVICE`）；参数长度不对（`E_SERVICE`） |
+| 服务号（`req`，或裸帧里的服务） | 只读：`03`（无参数）；`01`、`02`、`06`、`07`、`09`、`0A`、`1A`、`21`（各带 1 字节参数）；`22`、`23`（各带 2 字节参数） | 其他一切，尤其是会话、复位、安全访问、写入、例程、Tester Present、清除 DTC 等服务，如 `04/10/11/14/19/27/28/2A/2C/2E/2F/31/34-37/3B/3D/3E/85/86/87`（`E_SERVICE`）；参数长度不对（`E_SERVICE`） |
 | 发送头 `hdr` / `bus.hdr` | 功能寻址 `7DF`、`18DB33F1`；物理寻址 `7E0`-`7E7`、`600`-`6FF`、`18DAxxF1` | 其他（`E_HDR`） |
-| 功能寻址头 | 只用于 `01`、`09`；不能带 `cea` | `21`、`22` 走功能寻址（`E_HDR`） |
+| 功能寻址头 | 只用于标准广播安全的 `01`、`02`、`03`、`06`、`07`、`09`、`0A`；不能带 `cea` | `1A`、`21`、`22`、`23` 走功能寻址（`E_HDR`） |
 | 接收过滤 `rx` | `7E8`-`7EF`、`600`-`6FF`、`18DAF1xx` | 其他（`E_HDR`） |
 | CAN 监听 id `can` | 3 位 ≤ 7FF，或 8 位 ≤ 1FFFFFFF | 其他（`E_HDR`） |
 | 裸帧 `raw` | ISO-TP 单帧，1..8 字节。设备同时尝试两种解释：普通寻址（字节 0 = PCI `0x0L`，L = 其后字节数，1..7）和扩展寻址（字节 0 = 目标地址，字节 1 = PCI，L = 其后字节数，1..6）；**每一种成立的解释**里的服务都必须在白名单内、参数长度正确。固件自动加 `ATCAF0`/`ATCAF1` | 两种都不成立（`E_RAWFRAME`）；某种解释的服务被禁止（只有一种解释时 `E_SERVICE`，有歧义时 `E_RAWFRAME`） |
@@ -217,9 +219,13 @@ profile 不能直接写 AT 命令（`bus.init` 的受限白名单除外，见第
 
 ## 5. AT 命令
 
-固件自己生成的命令（`ATZ/ATE0/ATL0/ATS1/ATH0/ATAT1` 初始化、按字段生成的 `ATSP/ATST/ATSH/ATCRA/ATCEA/ATCAF0/ATCAF1`、`monitor` 窗口的 `ATH1/ATMA/ATH0/AT AR`、验车用的 `ATRV`/`ATI`）都在固件代码里，不由 profile 决定。发送层在发出前用 `vp_at_check()` 做白名单断言（纵深防御）。
+固件自己生成的命令（Car Scanner 风格的 `ATZ/ATE0/ATH1/ATSP/ATS0/ATM0/ATAT1` 初始化、按字段生成的 `ATSH/ATCRA/ATCEA/ATCAF0/ATCAF1`、`monitor` 窗口的 `ATH1/ATMA/ATH0/ATAR`、验车用的 `ATRV`/`ATI`）都在固件代码里，不由 profile 决定。请求源的 `before`/`after` 可以增加只作用于该请求链的 AT 命令：`after` 不会在同一头下的下一个请求前立即执行，而是保留到下一次请求需要切换 CAN 头时，先执行前一请求的 `after`，再设置新请求状态。`ATAL`、`ATST` 等旧适配器调优命令只有在 `bus.init` 显式提供时才发送。发送层在发出前用 `vp_at_check()` 做白名单断言（纵深防御）。
 
-`bus.init` 允许最多 8 条额外命令；去掉空格、转大写后只接受：
+请求级命令失败时，当前请求链 fail-closed：不再发送同一请求剩余的 `before` 命令，也不发送 OBD 请求本身；已经挂起的 `after` 仍可在后续头切换时尝试执行。`after` 命令失败不会伪造请求成功，也不会阻止后续请求继续调度。
+
+`bus.init` 允许最多 16 条额外命令；AT 命令去掉空格、转大写后只接受。另有一个仅用于 Nissan Consult II 的精确原始初始化帧 `2212010401`，它不作为通用 AT 转义开放，只能出现在 `bus.init`：
+
+翻译 Car Scanner 的完整 `InitSequence` 时，`ATZ`、`ATD`、`ATD0`、`ATE0`、`ATH1`、`ATS0`、`ATM0`、`ATAT1`、`ATAL` 也可以按原顺序放入 `bus.init`。只有同时包含复位命令（`ATZ`、`ATD` 或 `ATD0`）、`ATSP*`、`ATE0`、`ATH1`、`ATS0`、`ATM0`、`ATAT1` 时，固件才把这个数组视为完整初始化序列并按原顺序发送；只有部分命令的配置会在 profile 命令后补齐缺失的通用序列。`DELAY<n>` / `WAIT<n>` 只作为本地等待，不会发送给适配器。
 
 | 命令 | 条件 |
 |------|------|
@@ -228,8 +234,20 @@ profile 不能直接写 AT 命令（`bus.init` 的受限白名单除外，见第
 | `ATCAF1` | — |
 | `ATST<hh>` | 02..FF |
 | `ATSP<h>` / `ATSPA<h>` | `h` = 0-9、A-C（`SPA` 时 1-9、A-C） |
+| `ATFCSH<hdr>` | 11 位或 29 位 CAN 头，用于适配器流控 |
+| `ATFCSD<hh...>` | 3 或 4 个 CAN 数据字节，用于适配器流控 |
+| `ATFCSM0` / `ATFCSM1` | 适配器流控模式 |
+| `ATCP<hh>` | CAN 优先级/协议字节 |
+| `ATIB10` | ISO 9141 初始化波特率 |
+| `ATSW<hh>` | 旧协议帧间隔/时序参数 |
+| `ATIIA` / `ATIIA<hh>` | ISO 初始化地址 |
+| `ATSI` / `ATFI` | 旧协议初始化/快速初始化 |
+| `ATWM<hh...>` | 旧协议唤醒数据，2..14 个十六进制字符 |
+| `ATTAF1` / `ATCER` | 旧适配器初始化分支命令 |
 
-`bus.init` 里 `ATCEA`、`ATCAF0` 也拒绝（它们会改变后续所有请求的帧格式，只能经源的 `cea`/`raw` 字段、由固件包在单个请求两侧）。明确拒绝并给出原因的：`ATPP*`（写适配器 EEPROM）、`ATBRD`/`ATBRT`、`ATZ`/`ATWS`/`ATD`（复位）、`ATLP`、`ATMA`/`ATMR`/`ATMT`（监听只能经 `monitor` 块）、`ATSD`/`ATSW`/`ATWM`/`ATKW`/`ATFI`/`ATSI`/`ATCSM`/`ATCV`/`ATR0`/`ATE1`/`ATL1`/`ATS0`/`ATH*`（格式由固件固定），以及任何非 AT 命令。
+`bus.init` 里 `ATCEA`、`ATCAF0` 仍拒绝（它们会改变后续所有请求的帧格式，只能经源的 `cea`/`raw` 字段、由固件包在单个请求两侧）。上表中的旧协议命令只在 `bus.init` 中按参数形状接受；在固件生成上下文和请求级 `before`/`after` 中仍拒绝。明确拒绝并给出原因的：`ATPP*`（写适配器 EEPROM）、`ATBRD`/`ATBRT`、`ATWS`、`ATLP`、`ATMA`/`ATMR`/`ATMT`（监听只能经 `monitor` 块）、`ATSD`/`ATKW`/`ATCSM`/`ATCV`/`ATR0`/`ATE1`/`ATL1`/`ATH*`（格式由固件固定），以及任何非 AT 命令。
+
+请求源的 `before`/`after` 使用更窄的 request-local 白名单：允许 `ATCAF0`/`ATCAF1`、`ATCFC0`/`ATCFC1`、`ATAL`，以及受控的 `ATCEA<hh>`；不允许复位、协议选择、全局头/过滤器、监听、持久化或其他会逃逸当前请求作用域的命令。`ATCEA<hh>` 仍需满足该请求的扩展寻址和 ELM 能力约束。
 
 ## 6. 上限
 
@@ -244,7 +262,7 @@ profile 不能直接写 AT 命令（`bus.init` 的受限白名单除外，见第
 | 总请求率（`period_ms` 折算） | 100 次/秒；单个 `period_ms` ≥ 20 |
 | 查找表 | 8 张 × 16 项 |
 | 齿比 | 8 |
-| `bus.init` | 8 条 |
+| `bus.init` | 16 条 |
 | 公式 | 32 条指令、栈深 8、常量 `|c| <= 1e7`、数据 64 字节 |
 
 ## 7. 错误码

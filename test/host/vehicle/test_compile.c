@@ -351,7 +351,7 @@ static void test_check(void)
 
     b = dup_blob(p);
     q = (vp_profile_t *)(void *)b;
-    strcpy(((vp_at_cmd_t *)(void *)(b + q->off_init))[0].cmd, "ATZ");
+    strcpy(((vp_at_cmd_t *)(void *)(b + q->off_init))[0].cmd, "ATMA");
     reseal(b);
     VT_CHECK(!vp_profile_check(b, p->total_size));
     free(b);

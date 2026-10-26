@@ -2,8 +2,8 @@
  * video_player.c — OBV1 MJPEG playback engine (see video_player.h).
  *
  * One session at a time. Two tasks share a PSRAM ring:
- *   reader  (core 0, prio 5): header + index, then frame records from SD
- *   decoder (core 1, prio 5): paces, decodes and presents
+ *   reader  (core 0, mode-dependent priority): header + index, then frame records from SD
+ *   decoder (core 1, mode-dependent priority): paces, decodes and presents
  *
  * FULLSCREEN: LVGL's refresh timer is paused and the decoder writes the
  *   panel itself. esp_new_jpeg block mode (8/16-line MCU rows) decodes into
@@ -86,6 +86,8 @@ extern SemaphoreHandle_t lvgl_mux;   /* app_main.c */
 
 #define VP_READER_STACK      4096
 #define VP_DECODER_STACK     6144
+#define VP_BOOT_WORKER_PRIO  5u
+#define VP_THEME_WORKER_PRIO 3u
 
 #define EV_WAKE_READER       BIT0
 #define EV_WAKE_DECODER      BIT1
@@ -1305,12 +1307,18 @@ esp_err_t video_player_start(const video_config_t *config)
         s->refr_paused = true;
     }
 
-    bool ok = spawn(s, decoder_task, "vid_dec", VP_DECODER_STACK, 5, 1);
+    /* Composite playback shares both cores with LVGL and the OBD poller.
+     * Keep its workers below those tasks: the ring already provides read-ahead,
+     * while priority 5 on both workers can starve LVGL/OBD long enough for the
+     * signal store to become stale (the UI then renders a default zero). Fullscreen
+     * boot playback owns the panel and keeps its original high-priority path. */
+    const UBaseType_t worker_prio = s->mode == VIDEO_MODE_COMPOSITE
+        ? VP_THEME_WORKER_PRIO : VP_BOOT_WORKER_PRIO;
+    bool ok = spawn(s, decoder_task, "vid_dec", VP_DECODER_STACK, worker_prio, 1);
     if (!ok) xEventGroupSetBits(s->ev, EV_DECODER_DONE);
-    /* Keep SD completion/read-ahead above LVGL (prio 4). Otherwise continuous
-     * composite redraws starve the reader despite adequate card bandwidth.
-     * Ring-space waits still block this task whenever prefetch is full. */
-    ok = ok && spawn(s, reader_task, "vid_read", VP_READER_STACK, 5, 0);
+    /* Composite SD reads are deliberately cooperative with the OBD task. Ring
+     * space waits still block this task whenever prefetch is full. */
+    ok = ok && spawn(s, reader_task, "vid_read", VP_READER_STACK, worker_prio, 0);
     if (!ok) {
         session_halt(s);
         session_unref(s);

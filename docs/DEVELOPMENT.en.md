@@ -202,6 +202,7 @@ on the version page — so commit *before* releasing, see
 | `tools/check_bss.py` | compares two link maps, fails when internal-DRAM static usage grows past a threshold with no warning |
 | `tools/vehicles/dump_legacy.py` | exports an intermediate JSON from the legacy `vehicle_profiles.c` / `vehicle_custom_config.h` (or a given git revision) |
 | `tools/vehicles/legacy_to_v1.py` | intermediate JSON → `vehicles/catalog/*.vehicle.json` (`--check` for CI) |
+| `tools/vehicles/import_car_scanner.py` | converts safely representable PIDs from Car Scanner `vehicle-profiles.json` into community-importable vehicle JSON; supports linear scaling, reverse byte order, and simple arithmetic/bitwise formulas, and defaults to 12 custom signals per profile to leave room in the compiled device blob; conditional formulas, FLOAT32, and unsupported ECU commands are reported in the summary |
 | `tools/vehicles/expr2rpn.py` | compiles a profile formula (infix) into the device's executable RPN array; `--check` cross-verifies |
 | `tools/vehicles/gen_builtin.py` | `vehicles/catalog/obd2.generic.vehicle.json` → `main/vehicle/vp_builtin_generic.c` |
 | `tools/vehicles/legacy_golden.py` | generates/checks the legacy-firmware-behavior golden fixtures under `test/host/vehicle` |
@@ -211,6 +212,17 @@ on the version page — so commit *before* releasing, see
 | `tools/one_shot.py` | one-shot PID hunting: starts the fake server → you record once → pids_full.csv |
 | `tools/analyze_probe.py` | correlates injected signals with Car Scanner recordings to recover PID mappings and formulas |
 | `tools/parse_carscanner_backup.py` | parses a CarScanner backup directory into a per-car PID CSV |
+
+Example Car Scanner conversion (the PID catalog is an aggregate index; per-vehicle generation uses each vehicle entry's own `pids`):
+
+```bash
+python3 tools/vehicles/import_car_scanner.py \
+  --profiles /path/to/vehicle-profiles.json \
+  --output /tmp/carscanner-community
+python3 contracts/check_contracts.py --profiles '/tmp/carscanner-community/*.vehicle.json'
+```
+
+The converter accepts direct `21xx` / `22xxxx` requests and decoding that the firmware can express: linear `MUL/DIV/OFS`, reverse byte order, and simple arithmetic, `And`, `Shr`, and single-byte `SIGNED` formulas. Conditional branches, `FLOAT32`, formulas combined with external scaling, complex initialization commands, and firmware-unsupported requests are reported in `summary.json`. It defaults to 12 custom signals per profile; all 820 outputs from the current 1,304-profile input passed firmware catalog validation and the 8 KB NVS blob limit, while larger profiles may exceed that limit. Output vehicle JSON files can be imported and published individually in the vehicle community; make, model, and year metadata are retained for filtering.
 
 > Removed: `tools/convert_rpm_flash.py` (the custom RPM flash is now a theme
 > rule, see THEMES.en.md), `tools/theme_packer/pack_theme.py` (runtime themes

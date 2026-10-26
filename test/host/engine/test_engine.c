@@ -38,7 +38,9 @@ typedef struct {
     char     cra[12];
     char     cea[4];
     bool     caf0;
+    bool     cfc0;
     uint32_t round;
+    uint32_t at_ms;
     uint8_t  phase;
 } req_rec_t;
 
@@ -73,6 +75,7 @@ typedef struct {
     char cra[12];
     char cea[4];
     bool caf0;
+    bool cfc0;
     bool h1;
     bool in_ma;
     int  proto;
@@ -86,6 +89,12 @@ typedef struct {
     bool        ma_refuse;
     int         detect_proto;  /* requests fail unless ATSP == this (0 = any) */
     const char *at_fail;   /* AT command answered "?" */
+    bool        at_fail_no_prompt;
+    char        stop_once_tx[CMD_W]; /* one transient STOPPED response */
+    char        transient_once_tx[CMD_W];
+    char        transient_once_resp[CMD_W];
+    char       after_fc[2048];
+    bool       has_after_fc;
 
     /* sink side */
     int32_t val[SIG_SLOT_COUNT];
@@ -191,6 +200,12 @@ static void set_resp(fake_t *f, const char *hdr, const char *tx, const char *res
     f->tab[i].silent = resp == NULL;
 }
 
+static void set_after_fc(fake_t *f, const char *resp)
+{
+    snprintf(f->after_fc, sizeof(f->after_fc), "%s", resp ? resp : "");
+    f->has_after_fc = resp && resp[0] != '\0';
+}
+
 /* ------------------------------------------------------------------ */
 /* fake adapter                                                        */
 /* ------------------------------------------------------------------ */
@@ -261,12 +276,13 @@ static void respond(fake_t *f, const char *cmd)
     if (!strncmp(cmd, "AT", 2)) {
         const char *a = cmd + 2;
         if (f->at_fail && !strcmp(cmd, f->at_fail)) {
-            answer(f, cmd, "?", true);
+            answer(f, cmd, "?", !f->at_fail_no_prompt);
             return;
         }
         if (!strcmp(a, "Z")) {
             f->hdr[0] = f->cra[0] = f->cea[0] = '\0';
             f->caf0 = false;
+            f->cfc0 = false;
             f->h1 = false;
             answer(f, cmd, "\r\rELM327 v1.5", true);
             return;
@@ -284,6 +300,13 @@ static void respond(fake_t *f, const char *cmd)
             if (f->ma_lines && f->ma_lines[0]) answer(f, cmd, f->ma_lines, false);
             return;
         }
+        if (!strcmp(a, "CFC0") || !strcmp(a, "CFC1")) {
+            bool v = a[3] == '0';
+            if (v == f->cfc0) f->redundant++;
+            f->cfc0 = v;
+            answer(f, cmd, "OK", true);
+            return;
+        }
         if (!strncmp(a, "SH", 2)) state_cmd(f, f->hdr, sizeof(f->hdr), a + 2);
         else if (!strncmp(a, "CRA", 3)) state_cmd(f, f->cra, sizeof(f->cra), a + 3);
         else if (!strncmp(a, "CEA", 3)) state_cmd(f, f->cea, sizeof(f->cea), a + 3);
@@ -299,8 +322,18 @@ static void respond(fake_t *f, const char *cmd)
         return;
     }
     /* OBD request */
-    if (f->detect_proto && f->proto != f->detect_proto) {
+    if (f->detect_proto && f->proto != 0 && f->proto != f->detect_proto) {
         answer(f, cmd, "UNABLE TO CONNECT", true);
+        return;
+    }
+    if (f->stop_once_tx[0] && !strcmp(f->stop_once_tx, cmd)) {
+        f->stop_once_tx[0] = '\0';
+        answer(f, cmd, "STOPPED", true);
+        return;
+    }
+    if (f->transient_once_tx[0] && !strcmp(f->transient_once_tx, cmd)) {
+        f->transient_once_tx[0] = '\0';
+        answer(f, cmd, f->transient_once_resp, true);
         return;
     }
     for (i = 0; i < f->n_tab; i++) {
@@ -335,7 +368,9 @@ static bool s_send(void *ctx, const char *cmd)
         snprintf(r->cra, sizeof(r->cra), "%s", f->cra);
         snprintf(r->cea, sizeof(r->cea), "%s", f->cea);
         r->caf0 = f->caf0;
+        r->cfc0 = f->cfc0;
         r->round = st.rounds;
+        r->at_ms = f->now;
         r->phase = st.phase;
     }
     respond(f, cmd);
@@ -419,13 +454,13 @@ static fake_t *fake_reset(void)
     return f;
 }
 
-static vp_engine_t *fake_start(fake_t *f, const vp_profile_t *p, uint8_t proto)
+static vp_engine_t *fake_start_with_cfg(fake_t *f, const vp_profile_t *p,
+                                        const vp_engine_cfg_t *cfg_in)
 {
     vp_engine_sink_t s;
-    vp_engine_cfg_t cfg;
+    vp_engine_cfg_t cfg = *cfg_in;
 
     memset(&s, 0, sizeof(s));
-    memset(&cfg, 0, sizeof(cfg));
     s.ctx = f;
     s.send = s_send;
     s.now_ms = s_now;
@@ -441,11 +476,19 @@ static vp_engine_t *fake_start(fake_t *f, const vp_profile_t *p, uint8_t proto)
     s.on_proto_detected = s_proto;
     s.reconnect = s_reconnect;
     s.log = s_log;
-    cfg.proto = proto;
     f->p = p;
     f->eng = vp_engine_create(p, &s, &cfg, &vt_malloc_allocator);
     if (f->eng) vp_engine_link_up(f->eng);
     return f->eng;
+}
+
+static vp_engine_t *fake_start(fake_t *f, const vp_profile_t *p, uint8_t proto)
+{
+    vp_engine_cfg_t cfg;
+
+    memset(&cfg, 0, sizeof(cfg));
+    cfg.proto = proto;
+    return fake_start_with_cfg(f, p, &cfg);
 }
 
 static void fake_stop(fake_t *f, vp_profile_t *p)
@@ -457,10 +500,20 @@ static void fake_stop(fake_t *f, vp_profile_t *p)
 
 static void deliver(fake_t *f)
 {
+    bool flow_control;
+
     if (!f->has_pend || (int32_t)(f->pend_at - f->now) > 0) return;
+    flow_control = !strcmp(f->pend_cmd, "300800");
     f->has_pend = false;
     if (f->n_ans < LOG_MAX) snprintf(f->ans[f->n_ans++], CMD_W, "%s", f->pend_cmd);
     vp_engine_on_rx(f->eng, (const uint8_t *)f->pend, f->pend_len);
+    if (flow_control && f->has_after_fc) {
+        char deferred[sizeof(f->after_fc)];
+        if (f->verbose) printf("  %6u < deferred FC frames\n", (unsigned)f->now);
+        snprintf(deferred, sizeof(deferred), "%s", f->after_fc);
+        f->has_after_fc = false;
+        answer(f, "", deferred, true);
+    }
 }
 
 typedef bool (*pred_fn)(fake_t *f, const void *arg);
@@ -592,11 +645,10 @@ static void test_sparse_defaults(void)
 static void test_init_and_lazy_state(void)
 {
     static const char *const k_init[] = {
-        "ATZ", "ATE0", "ATL0", "ATS1", "ATH0", "ATAT1", "ATST0A", "ATSP6", "ATSH7E0",
-        "0100", "0100", "0100", "ATRV",
+        "ATZ", "ATD", "ATD0", "ATE0", "ATH1", "ATSP6", "ATM0", "ATS0", "ATAT1", "ATAL", "0100",
     };
     static const char *const k_round[] = {
-        "0105", "010C",
+        "ATSH7E0", "0105", "010C",
         "ATSH7E1", "224436", "ATSH7E0", "010C",
         "ATSH7E1", "ATCEA10", "221310", "ATSH7E0", "ATCEA", "010C",
         "ATSH6F1", "ATCRA618", "ATCAF0", "180322DA2E", "ATSH7E0", "ATCRA", "ATCAF1", "010C",
@@ -628,7 +680,7 @@ static void test_init_and_lazy_state(void)
     VT_CHECK(pump_rounds(f, 1));
     sim(f, 30);
     check_log(f, 0, k_init, (int)(sizeof(k_init) / sizeof(k_init[0])), "init");
-    check_log(f, 13, k_round, (int)(sizeof(k_round) / sizeof(k_round[0])), "round");
+    check_log(f, 11, k_round, (int)(sizeof(k_round) / sizeof(k_round[0])), "round");
     VT_CHECK_INT(f->val[SIG_OBD_RPM], 1726);
     VT_CHECK_INT(f->val[SIG_OBD_COOLANT_TEMP], 83);
     VT_CHECK_INT(f->val[SIG_OBD_OIL_PRESSURE], 300);   /* 3.000 bar, internal 0.01 bar */
@@ -636,10 +688,10 @@ static void test_init_and_lazy_state(void)
     VT_CHECK_INT(f->val[SIG_OBD_GEAR], 3);
     VT_CHECK(f->valid[SIG_OBD_GEAR]);
     VT_CHECK_INT(f->link, SIG_LINK_DATA);
-    VT_CHECK(f->n_volts >= 1);
-    VT_CHECK_FLT(f->volts, 12.6, 0.01);
     /* longer run: never a redundant state command, every request with its framing */
     sim(f, 5500);
+    VT_CHECK(f->n_volts >= 1);
+    VT_CHECK_FLT(f->volts, 12.6, 0.01);
     VT_CHECK_INT(f->redundant, 0);
     for (i = 0; i < f->n_req; i++) {
         const req_rec_t *r = &f->reqs[i];
@@ -655,9 +707,291 @@ static void test_init_and_lazy_state(void)
                          "request %s framing", r->tx);
         }
     }
-    VT_CHECK(count_cmd(f, "ATRV") >= 2);   /* periodic battery reading */
+    VT_CHECK(count_cmd(f, "ATRV") >= 1);   /* periodic battery reading */
     fake_stop(f, p);
     VT_CHECK_INT(f->veh_cleared, 1);
+}
+
+static void test_carscanner_init(void)
+{
+    static const char *const want[] = {
+        "ATZ", "ATD", "ATD0", "ATE0", "ATH1", "ATSP6", "ATM0", "ATS0", "ATAT1", "ATAL",
+        "ATSH7E0", "ATFCSH7E0", "ATFCSD300000", "ATFCSM1", "0100"
+    };
+    fake_t *f = fake_reset();
+    vp_profile_t *p = compile_q(
+        P_HEAD("t.carscanner", "{'proto':6,'hdr':'7E0','init':['ATD','ATD0','ATE0','ATH1','ATSP6','ATM0','ATS0','ATAT1','ATAL',"
+        "'ATSH7E0','ATFCSH7E0','ATFCSD300000','ATFCSM1']}")
+        "'signals':[" S_RPM "]}");
+
+    VT_CHECK(p != NULL);
+    if (!p) return;
+    set_resp(f, "", "010C", "41 0C 1A F8");
+    VT_CHECK(fake_start(f, p, 0) != NULL);
+    VT_CHECK(pump_rounds(f, 1));
+    check_log(f, 0, want, (int)(sizeof(want) / sizeof(want[0])), "carscanner init");
+    VT_CHECK_INT(count_cmd(f, "0100"), 1);
+    VT_CHECK_INT(count_cmd(f, "ATRV"), 0);
+    fake_stop(f, p);
+}
+
+static void test_carscanner_adaptive_timing_variant(void)
+{
+    static const char *const want[] = {
+        "ATZ", "ATD", "ATD0", "ATE0", "ATH1", "ATSP6", "ATM0", "ATS0", "ATAT0", "ATAL", "0100"
+    };
+    fake_t *f = fake_reset();
+    vp_profile_t *p = compile_q(
+        P_HEAD("t.carscanner-atat0", "{'proto':6,'hdr':'7E0','init':['ATZ','ATE0','ATH1','ATSP6','ATM0','ATS0','ATAT0','ATAL']}")
+        "'signals':[" S_RPM "]}");
+
+    VT_CHECK(p != NULL);
+    if (!p) return;
+    set_resp(f, "", "0100", "41 00 80 00");
+    VT_CHECK(fake_start(f, p, 0) != NULL);
+    VT_CHECK(pump_rounds(f, 1));
+    check_log(f, 0, want, (int)(sizeof(want) / sizeof(want[0])), "ATAT0 init");
+    VT_CHECK_INT(count_cmd(f, "ATAT1"), 0);
+    fake_stop(f, p);
+}
+
+static void test_nissan_consult_init(void)
+{
+    static const char *const want[] = {
+        "ATZ", "ATD", "ATD0", "ATE0", "ATH1", "ATSPB", "ATM0", "ATS0", "ATAT1", "ATAL",
+        "2212010401", "0100"
+    };
+    fake_t *f = fake_reset();
+    vp_profile_t *p = compile_q(
+        P_HEAD("t.nissan-consult", "{'proto':11,'hdr':'7E0','init':['ATZ','ATE0','ATH1','ATSPB','ATM0','ATS0','ATAT1','ATAL',"
+        "'2212010401']}") "'signals':[" S_RPM "]}");
+
+    VT_CHECK(p != NULL);
+    if (!p) return;
+    set_resp(f, "", "2212010401", "62 12 01 04 01");
+    set_resp(f, "", "0100", "41 00 80 00");
+    set_resp(f, "", "010C", "41 0C 1A F8");
+    VT_CHECK(fake_start(f, p, 0) != NULL);
+    VT_CHECK(pump_rounds(f, 1));
+    check_log(f, 0, want, (int)(sizeof(want) / sizeof(want[0])), "Nissan Consult II init");
+    VT_CHECK_INT(count_cmd(f, "2212010401"), 1);
+    fake_stop(f, p);
+}
+
+static void test_partial_reset_init(void)
+{
+    static const char *const want[] = {
+        "ATZ", "ATD", "ATD0", "ATE0", "ATH1", "ATSP6", "ATM0", "ATS0", "ATAT1", "ATAL", "0100"
+    };
+    fake_t *f = fake_reset();
+    vp_profile_t *p = compile_q(
+        P_HEAD("t.partial_init", "{'proto':6,'hdr':'7E0','init':['ATZ']}")
+        "'signals':[" S_RPM "]}");
+
+    VT_CHECK(p != NULL);
+    if (!p) return;
+    set_resp(f, "", "010C", "41 0C 1A F8");
+    VT_CHECK(fake_start(f, p, 0) != NULL);
+    VT_CHECK(pump_rounds(f, 1));
+    check_log(f, 0, want, (int)(sizeof(want) / sizeof(want[0])), "partial reset init");
+    fake_stop(f, p);
+}
+
+static void test_partial_init_is_ordered(void)
+{
+    static const char *const want[] = {
+        "ATZ", "ATD", "ATD0", "ATE0", "ATH1", "ATSP6", "ATM0", "ATS0", "ATAT1", "ATAL",
+        "ATST19", "ATSH7E0", "0100"
+    };
+    fake_t *f = fake_reset();
+    vp_profile_t *p = compile_q(
+        P_HEAD("t.partial_order", "{'proto':6,'hdr':'7E0','init':['ATZ','ATST19','ATSP6','ATSH7E0']}")
+        "'signals':[" S_RPM "]}");
+
+    VT_CHECK(p != NULL);
+    if (!p) return;
+    set_resp(f, "", "0100", "41 00 80 00");
+    VT_CHECK(fake_start(f, p, 0) != NULL);
+    VT_CHECK(pump_rounds(f, 1));
+    check_log(f, 0, want, (int)(sizeof(want) / sizeof(want[0])), "partial init order");
+    fake_stop(f, p);
+}
+
+static void test_init_wait_tokens(void)
+{
+    fake_t *f = fake_reset();
+    vp_profile_t *p = compile_q(
+        P_HEAD("t.initwait", "{'proto':6,'hdr':'7E0','init':['DELAY200','WAIT50']}")
+        "'signals':[" S_RPM "]}");
+    uint32_t warm_at = 0;
+    int i;
+
+    VT_CHECK(p != NULL);
+    if (!p) return;
+    VT_CHECK(vp_init_wait_ms("delay200", NULL));
+    VT_CHECK(vp_init_wait_ms(" WAIT50 ", NULL));
+    VT_CHECK(!vp_init_wait_ms("WAIT", NULL));
+    VT_CHECK(!vp_init_wait_ms("DELAY65536", NULL));
+    VT_CHECK(fake_start(f, p, 0) != NULL);
+    VT_CHECK(pump_rounds(f, 1));
+    for (i = 0; i < f->n_req; i++) {
+        if (!strcmp(f->reqs[i].tx, "0100")) {
+            warm_at = f->reqs[i].at_ms;
+            break;
+        }
+    }
+    VT_CHECK(warm_at >= 100400); /* explicit 200 + 50 ms waits are not sent */
+    VT_CHECK_INT(count_cmd(f, "DELAY200"), 0);
+    VT_CHECK_INT(count_cmd(f, "WAIT50"), 0);
+    fake_stop(f, p);
+}
+
+static void test_bus_connection_commands(void)
+{
+    fake_t *f = fake_reset();
+    vp_profile_t *p = compile_q(
+        P_HEAD("t.bus_commands", "{'proto':6,'gap_ms':1,'check_connection':'0902',"
+               "'tester_present':'3E00','tester_present_every_ms':200}")
+        "'signals':[" S_RPM "]}");
+
+    VT_CHECK(p != NULL);
+    if (!p) return;
+    set_resp(f, "", "0902", "49 02 01 02 03 04");
+    set_resp(f, "", "010C", "41 0C 1A F8");
+    set_resp(f, "", "3E00", "7E 00");
+    VT_CHECK(fake_start(f, p, 0) != NULL);
+    VT_CHECK(pump_rounds(f, 1));
+    VT_CHECK_INT(count_cmd(f, "0902"), 1);
+    VT_CHECK_INT(count_cmd(f, "0100"), 0);
+    sim(f, 1000);
+    VT_CHECK(count_cmd(f, "3E00") >= 3);
+    fake_stop(f, p);
+}
+
+static void test_request_command_chain(void)
+{
+    fake_t *f = fake_reset();
+    vp_profile_t *p = compile_q(
+        P_HEAD("t.reqchain", "{'proto':6,'hdr':'7E0','gap_ms':1}") "'signals':["
+        "{'id':'obd.coolant_temp','src':[{'req':'0105','before':['ATCAF0'],'after':['ATCAF1'],"
+        "'len':1,'rpn':[['A',0],['k',40],'-']}]},"
+        "{'id':'obd.rpm','src':[{'req':'010C','len':2,'rpn':" RPN_RPM "}]},"
+        "{'id':'obd.oil_temp','src':[{'req':'221234','hdr':'7E1','before':['ATCEA10'],"
+        "'after':['ATCFC1'],'len':1,'rpn':[['A',0]]}]},"
+        "{'id':'obd.speed','src':[{'req':'010D','len':1,'rpn':[['A',0]]}]}]}");
+    int first, same_header, deferred, hdr, before, req, flow_after, back_hdr, back_req;
+
+    VT_CHECK(p != NULL);
+    if (!p) return;
+    set_resp(f, "7E0", "0105", "41 05 7B");
+    set_resp(f, "7E0", "010C", "41 0C 1A F8");
+    set_resp(f, "7E1", "221234", "62 12 34 55");
+    set_resp(f, "7E0", "010D", "41 0D 3C");
+    VT_CHECK(fake_start(f, p, 0) != NULL);
+    VT_CHECK(pump_rounds(f, 1));
+
+    first = find_cmd(f, "ATCAF0", 0);
+    same_header = find_cmd(f, "010C", first + 1);
+    deferred = find_cmd(f, "ATCAF1", same_header + 1);
+    hdr = find_cmd(f, "ATSH7E1", deferred + 1);
+    before = find_cmd(f, "ATCEA10", hdr + 1);
+    req = find_cmd(f, "221234", before + 1);
+    flow_after = find_cmd(f, "ATCFC1", req + 1);
+    back_hdr = find_cmd(f, "ATSH7E0", flow_after + 1);
+    back_req = find_cmd(f, "010D", back_hdr + 1);
+    VT_CHECK(first >= 0 && same_header > first);
+    VT_CHECK(deferred > same_header);
+    VT_CHECK(hdr > deferred && before > hdr && req > before);
+    VT_CHECK(flow_after > req && back_hdr > flow_after && back_req > back_hdr);
+
+    /* A failed BeforeCommand drains the chain and never transmits the OBD request. */
+    fake_stop(f, p);
+    f = fake_reset();
+    p = compile_q(
+        P_HEAD("t.reqchain.fail", "{'proto':6,'hdr':'7E0'}") "'signals':["
+        "{'id':'obd.coolant_temp','src':[{'req':'0105','before':['ATCAF0'],"
+        "'len':1,'rpn':[['A',0],['k',40],'-']}]}]}");
+    VT_CHECK(p != NULL);
+    if (!p) return;
+    set_resp(f, "7E0", "0105", "41 05 7B");
+    f->at_fail = "ATCAF0";
+    VT_CHECK(fake_start(f, p, 0) != NULL);
+    VT_CHECK(pump_rounds(f, 1));
+    VT_CHECK_INT(count_cmd(f, "ATCAF0"), 1);
+    VT_CHECK_INT(count_cmd(f, "0105"), 0);
+    fake_stop(f, p);
+
+    /* A later BeforeCommand failure drains the remaining request chain; its
+     * AfterCommands belong to a request that was never transmitted. */
+    f = fake_reset();
+    p = compile_q(
+        P_HEAD("t.reqchain.fail-late", "{'proto':6,'hdr':'7E0'}") "'signals':["
+        "{'id':'obd.coolant_temp','src':[{'req':'0105','before':['ATCAF0','ATCEA10'],"
+        "'after':['ATCAF1'],'len':1,'rpn':[['A',0],['k',40],'-']}]}]}");
+    VT_CHECK(p != NULL);
+    if (!p) return;
+    f->at_fail = "ATCEA10";
+    VT_CHECK(fake_start(f, p, 0) != NULL);
+    VT_CHECK(pump_rounds(f, 1));
+    VT_CHECK_INT(count_cmd(f, "ATCAF0"), 1);
+    VT_CHECK_INT(count_cmd(f, "ATCEA10"), 1);
+    VT_CHECK_INT(count_cmd(f, "0105"), 0);
+    VT_CHECK_INT(count_cmd(f, "ATCAF1"), 0);
+    fake_stop(f, p);
+}
+
+static void test_request_header_explicitness(void)
+{
+    fake_t *f = fake_reset();
+    vp_profile_t *p = compile_q(
+        P_HEAD("t.header-explicit", "{'proto':6,'hdr':'7E0','gap_ms':1}") "'signals':["
+        "{'id':'obd.rpm','src':[{'req':'010C','after':['ATCAF0'],'len':2,'rpn':[['A',0]]}]},"
+        "{'id':'obd.speed','src':[{'req':'010D','hdr':'7E0','len':1,'rpn':[['A',0]]}]}]}");
+    int first_req, after, repeated_hdr, second_req;
+
+    VT_CHECK(p != NULL);
+    if (!p) return;
+    VT_CHECK_INT(p->n_req, 2);
+    set_resp(f, "7E0", "010C", "41 0C 0B B8");
+    set_resp(f, "7E0", "010D", "41 0D 3C");
+    VT_CHECK(fake_start(f, p, 0) != NULL);
+    VT_CHECK(pump_rounds(f, 1));
+
+    first_req = find_cmd(f, "010C", 0);
+    after = find_cmd(f, "ATCAF0", first_req + 1);
+    repeated_hdr = find_cmd(f, "ATSH7E0", after + 1);
+    second_req = find_cmd(f, "010D", repeated_hdr + 1);
+    VT_CHECK(first_req >= 0 && after > first_req);
+    VT_CHECK(repeated_hdr > after && second_req > repeated_hdr);
+    fake_stop(f, p);
+}
+
+static void test_stopped_retry(void)
+{
+    fake_t *f = fake_reset();
+    vp_profile_t *p = compile_q(
+        P_HEAD("t.stopped", "{'proto':6,'gap_ms':1}") "'signals':[" S_RPM "]}");
+    int i, n = 0;
+    uint32_t first_ms = 0, retry_ms = 0;
+
+    VT_CHECK(p != NULL);
+    if (!p) return;
+    set_resp(f, "", "010C", "41 0C 1A F8");
+    snprintf(f->stop_once_tx, sizeof(f->stop_once_tx), "%s", "010C");
+    VT_CHECK(fake_start(f, p, 0) != NULL);
+    VT_CHECK(pump_answer(f, "010C"));
+    VT_CHECK(pump_answer(f, "010C"));
+
+    for (i = 0; i < f->n_req; i++) {
+        if (f->reqs[i].phase != VP_ENGINE_PH_RUN || strcmp(f->reqs[i].tx, "010C")) continue;
+        if (n++ == 0) first_ms = f->reqs[i].at_ms;
+        else if (n == 2) retry_ms = f->reqs[i].at_ms;
+    }
+    VT_CHECK_INT(n, 2);
+    VT_CHECK(retry_ms >= first_ms + 200);
+    VT_CHECK(f->valid[SIG_OBD_RPM]);
+    VT_CHECK_INT(f->val[SIG_OBD_RPM], 1726);
+    fake_stop(f, p);
 }
 
 static void test_units_and_post(void)
@@ -901,10 +1235,58 @@ static void test_link_states(void)
         VT_CHECK_INT(f->n_log, n);
     }
     /* up again: bring-up starts over */
+    {
+        int atz_before = count_cmd(f, "ATZ");
     vp_engine_link_up(f->eng);
-    sim(f, 50);
-    VT_CHECK(!strcmp(f->log[f->n_log - 1], "ATZ") || find_cmd(f, "ATZ", 1) > 0);
+    sim(f, 400);
+    VT_CHECK_INT(count_cmd(f, "ATZ"), atz_before);
+    sim(f, 200);
+    VT_CHECK_INT(count_cmd(f, "ATZ"), atz_before + 1);
+    }
     VT_CHECK_INT(f->link, SIG_LINK_NO_DATA);
+    fake_stop(f, p);
+}
+
+static void test_elm_adapter_check(void)
+{
+    fake_t *f = fake_reset();
+    vp_profile_t *p = compile_q(P_HEAD("t.elm_check", "{'proto':6}") "'signals':[" S_RPM "]}");
+
+    VT_CHECK(p != NULL);
+    if (!p) return;
+
+    /* The adapter check is delayed and must happen before any ECU request. */
+    set_resp(f, "", "0100", "NO DATA");
+    set_resp(f, "", "010C", "41 0C 0B B8");
+    VT_CHECK(fake_start(f, p, 0) != NULL);
+    VT_CHECK_INT(f->n_log, 0);
+    sim(f, 400);
+    VT_CHECK_INT(count_cmd(f, "ATZ"), 0);
+    sim(f, 200);
+    VT_CHECK_INT(count_cmd(f, "ATZ"), 1);
+    VT_CHECK(pump_rounds(f, 1));
+    VT_CHECK_INT(count_cmd(f, "0100"), 1);
+    VT_CHECK_INT(f->reconnects, 0);
+    VT_CHECK_INT(f->val[SIG_OBD_RPM], 750);
+    fake_stop(f, p);
+
+    /* A missing prompt fails the adapter check and requests reconnect. */
+    f = fake_reset();
+    p = compile_q(P_HEAD("t.elm_check_fail", "{'proto':6}") "'signals':[" S_RPM "]}");
+    VT_CHECK(p != NULL);
+    if (!p) return;
+    f->at_fail = "ATZ";
+    f->at_fail_no_prompt = true;
+    VT_CHECK(fake_start(f, p, 0) != NULL);
+    sim(f, 3200);
+    VT_CHECK_INT(count_cmd(f, "ATZ"), 1);
+    VT_CHECK_INT(count_cmd(f, "0100"), 0);
+    VT_CHECK_INT(f->reconnects, 1);
+    {
+        vp_engine_stats_t st;
+        vp_engine_get_stats(f->eng, &st);
+        VT_CHECK_INT(st.phase, VP_ENGINE_PH_RECONNECT);
+    }
     fake_stop(f, p);
 }
 
@@ -1017,7 +1399,8 @@ static void test_can_line_formats(void)
     sim(f, 1500);
     VT_CHECK_INT(f->val[SIG_OBD_COOLANT_TEMP], 81);
     VT_CHECK_INT(f->val[SIG_OBD_OIL_TEMP], 90);
-    VT_CHECK(find_cmd(f, "ATSH18DB33F1", 0) >= 0);
+    /* This profile has only monitor/CAN sources, so no request needs the
+     * default transmit header during the run. */
     VT_CHECK(find_cmd(f, "ATSP7", 0) >= 0);
     fake_stop(f, p);
 }
@@ -1028,23 +1411,42 @@ static void test_multiframe(void)
     vp_profile_t *p = compile_q(
         P_HEAD("t.multi", "{'proto':6}") "'signals':["
         "{'id':'obd.oil_temp','src':[{'req':'2101','multiframe':true,'byte_from_end':5,'rpn':[['X'],['k',40],'-']}]},"
-        "{'id':'veh.first','src':[{'req':'2101','multiframe':true,'len':3,'rpn':[['A',2]]}]}]}");
+        "{'id':'veh.first','src':[{'req':'2101','multiframe':true,'len':3,'rpn':[['A',2]]}]},"
+        S_RPM "]}");
 
     VT_CHECK(p != NULL);
     if (!p) return;
     /* ELM numbered frames (CAF1, H0) with the byte count line */
     set_resp(f, "", "2101",
              "014\r0: 61 01 11 22 33 44\r1: 55 66 77 88 99 AA BB\r2: CC DD 82 EE FF 00 00");
+    set_resp(f, "", "010C", "41 0C 0B B8");
     fake_start(f, p, 0);
     VT_CHECK(pump_answer(f, "2101"));
     VT_CHECK_INT(f->val[SIG_OBD_OIL_TEMP], 90);
     VT_CHECK_INT(f->val[SIG_VEH_BASE], 0x33);
     /* raw ISO-TP frames (first frame + consecutive frames) */
-    set_resp(f, "", "2101", "10 14 61 01 11 22 33 44\r21 55 66 77 88 99 AA BB\r22 CC DD 78 EE FF 00 00");
+    set_resp(f, "", "2101", "10 14 61 01 11 22 33 44");
+    set_after_fc(f, "30 02 00\r21 55 66 77 88 99 AA BB\r22 CC DD 78 EE FF 00 00");
     VT_CHECK(pump_answer(f, "2101"));
+    sim(f, 50); /* allow request throttling plus the FC/continuation latency. */
     VT_CHECK_INT(f->val[SIG_OBD_OIL_TEMP], 80);
+    VT_CHECK(count_cmd(f, "ATCAF0") >= 1);
+    VT_CHECK(count_cmd(f, "ATCFC0") >= 1);
+    {
+        int req = find_cmd(f, "2101", 0);
+        int fc = find_cmd(f, "300800", req + 1);
+        VT_CHECK(req >= 0 && fc > req);
+    }
+    /* The next ordinary request restores automatic framing and flow control. */
+    VT_CHECK(pump_answer(f, "010C"));
+    {
+        int req = find_cmd(f, "2101", 0);
+        int caf1 = find_cmd(f, "ATCAF1", req + 1);
+        int cfc1 = find_cmd(f, "ATCFC1", req + 1);
+        VT_CHECK(req >= 0 && caf1 > req && cfc1 > req);
+    }
     /* compact hex single frame (spaces off) */
-    set_resp(f, "", "2101", "6101AABBCCDDEE016E02030405");
+    set_resp(f, "", "2101", "7E8 6101AABBCCDDEE016E02030405");
     VT_CHECK(pump_answer(f, "2101"));
     VT_CHECK_INT(f->val[SIG_OBD_OIL_TEMP], 70);
     VT_CHECK_INT(f->val[SIG_VEH_BASE], 0xCC);
@@ -1096,12 +1498,15 @@ static void test_rates(void)
 
 static void test_detect(void)
 {
+    static const uint8_t custom_protocols[] = { 9, 6 };
+    static const uint8_t invalid_protocols[] = { 0, 9 };
     static const char *const k_det[] = {
-        "ATZ", "ATE0", "ATAT1", "ATST19", "ATSP1", "010C", "ATSP2", "010C", "ATSP3", "010C",
-        "ATSP4", "010C", "ATSP5", "010C", "ATSP6", "010C",
-        "ATZ", "ATE0", "ATL0", "ATS1", "ATH0", "ATAT1", "ATST19", "ATSP6", "ATSH7E0",
+        "ATZ", "ATZ", "ATD", "ATD0", "ATE0", "ATH1", "ATSP6", "ATM0", "ATS0", "ATAT1", "ATAL", "0100",
+        "ATD", "ATD0", "ATE0", "ATH1", "ATSP6", "ATM0", "ATS0", "ATAT1", "ATAL", "0100",
     };
-    static const char *const k_up[] = { "ATZ", "ATE0", "ATL0", "ATS1", "ATH0", "ATAT1", "ATST19", "ATSP6" };
+    static const char *const k_up[] = {
+        "ATZ", "ATD", "ATD0", "ATE0", "ATH1", "ATSP6", "ATM0", "ATS0", "ATAT1", "ATAL", "0100",
+    };
     fake_t *f = fake_reset();
     vp_profile_t *p = compile_q(P_HEAD("t.det", "{'proto':0}") "'signals':[" S_RPM "]}");
     vp_engine_stats_t st;
@@ -1110,6 +1515,7 @@ static void test_detect(void)
     VT_CHECK(p != NULL);
     if (!p) return;
     f->detect_proto = 6;
+    set_resp(f, "", "0100", "41 00 80 00");
     set_resp(f, "", "010C", "41 0C 0B B8");
     fake_start(f, p, 0);
     VT_CHECK(pump_rounds(f, 1));
@@ -1126,7 +1532,103 @@ static void test_detect(void)
     check_log(f, mark, k_up, (int)(sizeof(k_up) / sizeof(k_up[0])), "re-init");
     fake_stop(f, p);
 
-    /* nothing answers: try every explicit ELM protocol, then fall back to ATSP6 without persisting it */
+    /* A generic profile without obd.rpm must still use its configured
+     * connection check for protocol detection. */
+    f = fake_reset();
+    p = compile_q(P_HEAD("t.det-no-rpm", "{'proto':0,'check_connection':'0902'}")
+                  "'signals':[" S_SPEED "]}");
+    VT_CHECK(p != NULL);
+    if (!p) return;
+    f->detect_proto = 6;
+    set_resp(f, "", "0902", "49 02 57 49 4E 56 49 4E");
+    set_resp(f, "", "010D", "41 0D 3C");
+    fake_start(f, p, 0);
+    VT_CHECK(pump_rounds(f, 1));
+    VT_CHECK_INT(f->proto_detected, 6);
+    VT_CHECK(count_cmd(f, "010C") == 0);
+    VT_CHECK(count_cmd(f, "0902") >= 2); /* probe plus warm check */
+    VT_CHECK(f->valid[SIG_OBD_SPEED]);
+    fake_stop(f, p);
+
+    /* A later candidate must be reached when the earlier CAN protocols fail. */
+    f = fake_reset();
+    p = compile_q(P_HEAD("t.det-fallback", "{'proto':0}") "'signals':[" S_RPM "]}");
+    VT_CHECK(p != NULL);
+    if (!p) return;
+    f->detect_proto = 9;
+    set_resp(f, "", "0100", "41 00 80 00");
+    set_resp(f, "", "010C", "41 0C 0B B8");
+    fake_start(f, p, 0);
+    VT_CHECK(pump_rounds(f, 1));
+    VT_CHECK_INT(count_cmd(f, "ATSP6"), 3);
+    VT_CHECK_INT(count_cmd(f, "ATSP7"), 3);
+    VT_CHECK_INT(count_cmd(f, "ATSP4"), 3);
+    VT_CHECK_INT(count_cmd(f, "ATSP5"), 3);
+    VT_CHECK_INT(count_cmd(f, "ATSP3"), 3);
+    VT_CHECK_INT(count_cmd(f, "ATSP1"), 3);
+    VT_CHECK_INT(count_cmd(f, "ATSP2"), 3);
+    VT_CHECK_INT(count_cmd(f, "ATSP8"), 3);
+    VT_CHECK_INT(count_cmd(f, "ATSP9"), 2); /* successful probe + final init */
+    VT_CHECK_INT(f->proto_detected, 9);
+    fake_stop(f, p);
+
+    /* A transient BUS INIT error retries the same candidate. It must not
+     * consume one of the candidate attempts or jump to the next protocol. */
+    f = fake_reset();
+    p = compile_q(P_HEAD("t.det-bus-init-retry", "{'proto':0}") "'signals':[" S_RPM "]}");
+    VT_CHECK(p != NULL);
+    if (!p) return;
+    f->detect_proto = 6;
+    set_resp(f, "", "0100", "41 00 80 00");
+    set_resp(f, "", "010C", "41 0C 0B B8");
+    snprintf(f->transient_once_tx, sizeof(f->transient_once_tx), "%s", "0100");
+    snprintf(f->transient_once_resp, sizeof(f->transient_once_resp), "%s", "BUS INIT: ERROR");
+    fake_start(f, p, 0);
+    VT_CHECK(pump_rounds(f, 1));
+    VT_CHECK_INT(count_cmd(f, "ATSP6"), 2);
+    VT_CHECK_INT(count_cmd(f, "0100"), 3);
+    VT_CHECK_INT(f->proto_detected, 6);
+    fake_stop(f, p);
+
+    /* A caller can override the probe order for a known adapter/vehicle. */
+    f = fake_reset();
+    p = compile_q(P_HEAD("t.det-custom", "{'proto':0}") "'signals':[" S_RPM "]}");
+    VT_CHECK(p != NULL);
+    if (!p) return;
+    f->detect_proto = 9;
+    set_resp(f, "", "0100", "41 00 80 00");
+    {
+        vp_engine_cfg_t cfg;
+        memset(&cfg, 0, sizeof(cfg));
+        cfg.detect_protocols = custom_protocols;
+        cfg.detect_protocol_count = (uint8_t)(sizeof(custom_protocols) / sizeof(custom_protocols[0]));
+        fake_start_with_cfg(f, p, &cfg);
+    }
+    VT_CHECK(pump_rounds(f, 1));
+    VT_CHECK_INT(count_cmd(f, "ATSP9"), 2); /* probe plus final init */
+    VT_CHECK_INT(count_cmd(f, "ATSP6"), 0);
+    fake_stop(f, p);
+
+    /* Invalid custom candidates fail closed to the engine defaults. */
+    f = fake_reset();
+    p = compile_q(P_HEAD("t.det-invalid-custom", "{'proto':0}") "'signals':[" S_RPM "]}");
+    VT_CHECK(p != NULL);
+    if (!p) return;
+    f->detect_proto = 9;
+    set_resp(f, "", "0100", "41 00 80 00");
+    {
+        vp_engine_cfg_t cfg;
+        memset(&cfg, 0, sizeof(cfg));
+        cfg.detect_protocols = invalid_protocols;
+        cfg.detect_protocol_count = (uint8_t)(sizeof(invalid_protocols) / sizeof(invalid_protocols[0]));
+        fake_start_with_cfg(f, p, &cfg);
+    }
+    VT_CHECK(pump_rounds(f, 1));
+    VT_CHECK(count_cmd(f, "ATSP6") >= 1);
+    VT_CHECK_INT(f->proto_detected, 9);
+    fake_stop(f, p);
+
+    /* nothing answers: keep the adapter in ATSP0 auto mode without persisting a protocol */
     f = fake_reset();
     p = compile_q(P_HEAD("t.det2", "{'proto':0}") "'signals':[" S_RPM "]}");
     VT_CHECK(p != NULL);
@@ -1134,9 +1636,7 @@ static void test_detect(void)
     f->detect_proto = 99;
     fake_start(f, p, 0);
     sim(f, 30000);
-    VT_CHECK(find_cmd(f, "ATSPB", 0) > 0);
-    VT_CHECK(find_cmd(f, "ATSPC", find_cmd(f, "ATSPB", 0)) > 0);
-    VT_CHECK(find_cmd(f, "ATSP6", find_cmd(f, "ATSPC", 0)) > 0);
+    VT_CHECK(count_cmd(f, "ATSP0") >= 1);
     VT_CHECK_INT(f->proto_detected, 0);
     fake_stop(f, p);
 
@@ -1150,6 +1650,41 @@ static void test_detect(void)
     VT_CHECK_INT(count_cmd(f, "ATSP1"), 0);
     sim(f, 1000);
     VT_CHECK(find_cmd(f, "ATSP8", 0) > 0);
+    fake_stop(f, p);
+
+    /* Auto-detection must also hide K-line response headers on a protocol
+     * 3 candidate, before its positive 0100 response is parsed. */
+    f = fake_reset();
+    p = compile_q(P_HEAD("t.det-kline", "{'proto':0}") "'signals':[" S_RPM "]}");
+    VT_CHECK(p != NULL);
+    if (!p) return;
+    f->detect_proto = 3;
+    set_resp(f, "", "0100", "41 00 80 00");
+    set_resp(f, "", "010C", "41 0C 0B B8");
+    fake_start(f, p, 0);
+    sim(f, 20000);
+    int atsp3 = find_cmd(f, "ATSP3", 0);
+    int ath0 = find_cmd(f, "ATH0", atsp3 + 1);
+    VT_CHECK(atsp3 >= 0 && ath0 > atsp3);
+    VT_CHECK_INT(f->proto_detected, 3);
+    VT_CHECK_INT(count_cmd(f, "ATSH7E0"), 0);
+    fake_stop(f, p);
+
+    /* Imported ISO K-line profiles can carry explicit CAN headers, but the
+     * ELM must keep native addressing and hide K-line response headers. */
+    f = fake_reset();
+    p = compile_q(P_HEAD("t.iso-kline", "{'proto':3,'hdr':'7E0','init':['ATH1']}")
+        "'signals':[{'id':'obd.rpm','src':[{'req':'010C','hdr':'7E0','len':2,"
+        "'rpn':[['A',0],['k',256],'*',['A',1],'+',['k',4],'/']}]}]}");
+    VT_CHECK(p != NULL);
+    if (!p) return;
+    set_resp(f, "", "010C", "41 0C 0B B8");
+    fake_start(f, p, 0);
+    VT_CHECK(pump_rounds(f, 1));
+    VT_CHECK_INT(count_cmd(f, "ATSH7E0"), 0);
+    VT_CHECK_INT(count_cmd(f, "ATH1"), 0);
+    VT_CHECK(count_cmd(f, "ATH0") > 0);
+    VT_CHECK(f->valid[SIG_OBD_RPM]);
     fake_stop(f, p);
 }
 
@@ -1212,9 +1747,9 @@ static void golden_one(const char *cat_path, const char *golden_dir, int *n_done
     size_t len, glen;
     vp_profile_t *p;
     cJSON *g;
-    const cJSON *init, *reqs, *it;
+    const cJSON *reqs, *it;
     gq_t round[VP_MAX_REQUESTS], fast[VP_MAX_REQUESTS], expect[2 * VP_MAX_REQUESTS * 2];
-    int n_round = 0, n_fast = 0, n_exp = 0, i, k, n_init, before;
+    int n_round = 0, n_fast = 0, n_exp = 0, i, k, before;
     fake_t *f;
 
     text = vt_read_file(cat_path, &len);
@@ -1245,16 +1780,22 @@ static void golden_one(const char *cat_path, const char *golden_dir, int *n_done
     fake_start(f, p, 6);
     VT_CHECK(pump_rounds(f, 2));
 
-    /* bring-up */
-    init = cJSON_GetObjectItemCaseSensitive(g, "init");
-    n_init = cJSON_GetArraySize(init);
-    for (i = 0; i < n_init; i++) {
-        const char *w = cJSON_GetArrayItem(init, i)->valuestring;
-        snprintf(want, sizeof(want), "%s", strcmp(w, "ATSP0") ? w : "ATSP6");
-        VT_CHECK_MSG(i < f->n_log && !strcmp(f->log[i], want), "%s init[%d]: got '%s', want '%s'", p->id, i,
-                     i < f->n_log ? f->log[i] : "", want);
+    /* bring-up: the runtime owns the common Car Scanner sequence.  The
+     * historical fixture remains authoritative for request projections, not
+     * for the retired legacy ATAL/ATST/warm-up sequence. */
+    snprintf(want, sizeof(want), "ATSP%X", p->proto ? p->proto : 6u);
+    {
+        static const char *const base[] = {
+            "ATZ", "ATD", "ATD0", "ATE0", "ATH1", NULL, "ATM0", "ATS0", "ATAT1"
+        };
+        for (i = 0; i < (int)(sizeof(base) / sizeof(base[0])); i++) {
+            const char *expected = base[i] ? base[i] : want;
+            VT_CHECK_MSG(i < f->n_log && !strcmp(f->log[i], expected),
+                         "%s init[%d]: got '%s', want '%s'", p->id, i,
+                         i < f->n_log ? f->log[i] : "", expected);
+        }
     }
-    VT_CHECK_MSG(n_init < f->n_log && !strcmp(f->log[n_init], "0100"), "%s: warm-up after init", p->id);
+    VT_CHECK_INT(count_cmd(f, "0100"), 1);
 
     /* first round: every round request once (signal order), fast ones after each slot */
     reqs = cJSON_GetObjectItemCaseSensitive(g, "requests");
@@ -1266,7 +1807,8 @@ static void golden_one(const char *cat_path, const char *golden_dir, int *n_done
         snprintf(q.hdr, sizeof(q.hdr), "%s", jstr(it, "hdr"));
         snprintf(q.tx, sizeof(q.tx), "%s", jstr(it, "tx"));
         snprintf(q.rx, sizeof(q.rx), "%s", jstr(it, "rx"));
-        q.raw = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(it, "raw"));
+        q.raw = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(it, "raw")) ||
+                cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(it, "multi"));
         if (!strcmp(jstr(it, "class"), "fast")) n_fast = gq_add(fast, n_fast, &q);
         else n_round = gq_add(round, n_round, &q);
     }
@@ -1340,12 +1882,23 @@ int main(void)
 {
     RUN(test_sparse_defaults);
     RUN(test_init_and_lazy_state);
+    RUN(test_request_command_chain);
+    RUN(test_request_header_explicitness);
+    RUN(test_stopped_retry);
+    RUN(test_carscanner_init);
+    RUN(test_carscanner_adaptive_timing_variant);
+    RUN(test_nissan_consult_init);
+    RUN(test_partial_reset_init);
+    RUN(test_partial_init_is_ordered);
+    RUN(test_init_wait_tokens);
+    RUN(test_bus_connection_commands);
     RUN(test_units_and_post);
     RUN(test_hold);
     RUN(test_temp_hyst);
     RUN(test_fallback_chain);
     RUN(test_gear);
     RUN(test_link_states);
+    RUN(test_elm_adapter_check);
     RUN(test_heal_and_reconnect);
     RUN(test_monitor);
     RUN(test_can_line_formats);

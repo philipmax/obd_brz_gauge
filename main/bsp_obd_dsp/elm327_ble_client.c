@@ -25,6 +25,7 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/idf_additions.h"
+#include "freertos/semphr.h"
 #include "freertos/stream_buffer.h"
 #include "freertos/task.h"
 
@@ -49,7 +50,7 @@ static const char *TAG = "elm327_ble";
 #define RX_CHUNK             128
 #define RX_DRAIN_MAX         16          /* chunks per loop */
 #define TX_LINE_MAX          64
-#define TX_CHUNK             20          /* ATT payload at the default MTU 23 */
+#define TX_CHUNK             20          /* fallback ATT payload when MTU stays at 23 */
 #define SCAN_RECONNECT_S     10
 #define SCAN_CONNECT_S       15
 #define RESCAN_GAP_US        (2LL * 1000 * 1000)
@@ -57,6 +58,7 @@ static const char *TAG = "elm327_ble";
 #define NOTIFY_SETTLE_US     (300LL * 1000)         /* subscription settle before ATZ */
 #define RECONNECT_GRACE_US   (5LL * 1000 * 1000)
 #define STATS_EVERY_US       (60LL * 1000 * 1000)
+#define TX_WRITE_TIMEOUT_MS  1000
 #define IDLE_WAIT_MS         300
 #define OTA_WAIT_MS          200
 #define SHOWROOM_WAIT_MS     500
@@ -88,15 +90,23 @@ static volatile uint16_t s_conn_id = 0xFFFF;
 static esp_bd_addr_t     s_peer_bda;
 static volatile bool     s_connected;
 static volatile bool     s_notify_ready;
+static volatile bool     s_mtu_ready;
+static volatile bool     s_notify_configured;
 static volatile bool     s_opening;
 static volatile int64_t  s_open_us;
 static volatile int64_t  s_ready_us;
+static volatile uint16_t s_att_mtu = 23;
 static svc_range_t       s_svc[SVC_COUNT];
 static uint16_t          s_all_attr_end;
 static volatile uint16_t s_write_handle;
 static uint16_t          s_notify_handle;
 static uint16_t          s_cccd_handle;
+static bool               s_notify_indicate;
 static volatile esp_gatt_write_type_t s_write_type = ESP_GATT_WRITE_TYPE_RSP;
+static StaticSemaphore_t  s_tx_done_storage;
+static SemaphoreHandle_t  s_tx_done;
+static volatile bool      s_tx_waiting;
+static volatile esp_gatt_status_t s_tx_status = ESP_GATT_ERROR;
 
 /* ---- target / modes ---- */
 static char              s_target_name[32] = "OBDII";
@@ -182,15 +192,24 @@ static void close_link(void)
 
 static void reset_link_state(void)
 {
+    /* Wake a sender blocked on a Write With Response before invalidating the
+     * connection state. The sender will observe the failed status below. */
+    s_tx_waiting = false;
+    s_tx_status = ESP_GATT_ERROR;
+    if (s_tx_done) xSemaphoreGive(s_tx_done);
     s_connected = false;
     s_notify_ready = false;
+    s_mtu_ready = false;
+    s_notify_configured = false;
     s_opening = false;
     s_conn_id = 0xFFFF;
+    s_att_mtu = 23;
     memset(s_svc, 0, sizeof(s_svc));
     s_all_attr_end = 0;
     s_write_handle = 0;
     s_notify_handle = 0;
     s_cccd_handle = 0;
+    s_notify_indicate = false;
     s_write_type = ESP_GATT_WRITE_TYPE_RSP;
 }
 
@@ -256,6 +275,8 @@ static void link_open(esp_gatt_if_t gattc_if, uint16_t conn_id)
     s_connected = true;
     s_opening = false;
     s_notify_ready = false;
+    s_mtu_ready = false;
+    s_notify_configured = false;
     if (s_paused || !is_target(s_peer_bda)) {
         /* unbound / OTA while the connect was pending */
         ESP_LOGI(TAG, "dropping a link that is no longer wanted");
@@ -263,6 +284,15 @@ static void link_open(esp_gatt_if_t gattc_if, uint16_t conn_id)
         return;
     }
     ESP_LOGI(TAG, "connected to %s", s_target_name);
+    /* ELM327 BLE clones commonly accept the phone-sized MTU used by Car
+     * Scanner. Discovery can run in parallel; writes use the negotiated value
+     * once ESP_GATTC_CFG_MTU_EVT arrives and keep the 20-byte fallback before
+     * then. */
+    esp_err_t mtu_err = esp_ble_gattc_send_mtu_req(gattc_if, conn_id);
+    if (mtu_err != ESP_OK) {
+        s_mtu_ready = true; /* 23-byte ATT fallback is safe to use now. */
+        ESP_LOGW(TAG, "MTU request: %s; using 20-byte payload", esp_err_to_name(mtu_err));
+    }
     /* NULL: discover every service (adapters use different UUIDs) */
     esp_ble_gattc_search_service(gattc_if, conn_id, NULL);
     wake_task();
@@ -270,6 +300,7 @@ static void link_open(esp_gatt_if_t gattc_if, uint16_t conn_id)
 
 static void notify_ready(void)
 {
+    if (!s_mtu_ready || !s_notify_configured) return;
     s_ready_us = esp_timer_get_time();
     s_notify_ready = true;
     wake_task();
@@ -278,8 +309,10 @@ static void notify_ready(void)
 /* After discovery: pick the write / notify characteristics and subscribe. */
 static void setup_channel(esp_gatt_if_t gattc_if)
 {
-    uint16_t start = 0x0001;
-    uint16_t end = s_all_attr_end > 0x0001 ? s_all_attr_end : 0xFFFF;
+    const uint16_t all_start = 0x0001;
+    const uint16_t all_end = s_all_attr_end > 0x0001 ? s_all_attr_end : 0xFFFF;
+    uint16_t start = all_start;
+    uint16_t end = all_end;
     int svc = -1;
     for (int i = 0; i < SVC_COUNT && svc < 0; i++) {
         if (s_svc[i].found) svc = i;
@@ -292,56 +325,106 @@ static void setup_channel(esp_gatt_if_t gattc_if)
         ESP_LOGW(TAG, "no known adapter service, searching 0x0001..0x%04X", end);
     }
 
-    uint16_t count = 0;
-    esp_gatt_status_t st = esp_ble_gattc_get_attr_count(gattc_if, s_conn_id, ESP_GATT_DB_CHARACTERISTIC,
-                                                        start, end, 0, &count);
-    esp_gattc_char_elem_t *chars = NULL;
-    if (st == ESP_GATT_OK && count > 0) {
-        chars = malloc(count * sizeof(*chars));
-    }
-    if (chars) {
-        st = esp_ble_gattc_get_all_char(gattc_if, s_conn_id, start, end, chars, &count, 0);
-        if (st != ESP_GATT_OK) count = 0;
-        for (uint16_t i = 0; i < count; i++) {
-            const esp_gattc_char_elem_t *c = &chars[i];
-            ESP_LOGD(TAG, "char handle 0x%04X prop 0x%02X", c->char_handle, c->properties);
-            if (!s_write_handle &&
-                (c->properties & (ESP_GATT_CHAR_PROP_BIT_WRITE | ESP_GATT_CHAR_PROP_BIT_WRITE_NR))) {
-                /* write-without-response avoids WRITE_NOT_PERMIT on some clones */
-                s_write_type = (c->properties & ESP_GATT_CHAR_PROP_BIT_WRITE_NR) ? ESP_GATT_WRITE_TYPE_NO_RSP
-                                                                                 : ESP_GATT_WRITE_TYPE_RSP;
-                s_write_handle = c->char_handle;
+    esp_gatt_status_t st;
+    for (int pass = 0; pass < 2; pass++) {
+        uint16_t count = 0;
+        st = esp_ble_gattc_get_attr_count(gattc_if, s_conn_id,
+                                          ESP_GATT_DB_CHARACTERISTIC,
+                                          start, end, 0, &count);
+        esp_gattc_char_elem_t *chars = NULL;
+
+        s_write_handle = 0;
+        s_notify_handle = 0;
+        if (st == ESP_GATT_OK && count > 0) chars = malloc(count * sizeof(*chars));
+        if (chars) {
+            uint16_t combined_handle = 0;
+            uint16_t write_handle = 0;
+            uint16_t notify_handle = 0;
+            uint8_t notify_props = 0;
+            st = esp_ble_gattc_get_all_char(gattc_if, s_conn_id, start, end, chars, &count, 0);
+            if (st != ESP_GATT_OK) count = 0;
+            for (uint16_t i = 0; i < count; i++) {
+                const esp_gattc_char_elem_t *c = &chars[i];
+                ESP_LOGD(TAG, "char handle 0x%04X prop 0x%02X", c->char_handle, c->properties);
+                /* Car Scanner checks CanWrite and uses the default
+                 * WriteAsync path, so require ATT Write Request support. */
+                bool writable = (c->properties & ESP_GATT_CHAR_PROP_BIT_WRITE) != 0;
+                bool notify = (c->properties & ESP_GATT_CHAR_PROP_BIT_NOTIFY) != 0;
+                bool indicate = (c->properties & ESP_GATT_CHAR_PROP_BIT_INDICATE) != 0;
+                if (!combined_handle && writable && notify) {
+                    combined_handle = c->char_handle;
+                }
+                if (!write_handle && writable) {
+                    write_handle = c->char_handle;
+                }
+                if (!notify_handle && (notify || indicate)) {
+                    notify_handle = c->char_handle;
+                    notify_props = c->properties;
+                }
             }
-            if (!s_notify_handle && (c->properties & ESP_GATT_CHAR_PROP_BIT_NOTIFY)) {
-                s_notify_handle = c->char_handle;
+            if (combined_handle) {
+                s_write_handle = combined_handle;
+                s_notify_handle = combined_handle;
+                s_notify_indicate = false;
+                s_write_type = ESP_GATT_WRITE_TYPE_RSP;
+            } else {
+                s_write_handle = write_handle;
+                s_notify_handle = notify_handle;
+                s_notify_indicate = (notify_props & ESP_GATT_CHAR_PROP_BIT_NOTIFY) == 0 &&
+                                    (notify_props & ESP_GATT_CHAR_PROP_BIT_INDICATE) != 0;
+                s_write_type = ESP_GATT_WRITE_TYPE_RSP;
             }
+            free(chars);
         }
-        free(chars);
+        if (s_write_handle && s_notify_handle) break;
+        if (start == all_start && end == all_end) break;
+        start = all_start;
+        end = all_end;
+        ESP_LOGW(TAG, "known service has no complete UART channel, searching all attributes");
     }
     if (!s_write_handle) {
         ESP_LOGE(TAG, "adapter has no writable characteristic, dropping the link");
         esp_ble_gattc_close(gattc_if, s_conn_id);
         return;
     }
-    if (!s_notify_handle) s_notify_handle = s_write_handle;
+    /* A writable characteristic is not necessarily the RX channel. Do not
+     * start vp_engine until a real notify/indicate characteristic has been
+     * discovered and subscribed; otherwise the first AT command is sent into
+     * a link that can never deliver its prompt. */
+    if (!s_notify_handle) {
+        ESP_LOGE(TAG, "adapter has no notify/indicate characteristic, dropping the link");
+        esp_ble_gattc_close(gattc_if, s_conn_id);
+        return;
+    }
     ESP_LOGI(TAG, "write 0x%04X (%s), notify 0x%04X", s_write_handle,
              s_write_type == ESP_GATT_WRITE_TYPE_NO_RSP ? "no-rsp" : "rsp", s_notify_handle);
 
-    esp_ble_gattc_register_for_notify(gattc_if, s_peer_bda, s_notify_handle);
+    esp_err_t notify_err = esp_ble_gattc_register_for_notify(gattc_if, s_peer_bda, s_notify_handle);
+    if (notify_err != ESP_OK) {
+        ESP_LOGW(TAG, "register notify: %s", esp_err_to_name(notify_err));
+        esp_ble_gattc_close(gattc_if, s_conn_id);
+        return;
+    }
     esp_gattc_descr_elem_t descr[2];
     uint16_t n = 2;
     esp_bt_uuid_t cccd = { .len = ESP_UUID_LEN_16, .uuid = { .uuid16 = UUID16_CCCD } };
     st = esp_ble_gattc_get_descr_by_char_handle(gattc_if, s_conn_id, s_notify_handle, cccd, descr, &n);
     if (st == ESP_GATT_OK && n > 0) {
         s_cccd_handle = descr[0].handle;
-        uint8_t en[2] = { 0x01, 0x00 };
+        uint8_t en[2] = { s_notify_indicate ? 0x02 : 0x01, 0x00 };
         esp_err_t err = esp_ble_gattc_write_char_descr(gattc_if, s_conn_id, s_cccd_handle, sizeof(en), en,
                                                        ESP_GATT_WRITE_TYPE_RSP, ESP_GATT_AUTH_REQ_NONE);
-        if (err == ESP_OK) return;   /* ready on WRITE_DESCR_EVT */
+        if (err == ESP_OK) return;   /* ready on WRITE_DESCR_EVT + MTU */
         ESP_LOGW(TAG, "CCCD write: %s", esp_err_to_name(err));
+        /* The CCCD write did not even get queued.  Do not treat this as an
+         * enabled subscription: without it the ELM prompt can never reach
+         * the engine.  The disconnect path will schedule a clean retry. */
+        esp_ble_gattc_close(gattc_if, s_conn_id);
+        return;
     } else {
         ESP_LOGW(TAG, "no CCCD on 0x%04X, assuming notifications are on", s_notify_handle);
     }
+    s_notify_configured = true;
     notify_ready();
 }
 
@@ -393,6 +476,21 @@ static void gattc_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp_ble
         break;
     }
 
+    case ESP_GATTC_CFG_MTU_EVT:
+        if (!s_connected || param->cfg_mtu.conn_id != s_conn_id) break;
+        if (param->cfg_mtu.status == ESP_GATT_OK && param->cfg_mtu.mtu > 3) {
+            s_att_mtu = param->cfg_mtu.mtu;
+            ESP_LOGI(TAG, "ATT MTU negotiated: %u (payload %u)", (unsigned)s_att_mtu,
+                     (unsigned)(s_att_mtu - 3));
+        } else {
+            s_att_mtu = 23;
+            ESP_LOGW(TAG, "ATT MTU negotiation failed, using 20-byte payload (status %d)",
+                     param->cfg_mtu.status);
+        }
+        s_mtu_ready = true;
+        notify_ready();
+        break;
+
     case ESP_GATTC_SEARCH_CMPL_EVT:
         if (!s_connected || param->search_cmpl.conn_id != s_conn_id) break;
         if (param->search_cmpl.status != ESP_GATT_OK) {
@@ -406,9 +504,14 @@ static void gattc_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp_ble
     case ESP_GATTC_WRITE_DESCR_EVT:
         if (!s_connected || param->write.conn_id != s_conn_id || param->write.handle != s_cccd_handle) break;
         if (param->write.status != ESP_GATT_OK) {
-            /* carry on: the engine heals / reconnects if nothing comes back */
             ESP_LOGW(TAG, "enable notify failed, status %d", param->write.status);
+            /* Do not start the ELM engine without a usable RX path. Keep the
+             * target bound and let the disconnect path schedule a clean
+             * reconnect instead of sending ATZ into a dead subscription. */
+            esp_ble_gattc_close(gattc_if, s_conn_id);
+            break;
         }
+        s_notify_configured = true;
         notify_ready();
         break;
 
@@ -422,8 +525,16 @@ static void gattc_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp_ble
         break;
 
     case ESP_GATTC_WRITE_CHAR_EVT:
-        if (param->write.conn_id == s_conn_id && param->write.status != ESP_GATT_OK) {
-            ESP_LOGW(TAG, "write failed, status %d", param->write.status);
+        if (param->write.conn_id == s_conn_id && param->write.handle == s_write_handle) {
+            s_tx_status = param->write.status;
+            if (param->write.status != ESP_GATT_OK) {
+                ESP_LOGW(TAG, "write failed, handle 0x%04X status %d",
+                         param->write.handle, param->write.status);
+            }
+            if (s_tx_waiting) {
+                s_tx_waiting = false;
+                if (s_tx_done) xSemaphoreGive(s_tx_done);
+            }
         }
         break;
 
@@ -476,12 +587,33 @@ static bool sink_send(void *ctx, const char *cmd)
     size_t n = strnlen(cmd, sizeof(buf) - 1);
     memcpy(buf, cmd, n);
     buf[n++] = '\r';
-    for (size_t off = 0; off < n; off += TX_CHUNK) {
-        size_t len = (n - off < TX_CHUNK) ? n - off : TX_CHUNK;
+    uint16_t att_payload = s_att_mtu > 3 ? (uint16_t)(s_att_mtu - 3) : TX_CHUNK;
+    if (att_payload == 0) att_payload = TX_CHUNK;
+    for (size_t off = 0; off < n; off += att_payload) {
+        size_t len = (n - off < att_payload) ? n - off : att_payload;
+        if (s_write_type == ESP_GATT_WRITE_TYPE_RSP) {
+            if (!s_tx_done) return false;
+            while (xSemaphoreTake(s_tx_done, 0) == pdTRUE) {}
+            s_tx_status = ESP_GATT_ERROR;
+            s_tx_waiting = true;
+        }
         esp_err_t err = esp_ble_gattc_write_char(gif, s_conn_id, handle, (uint16_t)len, buf + off,
                                                  s_write_type, ESP_GATT_AUTH_REQ_NONE);
         if (err != ESP_OK) {
+            s_tx_waiting = false;
             ESP_LOGW(TAG, "write: %s", esp_err_to_name(err));
+            return false;
+        }
+        if (s_write_type == ESP_GATT_WRITE_TYPE_RSP &&
+            xSemaphoreTake(s_tx_done, pdMS_TO_TICKS(TX_WRITE_TIMEOUT_MS)) != pdTRUE) {
+            s_tx_waiting = false;
+            ESP_LOGW(TAG, "write response timeout (offset %u length %u mtu %u)",
+                     (unsigned)off, (unsigned)len, (unsigned)s_att_mtu);
+            return false;
+        }
+        if (s_write_type == ESP_GATT_WRITE_TYPE_RSP && s_tx_status != ESP_GATT_OK) {
+            ESP_LOGW(TAG, "write response failed (offset %u length %u status %d)",
+                     (unsigned)off, (unsigned)len, s_tx_status);
             return false;
         }
     }
@@ -750,6 +882,9 @@ static void obd_task(void *arg)
     engine_down();
     ESP_LOGI(TAG, "BLE released, obd_poll exits");
     s_task = NULL;
+    portENTER_CRITICAL(&s_lock);
+    s_task_started = false;
+    portEXIT_CRITICAL(&s_lock);
     esp_task_wdt_delete(NULL);
     vTaskDelay(pdMS_TO_TICKS(20));   /* let a racing wake_task() finish */
     vTaskDelete(NULL);
@@ -766,6 +901,7 @@ static void start_task(void)
         wake_task();
         return;
     }
+    if (!s_tx_done) s_tx_done = xSemaphoreCreateBinaryStatic(&s_tx_done_storage);
     if (!s_rx) s_rx = xStreamBufferCreateWithCaps(RX_BUF_BYTES, 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     TaskHandle_t t = NULL;
     if (!s_rx || xTaskCreate(obd_task, "obd_poll", TASK_STACK, NULL, TASK_PRIO, &t) != pdPASS) {
@@ -790,6 +926,7 @@ void elm327_ble_ensure_stack_init(void)
 void elm327_ble_start_default(const char *target_name, const uint8_t mac[6])
 {
     if (!ensure_registered()) return;
+    s_paused = false;
     set_name(target_name);
     bind_target(mac);
     s_scan_only = false;
@@ -822,6 +959,7 @@ void elm327_ble_connect_by_addr(const uint8_t mac[6], const char *name)
     if (!mac_nonzero(mac) || !ensure_registered()) return;
     ESP_LOGI(TAG, "bind %02X:%02X:%02X:%02X:%02X:%02X (%s)", mac[0], mac[1], mac[2], mac[3], mac[4],
              mac[5], name ? name : "");
+    s_paused = false;
     s_scan_only = false;
     set_name(name);
     bind_target(mac);

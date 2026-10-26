@@ -24,12 +24,16 @@ int main(void)
     static const uint8_t stream[] = "360 00 00 82 78 00 00 00 00\r\n"
         "1: 360 00 00 82 78 00 00 00 00\r140 00 00 00 00 00 00 33 00\n"
         "1:360 00 00 82 78 00 00 00 00\rCAN ERROR\r?\rSTOPPED\r>";
-    uint8_t prefix[512], data[1024];
+    uint8_t prefix[512], data[1024], *full, *overflow;
+    size_t rx_cap = ra_rx_capacity();
     unsigned mode, prompt, byte, oi, li, n, step;
     size_t split;
     uint32_t seed = 193;
     ra_observation_t o;
     ra_case_t *c = ra_create();
+    full = malloc(rx_cap);
+    overflow = malloc(rx_cap + 1);
+    check(full != NULL && overflow != NULL, "allocate RX capacity probes");
     check(c != NULL, "create monitor profile");
     /* Exhaust all byte values with realistic transport sizes and both flags. */
     memset(prefix, '7', sizeof(prefix));
@@ -53,16 +57,17 @@ int main(void)
     check(o.frames == 1 && o.used == 0 && o.writes == 2 && o.clocks == 1 &&
           o.coolant == 80 && o.oil == 90, "decoded CAN writes must stay 80C/90C");
     /* Null data returns before flushing; zero-length nonnull can flush full RX. */
-    ra_reset(c, prefix, 512, 2, false, 0);
+    memset(full, '7', rx_cap);
+    ra_reset(c, full, rx_cap, 2, false, 0);
     feed(c, NULL, 1024); ra_observe(c, &o);
-    check(o.used == 512 && o.clocks == 0, "null data must not flush");
+    check(o.used == rx_cap && o.clocks == 0, "null data must not flush");
     feed(c, data, 0); ra_observe(c, &o);
     check(o.used == 0 && o.clocks == 1, "zero-length nonnull full buffer must flush");
     /* Scan every input byte after capacity; preserve end-of-call monitor flush. */
-    memset(data, '7', sizeof(data)); data[sizeof(data)-1] = '>';
-    ra_reset(c, NULL, 0, 1, false, 0); feed(c, data, sizeof(data)); ra_observe(c, &o);
-    check(o.used == 512 && o.prompt && o.clocks == 0, "prompt beyond capacity must survive");
-    ra_reset(c, NULL, 0, 2, false, 0); feed(c, data, sizeof(data)); ra_observe(c, &o);
+    memset(overflow, '7', rx_cap + 1); overflow[rx_cap] = '>';
+    ra_reset(c, NULL, 0, 1, false, 0); feed(c, overflow, rx_cap + 1); ra_observe(c, &o);
+    check(o.used == rx_cap && o.prompt && o.clocks == 0, "prompt beyond capacity must survive");
+    ra_reset(c, NULL, 0, 2, false, 0); feed(c, overflow, rx_cap + 1); ra_observe(c, &o);
     check(o.used == 0 && o.prompt && o.frames == 0 && o.clocks == 1,
           "monitor overflow must consume once at call end");
     /* Leading NULs and empty CR/LF lines cannot suppress a later real frame. */
@@ -83,5 +88,7 @@ int main(void)
     check(ra_compare(NULL, data, 1), "null engine guard"); comparisons++;
     printf("RX append: %llu complete engine/callback comparisons; engine=%zu bytes\n",
            (unsigned long long)comparisons, ra_engine_size());
+    free(full);
+    free(overflow);
     ra_destroy(c); return EXIT_SUCCESS;
 }

@@ -185,6 +185,7 @@ build tag 就是它，所以发版前必须先 commit，见[发布流程](#发�
 | `tools/check_bss.py` | 对比两份 link map，禁止内部 DRAM 静态占用无提醒地增长超过阈值 |
 | `tools/vehicles/dump_legacy.py` | 从旧版 `vehicle_profiles.c` / `vehicle_custom_config.h`（或指定 git 版本）导出中间 JSON |
 | `tools/vehicles/legacy_to_v1.py` | 中间 JSON → `vehicles/catalog/*.vehicle.json`（`--check` 供 CI）|
+| `tools/vehicles/import_car_scanner.py` | 把 Car Scanner `vehicle-profiles.json` 中可安全表达的 PID 转成社区可导入的车型 JSON；支持线性缩放、反序字节及简单算术/位运算公式，默认每份最多 12 个自定义信号以留出设备编译 blob 空间；条件公式、FLOAT32 和不支持的 ECU 命令会在 summary 中标注跳过原因 |
 | `tools/vehicles/expr2rpn.py` | 把 profile 公式（infix）编译成设备执行的 RPN 数组；`--check` 交叉验证 |
 | `tools/vehicles/gen_builtin.py` | `vehicles/catalog/obd2.generic.vehicle.json` → `main/vehicle/vp_builtin_generic.c` |
 | `tools/vehicles/legacy_golden.py` | 生成/校验 `test/host/vehicle` 的旧固件行为 golden fixture |
@@ -194,6 +195,17 @@ build tag 就是它，所以发版前必须先 commit，见[发布流程](#发�
 | `tools/one_shot.py` | 一键 PID 挖掘：起伪服务器 → 手机录一遍 → 自动出 pids_full.csv |
 | `tools/analyze_probe.py` | 把注入信号与 Car Scanner 录制对上号，反推 PID→仪表映射与解码公式 |
 | `tools/parse_carscanner_backup.py` | 解析 CarScanner 备份目录，导出全车 PID 清单 CSV |
+
+Car Scanner 配置转换示例（PID 目录是聚合索引，按车型生成时使用各车型条目自带的 `pids`）：
+
+```bash
+python3 tools/vehicles/import_car_scanner.py \
+  --profiles /path/to/vehicle-profiles.json \
+  --output /tmp/carscanner-community
+python3 contracts/check_contracts.py --profiles '/tmp/carscanner-community/*.vehicle.json'
+```
+
+转换器只接受直接 `21xx` / `22xxxx` 请求和固件可表达的数据解码：线性 `MUL/DIV/OFS`、反序字节，以及简单算术、`And`、`Shr`、单字节 `SIGNED` 公式。条件分支、`FLOAT32`、外置缩放与公式同时出现、复杂初始化命令和固件不支持的请求会在 `summary.json` 记录跳过原因。默认每份最多输出 12 个自定义信号；当前 1304 份输入中的 820 份输出均通过固件车型目录校验和 8 KB NVS blob 上限，更多信号可能超限。输出车型 JSON 可在车型社区逐个导入发布，多品牌配置会保留品牌列表供筛选，车型和年份元数据也会随配置发布。
 
 > 已删除：`tools/convert_rpm_flash.py`（RPM 自定义闪烁现在是一条主题规则，
 > 见 THEMES.md）、`tools/theme_packer/pack_theme.py`（运行时主题统一用编辑器

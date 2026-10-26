@@ -20,8 +20,16 @@
  *     link_down() when the BLE link drops.
  *
  * Behaviour (contracts/vehicle-rpn.md section 3 is the decode pipeline):
- *  - bring-up: [auto-detect] ATZ ATE0 ATL0 ATS1 ATH0 ATAT1 ATSTxx ATSPx
- *    ATSHhdr, the profile's bus.init, 3 x 0100, then ATRV;
+ *  - bring-up: legacy profiles use the Car Scanner-style common setup
+ *    (ATZ ATD ATD0 ATE0 ATH1 ATSPx ATM0 ATS0 ATAT1 ATAL), followed by profile-specific
+ *    bus.init commands and one configurable check_connection request (0100
+ *    by default).  A translated InitSequence that
+ *    contains a reset, ATSP and all common setup commands owns the complete
+ *    setup order and is sent verbatim (with DELAY/WAIT tokens represented as
+ *    local waits); partial reset-bearing sequences are completed after the
+ *    profile commands;
+ *  - protocol auto-detect probes the supported ELM protocol numbers in a
+ *    deterministic order and reuses the accepted protocol on reconnect;
  *  - rounds: the current request of every due signal (round / slow every
  *    div rounds / period_ms), each distinct request once, in signal order;
  *    "every" signals are inserted after each slot; gap_ms after each slot;
@@ -37,8 +45,9 @@
  *    back to 1 after link_hold_ms without a decode, 0 on link_down;
  *  - self-heal: heal_ms without a decode re-runs the bring-up; the third
  *    heal in a row asks the transport to reconnect.
- * Every AT command goes through vp_at_check(VP_AT_CTX_ENGINE) before it is
- * sent; refused commands are dropped.
+ * Every generated AT command and profile init command goes through the
+ * corresponding vp_at_check context before it is sent; refused commands are
+ * dropped.
  */
 
 #include <stdbool.h>
@@ -75,15 +84,17 @@ typedef struct {
     void     (*on_voltage)(void *ctx, float volts);
     void     (*on_elm_link)(void *ctx, bool up);
     /* Optional (may be NULL). */
-    void     (*on_proto_detected)(void *ctx, uint8_t proto); /* auto-detect result, persist it */
+    void     (*on_proto_detected)(void *ctx, uint8_t proto); /* concrete detector result; caller owns persistence */
     void     (*reconnect)(void *ctx);                        /* drop and reconnect the transport */
     void     (*log)(void *ctx, const char *msg);
 } vp_engine_sink_t;
 
 typedef struct {
     uint8_t  proto;              /* ATSP when the profile's bus.proto is 0: 1..12; 0 = auto-detect */
-    uint16_t resp_timeout_ms;    /* 0 = 3000 */
-    uint16_t detect_timeout_ms;  /* 0 = 2000 (per protocol tried) */
+    const uint8_t *detect_protocols; /* optional caller-owned ATSP candidates; NULL = engine default */
+    uint8_t  detect_protocol_count;  /* number of entries in detect_protocols */
+    uint16_t resp_timeout_ms;    /* 0 = 2500 */
+    uint16_t detect_timeout_ms;  /* 0 = 2000 (adapter auto-detect check) */
     uint16_t link_hold_ms;       /* 0 = 3000 */
     uint16_t vbat_every_ms;      /* ATRV period, 0 = 5000 */
     uint16_t heal_ms;            /* 0 = 10000 */
@@ -107,6 +118,7 @@ typedef struct {
 
 enum {
     VP_ENGINE_PH_DOWN = 0,
+    VP_ENGINE_PH_CHECK,    /* verify ELM327 prompt after transport connect */
     VP_ENGINE_PH_DETECT,
     VP_ENGINE_PH_INIT,
     VP_ENGINE_PH_RUN,
@@ -115,7 +127,7 @@ enum {
 
 /*
  * Bind a profile. Registers the profile's veh.* signals through the sink.
- * All state (including the 512-byte response buffer) is one allocation from
+ * All state (including the 5120-byte response buffer) is one allocation from
  * alloc. Returns NULL on bad arguments or out of memory. p must outlive the
  * engine.
  */

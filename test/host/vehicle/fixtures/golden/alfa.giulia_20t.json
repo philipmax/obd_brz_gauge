@@ -5,7 +5,7 @@
     "idx": 14,
     "name": "GIULIA 2.0T"
   },
-  "init": ["ATZ", "ATE0", "ATL0", "ATS1", "ATH0", "ATAT1", "ATST0F", "ATSP7", "ATSH18DB33F1"],
+  "init": ["ATZ", "ATE0", "ATH1", "ATS0", "ATM0", "ATAT1", "ATAL", "ATST0F", "ATSP7", "ATSH18DB33F1"],
   "gap_ms": 50,
   "requests": [
     {

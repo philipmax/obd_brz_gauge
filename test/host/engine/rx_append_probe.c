@@ -170,3 +170,4 @@ uint32_t ra_feed(ra_case_t *c, const uint8_t *data, size_t len)
     return c->e.rx_len + (uint32_t)c->e.prompt;
 }
 size_t ra_engine_size(void) { return sizeof(vp_engine_t); }
+size_t ra_rx_capacity(void) { return ENG_RX_CAP; }

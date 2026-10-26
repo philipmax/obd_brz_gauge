@@ -80,6 +80,7 @@ a saved or already-detected protocol and auto-detects if neither is available. S
 `bus.proto` explicitly to lock a special vehicle protocol. Without `bus`, the other
 defaults are header `7E0`, `ATST=0x19` and a 30 ms request gap. Inherited standard requests use the
 vehicle's `bus.hdr`; special headers remain configurable through each `src.hdr`.
+ISO 9141-2 / ISO KWP2000 (protocols 3–5) are an exception: these K-line protocols do not use CAN request headers. Even if imported data contains `7E0`, runtime ignores it and uses `ATH0` to receive responses.
 Drivetrain ratios and ratio-derived `obd.gear` are not inherited: declare a direct gear
 source or supply the vehicle's own `drivetrain`. Automatic completion does not imply
 ECU support for a PID; unavailable values still follow existing failure rules and

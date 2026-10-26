@@ -143,8 +143,10 @@ BaseType_t xTaskCreatePinnedToCore(TaskFunction_t fn, const char *name, uint32_t
                                  void *arg, UBaseType_t prio, TaskHandle_t *handle, BaseType_t core)
 {
     CHECK(!handle && fn && arg);
-    CHECK((!strcmp(name, "vid_dec") && stack == 6144 && prio == 5 && core == 1) ||
-          (!strcmp(name, "vid_read") && stack == 4096 && prio == 5 && core == 0));
+    vp_session_t *s = arg;
+    UBaseType_t expected_prio = s->mode == VIDEO_MODE_COMPOSITE ? 3 : 5;
+    CHECK((!strcmp(name, "vid_dec") && stack == 6144 && prio == expected_prio && core == 1) ||
+          (!strcmp(name, "vid_read") && stack == 4096 && prio == expected_prio && core == 0));
     if (++create_attempts == fail_task_attempt) return pdFAIL;
     CHECK(task_count < COUNT_OF(tasks));
     tasks[task_count++] = (fake_task_t){ fn, arg, false };

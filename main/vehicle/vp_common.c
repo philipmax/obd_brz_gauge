@@ -64,8 +64,13 @@ vp_hdr_class_t vp_classify_tx_id(uint32_t id)
         return VP_HDR_INVALID;
     }
     if (id == 0x7DFu) return VP_HDR_FUNCTIONAL;
-    if (id >= 0x7E0u && id <= 0x7E7u) return VP_HDR_PHYSICAL;
-    if (id >= 0x600u && id <= 0x6FFu) return VP_HDR_PHYSICAL;
+    /* Car Scanner profiles use the broader manufacturer/legacy 11-bit range
+     * as well as the usual 7E0-7E7 OBD request IDs (for example 740, 7A0 and
+     * 7D4).  Keep the standard 7E8-7EF response IDs out of ATSH. Requests
+     * remain read-only at the service validator boundary. */
+    if (id >= 0x600u && id <= 0x7FFu && !(id >= 0x7E8u && id <= 0x7EFu)) {
+        return VP_HDR_PHYSICAL;
+    }
     return VP_HDR_INVALID;
 }
 
@@ -96,7 +101,9 @@ bool vp_parse_rx_filter(const char *s, uint32_t *id)
 
     if (!vp_parse_hex_id(s, &v, &nd)) return false;
     if (nd == 3) {
-        if (!((v >= 0x7E8u && v <= 0x7EFu) || (v >= 0x600u && v <= 0x6FFu))) return false;
+        if (v < 0x600u || v > 0x7FFu || v == 0x7DFu || (v >= 0x7E0u && v <= 0x7E7u)) {
+            return false;
+        }
     } else if (nd == 8) {
         if ((v & 0xFFFFFF00u) != 0x18DAF100u) return false;
         v |= VP_ID_29BIT;
@@ -127,22 +134,36 @@ bool vp_parse_can_id(const char *s, uint32_t *id)
 
 bool vp_service_allowed(uint8_t svc)
 {
-    return svc == 0x01 || svc == 0x09 || svc == 0x21 || svc == 0x22;
+    /* Read-only OBD/KWP/UDS services seen in translated Car Scanner
+     * profiles.  Keep state-changing services (04, 10, 11, 14, 27, 2E,
+     * 2F, 31, 34..3D, 3E, 85, ...) fail-closed. */
+    return svc == 0x01 || svc == 0x02 || svc == 0x03 || svc == 0x06 ||
+           svc == 0x07 || svc == 0x09 || svc == 0x0A || svc == 0x1A ||
+           svc == 0x21 || svc == 0x22 || svc == 0x23;
 }
 
 bool vp_service_functional_ok(uint8_t svc)
 {
-    return svc == 0x01 || svc == 0x09;
+    return svc == 0x01 || svc == 0x02 || svc == 0x03 || svc == 0x06 ||
+           svc == 0x07 || svc == 0x09 || svc == 0x0A;
 }
 
 bool vp_service_len_ok(uint8_t svc, size_t len)
 {
     switch (svc) {
     case 0x01:
+    case 0x02:
+    case 0x06:
+    case 0x07:
     case 0x09:
+    case 0x0A:
+    case 0x1A:
     case 0x21:
         return len == 2;
+    case 0x03:
+        return len == 1;
     case 0x22:
+    case 0x23:
         return len == 3;
     default:
         return false;

@@ -205,6 +205,7 @@ bool vp_int_req_key(const cJSON *src, uint32_t bus_hdr, vp_request_t *k)
 
     if (hdr) {
         if (vp_classify_tx_header(hdr, &k->hdr) == VP_HDR_INVALID) return false;
+        k->rsv |= VP_REQ_RSV_HDR_EXPLICIT;
     } else {
         k->hdr = bus_hdr;
     }
@@ -219,6 +220,31 @@ bool vp_int_req_key(const cJSON *src, uint32_t bus_hdr, vp_request_t *k)
         k->flags |= VP_REQ_F_CEA;
     }
     if (cJSON_IsTrue(jget(src, "multiframe"))) k->flags |= VP_REQ_F_MULTI;
+
+    {
+        const char *const keys[] = { "before", "after" };
+        uint8_t *counts[] = { &k->before_count, &k->after_count };
+        vp_at_cmd_t *dst[] = { k->before, k->after };
+        size_t side;
+        for (side = 0; side < 2; side++) {
+            const cJSON *list = jget(src, keys[side]);
+            int i;
+            if (!list) continue;
+            if (!cJSON_IsArray(list)) return false;
+            if (cJSON_GetArraySize(list) > VP_MAX_REQ_COMMANDS) return false;
+            for (i = 0; i < cJSON_GetArraySize(list); i++) {
+                const cJSON *it = cJSON_GetArrayItem(list, i);
+                const char *why = NULL;
+                if (!cJSON_IsString(it) ||
+                    !vp_at_check(it->valuestring, VP_AT_CTX_REQUEST,
+                                 dst[side][i].cmd, sizeof(dst[side][i].cmd), &why)) {
+                    (void)why;
+                    return false;
+                }
+            }
+            *counts[side] = (uint8_t)cJSON_GetArraySize(list);
+        }
+    }
     return true;
 }
 
@@ -277,18 +303,118 @@ static const char *at_refusal(const char *a)
     return "command not whitelisted";
 }
 
+static bool at_hex_width(const char *s, size_t a, size_t b)
+{
+    size_t n = strlen(s);
+    return (n == a || n == b) && is_hex_str(s, n);
+}
+
+static bool at_hex_range(const char *s, size_t lo, size_t hi)
+{
+    size_t n = strlen(s);
+    return n >= lo && n <= hi && !(n & 1u) && is_hex_str(s, n);
+}
+
+static bool obd_command(const char *s)
+{
+    uint8_t b[8];
+    size_t n = 0;
+
+    if (!s || !vp_parse_hex_bytes(s, false, b, sizeof(b), &n)) return false;
+    return vp_service_allowed(b[0]) && vp_service_len_ok(b[0], n);
+}
+
+static bool tester_command(const char *s)
+{
+    size_t n;
+    if (!s) return false;
+    n = strlen(s);
+    return (n == 2 || n == 4) && !strncmp(s, "3E", 2) &&
+           (n == 2 || is_hex_str(s + 2, 2));
+}
+
 /* Fixed commands the firmware sends itself (link setup, vehicle check,
  * monitor window); never accepted from a profile. */
 static bool engine_fixed(const char *a)
 {
     static const char *const k_fixed[] = {
-        "Z", "E0", "L0", "S1", "H0", "H1", "AT1", "I", "RV", "MA", "AR", NULL
+        "Z", "E0", "L0", "S1", "S0", "M0", "AL", "H0", "H1", "AT1", "I", "RV", "MA", "AR", NULL
     };
     size_t i;
     for (i = 0; k_fixed[i]; i++) {
         if (!strcmp(a, k_fixed[i])) return true;
     }
     return false;
+}
+
+static bool init_setup(const char *a)
+{
+    static const char *const k_setup[] = {
+        "Z", "D", "D0", "E0", "H1", "S0", "M0", "AT1", "AT0", "AT2", "AL", NULL
+    };
+    size_t i;
+    for (i = 0; k_setup[i]; i++) {
+        if (!strcmp(a, k_setup[i])) return true;
+    }
+    /* Car Scanner's legacy/J1850 and Nissan branches use these adapter
+     * controls. Keep their accepted shapes narrow and init-only; they are
+     * not safe request-local escapes. */
+    if (!strcmp(a, "IB10") || !strcmp(a, "SI") || !strcmp(a, "FI") ||
+        !strcmp(a, "CER") || !strcmp(a, "TAF1")) {
+        return true;
+    }
+    if (starts(a, "SW") && is_hex_str(a + 2, 2)) return true;
+    if (starts(a, "IIA") && (a[3] == '\0' || is_hex_str(a + 3, 2))) return true;
+    if (starts(a, "WM") && at_hex_range(a + 2, 2, 14)) return true;
+    return false;
+}
+
+/* Request-local commands are the small, non-destructive subset used by the
+ * APK command queue around one OBD request.  Header/framing state is still
+ * represented by the structured request fields when possible; this escape
+ * hatch exists for translated BeforeCommands/AfterCommands that must retain
+ * their original order. */
+static bool request_setup(const char *a)
+{
+    return !strcmp(a, "AL");
+}
+
+bool vp_init_raw_command(const char *cmd)
+{
+    return cmd && !strcmp(cmd, "2212010401");
+}
+
+bool vp_init_wait_ms(const char *token, uint16_t *out_ms)
+{
+    char b[VP_AT_MAX_LEN + 1];
+    size_t n = 0;
+    size_t i;
+    uint32_t value = 0;
+    bool prefix;
+
+    if (!token) return false;
+    for (; *token; token++) {
+        char c = *token;
+        if (c == ' ' || c == '\r' || c == '\n') continue;
+        if ((unsigned char)c < 0x21 || (unsigned char)c > 0x7E || n >= VP_AT_MAX_LEN) {
+            return false;
+        }
+        if (c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');
+        b[n++] = c;
+    }
+    b[n] = '\0';
+    prefix = (n >= 6 && !strncmp(b, "DELAY", 5)) ||
+             (n >= 5 && !strncmp(b, "WAIT", 4));
+    if (!prefix) return false;
+    i = b[1] == 'E' ? 5 : 4;
+    if (i == n) return false;
+    for (; i < n; i++) {
+        if (b[i] < '0' || b[i] > '9') return false;
+        value = value * 10u + (uint32_t)(b[i] - '0');
+        if (value > 65535u) return false;
+    }
+    if (out_ms) *out_ms = (uint16_t)value;
+    return true;
 }
 
 bool vp_at_check(const char *cmd, vp_at_ctx_t ctx, char *norm, size_t norm_cap,
@@ -320,6 +446,14 @@ bool vp_at_check(const char *cmd, vp_at_ctx_t ctx, char *norm, size_t norm_cap,
         b[n++] = c;
     }
     b[n] = '\0';
+    if (ctx == VP_AT_CTX_INIT && vp_init_wait_ms(b, NULL)) {
+        if (norm && norm_cap) snprintf(norm, norm_cap, "%s", b);
+        return true;
+    }
+    if (ctx == VP_AT_CTX_INIT && vp_init_raw_command(b)) {
+        if (norm && norm_cap) snprintf(norm, norm_cap, "%s", b);
+        return true;
+    }
     if (n < 3 || b[0] != 'A' || b[1] != 'T') {
         if (why) *why = "not an AT command";
         return false;
@@ -347,19 +481,46 @@ bool vp_at_check(const char *cmd, vp_at_ctx_t ctx, char *norm, size_t norm_cap,
         }
     } else if (!strcmp(a, "CAF1")) {
         ok = true;
+    } else if (!strcmp(a, "CFC0") || !strcmp(a, "CFC1")) {
+        /* Manual ISO-TP reception temporarily disables ELM automatic flow
+         * control; the engine owns both transitions. */
+        ok = ctx != VP_AT_CTX_INIT;
+        if (!ok) reason = "CFC is controlled by the engine";
+    } else if (starts(a, "FCSH")) {
+        /* ELM CAN flow-control transmit header: 11-bit or 29-bit id. */
+        ok = at_hex_width(a + 4, 3, 8);
+        if (!ok) reason = "FCSH takes an 11-bit or 29-bit CAN id";
+    } else if (starts(a, "FCSD")) {
+        /* ELM CAN flow-control data: three or four CAN bytes. */
+        ok = at_hex_width(a + 4, 6, 8);
+        if (!ok) reason = "FCSD takes 3 or 4 CAN bytes";
+    } else if (starts(a, "FCSM")) {
+        ok = !strcmp(a + 4, "0") || !strcmp(a + 4, "1");
+        if (!ok) reason = "FCSM takes 0 or 1";
+    } else if (starts(a, "CP")) {
+        ok = is_hex_str(a + 2, 2);
+        if (!ok) reason = "CP takes one hex byte";
     } else if (starts(a, "ST") && is_hex_str(a + 2, 2)) {
         ok = strcmp(a + 2, "02") >= 0;
         if (!ok) reason = "ATST below 02";
     } else if (starts(a, "SP")) {
         const char *p = a + 2;
-        if (p[0] == 'A') {
+        if (ctx == VP_AT_CTX_REQUEST) {
+            reason = "protocol selection is connection setup only";
+        } else if (p[0] == 'A') {
             p++;
             ok = p[1] == '\0' && ((p[0] >= '1' && p[0] <= '9') || (p[0] >= 'A' && p[0] <= 'C'));
         } else {
             ok = p[1] == '\0' && ((p[0] >= '0' && p[0] <= '9') || (p[0] >= 'A' && p[0] <= 'C'));
         }
-        if (!ok) reason = "protocol not 0-9/A-C";
+        if (!ok && !reason) reason = "protocol not 0-9/A-C";
+    } else if (ctx == VP_AT_CTX_INIT && init_setup(a)) {
+        /* A translated Car Scanner InitSequence may carry the complete
+         * reset/default and common setup sequence in its original order. */
+        ok = true;
     } else if (ctx == VP_AT_CTX_ENGINE && engine_fixed(a)) {
+        ok = true;
+    } else if (ctx == VP_AT_CTX_REQUEST && request_setup(a)) {
         ok = true;
     } else {
         reason = at_refusal(a);
@@ -678,12 +839,40 @@ static void check_rpn(vctx_t *c, const cJSON *src, const char *base)
 
 static const char *const k_src_req_keys[] = {
     "req", "raw", "hdr", "rx", "cea", "len", "multiframe", "byte_from_end", "hold",
-    "expect", "valid", "fail_after", "rpn", "expr", "notes", NULL
+    "expect", "before", "after", "valid", "fail_after", "rpn", "expr", "notes", NULL
 };
 static const char *const k_src_can_keys[] = {
     "can", "bit", "bits", "endian", "signed", "valid", "fail_after", "rpn", "expr", "notes", NULL
 };
 static const char *const k_hold_keys[] = { "delta", "max_hold", "gap_ms", NULL };
+
+static void check_req_commands(vctx_t *c, const cJSON *src, const char *key, const char *base)
+{
+    const cJSON *list = jget(src, key);
+    char p[48];
+    int i;
+
+    if (!list) return;
+    pj(p, sizeof(p), base, key);
+    if (!cJSON_IsArray(list)) {
+        verr(c, "E_SCHEMA", p, "must be an array");
+        return;
+    }
+    if (cJSON_GetArraySize(list) > VP_MAX_REQ_COMMANDS) {
+        verr(c, "E_LIMIT", p, "%d commands, max %d", cJSON_GetArraySize(list), VP_MAX_REQ_COMMANDS);
+    }
+    for (i = 0; i < cJSON_GetArraySize(list) && i < VP_MAX_REQ_COMMANDS; i++) {
+        const cJSON *it = cJSON_GetArrayItem(list, i);
+        const char *why = NULL;
+        char q[64];
+        snprintf(q, sizeof(q), "%s[%d]", p, i);
+        if (!cJSON_IsString(it)) {
+            verr(c, "E_SCHEMA", q, "must be a string");
+        } else if (!vp_at_check(it->valuestring, VP_AT_CTX_REQUEST, NULL, 0, &why)) {
+            verr(c, "E_AT", q, "request command refused: %s", why ? why : "not whitelisted");
+        }
+    }
+}
 
 /* Validate the service(s) carried by a request source against header rules. */
 static void check_service_hdr(vctx_t *c, const char *path, uint8_t svc, bool functional,
@@ -813,6 +1002,9 @@ static void check_req_source(vctx_t *c, const cJSON *src, const char *base)
             verr(c, "E_HDR", p, "extended addressing needs a physical hdr");
         }
     }
+
+    check_req_commands(c, src, "before", base);
+    check_req_commands(c, src, "after", base);
 
     f_int(c, src, "len", base, 1, VP_MAX_DATA_LEN, "E_LIMIT", NULL);
     f_bool(c, src, "multiframe", base, &multi);
@@ -1095,8 +1287,12 @@ static void check_signal(vctx_t *c, const cJSON *sig, int idx, const cJSON *sign
 
 static void check_bus(vctx_t *c, const cJSON *bus)
 {
-    static const char *const keys[] = { "proto", "hdr", "atst", "gap_ms", "init", NULL };
+    static const char *const keys[] = { "proto", "hdr", "atst", "gap_ms", "init",
+                                        "check_connection", "tester_present",
+                                        "tester_present_every_ms", NULL };
     const char *hdr = NULL;
+    const char *check = NULL;
+    const char *tester = NULL;
     const cJSON *init;
     char p[48];
 
@@ -1113,6 +1309,13 @@ static void check_bus(vctx_t *c, const cJSON *bus)
     }
     f_int(c, bus, "atst", "bus", 2, 255, "E_AT", NULL);
     f_int(c, bus, "gap_ms", "bus", 0, 1000, "E_RATE", NULL);
+    if (f_str(c, bus, "check_connection", "bus", &check) == F_OK && !obd_command(check)) {
+        verr(c, "E_REQUEST", "bus.check_connection", "OBD command not allowed");
+    }
+    if (f_str(c, bus, "tester_present", "bus", &tester) == F_OK && !tester_command(tester)) {
+        verr(c, "E_REQUEST", "bus.tester_present", "tester-present command must be 3E or 3Exx");
+    }
+    f_int(c, bus, "tester_present_every_ms", "bus", 0, 60000, "E_RATE", NULL);
 
     init = jget(bus, "init");
     if (init) {

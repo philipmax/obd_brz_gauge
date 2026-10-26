@@ -141,6 +141,9 @@ static void old_state(vp_engine_t *e, uint8_t st, uint32_t val, int16_t req)
         if (val == ENG_CEA_OFF_VAL) snprintf(cmd, sizeof(cmd), "ATCEA");
         else snprintf(cmd, sizeof(cmd), "ATCEA%02X", (unsigned)(val & 0xFFu));
         break;
+    case ST_CFC:
+        snprintf(cmd, sizeof(cmd), "ATCFC%u", val ? 0u : 1u);
+        break;
     default:
         snprintf(cmd, sizeof(cmd), "ATCAF%u", val ? 0u : 1u);
         break;

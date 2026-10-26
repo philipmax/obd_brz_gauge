@@ -8,7 +8,9 @@
     "legacy_idx": 0,
     "legacy_name": "OBD2 Generic"
   },
-  "bus": {},
+  "bus": {
+    "hdr": "7DF"
+  },
   "drivetrain": {
     "fd": 3.5,
     "tire_m": 0.315,

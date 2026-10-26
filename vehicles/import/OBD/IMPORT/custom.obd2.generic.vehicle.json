@@ -10,8 +10,8 @@
     "generator": "tools/vehicles/gen_import_pack.py"
   },
   "bus": {
+    "hdr": "7DF",
     "proto": 0,
-    "hdr": "7E0",
     "atst": 25,
     "gap_ms": 30
   },
@@ -58,7 +58,7 @@
             ],
             "/"
           ],
-          "hdr": "7E0",
+          "hdr": "7DF",
           "expect": "410C",
           "fail_after": 5
         }
@@ -83,7 +83,7 @@
             ],
             "-"
           ],
-          "hdr": "7E0",
+          "hdr": "7DF",
           "expect": "410F",
           "fail_after": 5
         }
@@ -107,7 +107,7 @@
               0
             ]
           ],
-          "hdr": "7E0",
+          "hdr": "7DF",
           "expect": "410D",
           "fail_after": 5
         }
@@ -133,7 +133,7 @@
             ],
             "-"
           ],
-          "hdr": "7E0",
+          "hdr": "7DF",
           "expect": "4105",
           "fail_after": 5
         }
@@ -164,7 +164,7 @@
             ],
             "/"
           ],
-          "hdr": "7E0",
+          "hdr": "7DF",
           "expect": "4104",
           "fail_after": 5
         }
@@ -195,7 +195,7 @@
             ],
             "/"
           ],
-          "hdr": "7E0",
+          "hdr": "7DF",
           "expect": "4111",
           "fail_after": 5
         }
@@ -230,7 +230,7 @@
             ],
             "-"
           ],
-          "hdr": "7E0",
+          "hdr": "7DF",
           "expect": "415C",
           "fail_after": 5
         }
@@ -254,7 +254,7 @@
               "be"
             ]
           ],
-          "hdr": "7E0",
+          "hdr": "7DF",
           "expect": "4142",
           "fail_after": 5
         }
@@ -291,7 +291,7 @@
             ],
             "/"
           ],
-          "hdr": "7E0",
+          "hdr": "7DF",
           "expect": "4144",
           "fail_after": 5
         }

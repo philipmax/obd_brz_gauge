@@ -5,7 +5,7 @@
     "idx": 13,
     "name": "POS 997.1"
   },
-  "init": ["ATZ", "ATE0", "ATL0", "ATS1", "ATH0", "ATAT1", "ATST19", "ATSP6", "ATSH7E0"],
+  "init": ["ATZ", "ATE0", "ATH1", "ATS0", "ATM0", "ATAT1", "ATAL", "ATST19", "ATSP6", "ATSH7E0"],
   "gap_ms": 30,
   "requests": [
     {

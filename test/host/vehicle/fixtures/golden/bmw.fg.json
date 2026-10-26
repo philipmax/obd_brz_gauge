@@ -5,7 +5,7 @@
     "idx": 6,
     "name": "BMW F/G"
   },
-  "init": ["ATZ", "ATE0", "ATL0", "ATS1", "ATH0", "ATAT1", "ATST0F", "ATSP6", "ATSH7DF"],
+  "init": ["ATZ", "ATE0", "ATH1", "ATS0", "ATM0", "ATAT1", "ATAL", "ATST0F", "ATSP6", "ATSH7DF"],
   "gap_ms": 1,
   "requests": [
     {

@@ -32,12 +32,13 @@ extern "C" {
 
 #define VP_PROFILE_MAGIC        0x31525056u   /* "VPR1" */
 #define VP_PROFILE_VERSION      1
-#define VP_DEFAULT_PROTO        0             /* saved protocol or OBD-II auto-detect */
+#define VP_DEFAULT_PROTO        0             /* ATSP0 / adapter OBD-II auto-detect */
 #define VP_DEFAULT_HDR          0x7E0u
 #define VP_DEFAULT_GAP_MS       30            /* legacy OBD_POLL_SLOT_GAP_MS */
 #define VP_DEFAULT_ATST         0x19          /* legacy default when unset */
 #define VP_DEFAULT_FAIL_AFTER   5
 #define VP_DEFAULT_SLOW_DIV     4
+#define VP_PROFILE_CMD_CAP      20
 #define VP_MIN_REQ_INTERVAL_MS  (1000 / VP_MAX_REQ_RATE_HZ)
 #define VP_VEH_NUM_ID_BASE      0x0100u
 
@@ -54,6 +55,9 @@ enum { VP_MON_NONE = 0, VP_MON_PROBE = 1, VP_MON_CONTINUOUS = 2 };
 #define VP_REQ_F_CEA    0x04u   /* send with ATCEA <cea>, restore ATCEA after */
 #define VP_REQ_F_FUNC   0x08u   /* hdr is a functional (broadcast) address */
 #define VP_REQ_F_RX     0x10u   /* set ATCRA <rx> before, ATCRA after */
+
+/* vp_request_t.rsv: internal request identity retained from profile input. */
+#define VP_REQ_RSV_HDR_EXPLICIT 0x01u /* JSON source supplied hdr explicitly */
 
 /* vp_source_t.kind / flags */
 enum { VP_SRC_REQ = 1, VP_SRC_CAN = 2 };
@@ -88,7 +92,11 @@ typedef struct {
     uint8_t  tx[8];               /* service + parameters, or raw CAN payload */
     uint8_t  expect[8];           /* positive response prefix; data bytes follow */
     uint8_t  service;             /* request service (embedded one for raw frames) */
-    uint8_t  rsv[3];
+    uint8_t  before_count;        /* APK BeforeCommands, executed before tx */
+    uint8_t  after_count;         /* APK AfterCommands, deferred to next hdr change */
+    uint8_t  rsv;
+    vp_at_cmd_t before[VP_MAX_REQ_COMMANDS];
+    vp_at_cmd_t after[VP_MAX_REQ_COMMANDS];
 } vp_request_t;
 
 typedef struct {
@@ -182,7 +190,9 @@ typedef struct {
     uint32_t off_lut;
     uint32_t off_lut_entry;
     uint16_t min_req_ms;          /* scheduler lower bound between request starts */
-    uint16_t rsv;
+    char     check_connection[VP_PROFILE_CMD_CAP]; /* default 0100 */
+    char     tester_present[VP_PROFILE_CMD_CAP];   /* optional OBD tester-present command */
+    uint16_t tester_present_every_ms;              /* 0 = disabled */
 } vp_profile_t;
 
 #define VP__ASSERT(name, cond) typedef char vp__assert_##name[(cond) ? 1 : -1]
@@ -190,11 +200,11 @@ VP__ASSERT(insn,    sizeof(vp_rpn_insn_t) == 8);
 VP__ASSERT(lut,     sizeof(vp_rpn_lut_t) == 4);
 VP__ASSERT(lut_e,   sizeof(vp_rpn_lut_entry_t) == 12);
 VP__ASSERT(at,      sizeof(vp_at_cmd_t) == 16);
-VP__ASSERT(req,     sizeof(vp_request_t) == 32);
+VP__ASSERT(req,     sizeof(vp_request_t) == 160);
 VP__ASSERT(can,     sizeof(vp_can_rule_t) == 8);
 VP__ASSERT(src,     sizeof(vp_source_t) == 32);
 VP__ASSERT(sig,     sizeof(vp_signal_t) == 100);
-VP__ASSERT(profile, sizeof(vp_profile_t) == 192);
+VP__ASSERT(profile, sizeof(vp_profile_t) == 232);
 
 typedef struct {
     void *(*alloc)(void *ctx, size_t size);   /* 4-byte aligned; need not be zeroed */

@@ -6,8 +6,8 @@
  *   test_golden [catalog_dir] [golden_dir]
  *
  * Checked per profile, compiled with vp_validate_default_cfg():
- *  - init: the engine bring-up ATZ ATE0 ATL0 ATS1 ATH0 ATAT1 ATST<atst>
- *    ATSP<proto> ATSH<hdr> followed by the profile's bus.init;
+ *  - init: the engine bring-up ATZ ATE0 ATH1 ATS0 ATM0 ATAT1 ATAL
+ *    ATST<atst> ATSP<proto> ATSH<hdr> followed by the profile's bus.init;
  *  - requests: one entry per request source in signal/source order with
  *    sig, src, hdr, tx, class (signal rate) and the raw/rx/multi options;
  *  - gap_ms, requires, monitor, CAN rules (as a set) and drivetrain.
@@ -107,7 +107,7 @@ static int compiled_init(const vp_profile_t *p, char out[][24])
     char hdr[12];
     int n = 0;
     uint16_t i;
-    static const char *const fixed[] = { "ATZ", "ATE0", "ATL0", "ATS1", "ATH0", "ATAT1" };
+    static const char *const fixed[] = { "ATZ", "ATE0", "ATH1", "ATS0", "ATM0", "ATAT1", "ATAL" };
 
     for (i = 0; i < sizeof(fixed) / sizeof(fixed[0]); i++) snprintf(out[n++], 24, "%s", fixed[i]);
     snprintf(out[n++], 24, "ATST%02X", (unsigned)p->atst);

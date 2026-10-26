@@ -59,7 +59,8 @@ extern "C" {
 #define VP_MAX_LUTS           8
 #define VP_MAX_LUT_ENTRIES    16
 #define VP_MAX_GEARS          8
-#define VP_MAX_INIT_CMDS      8
+#define VP_MAX_INIT_CMDS      16
+#define VP_MAX_REQ_COMMANDS   4     /* APK request Before/AfterCommands per side */
 #define VP_MAX_DATA_LEN       64    /* response data bytes addressable by a formula */
 #define VP_MAX_EVERY_SIGNALS  2     /* rate "every" is inserted after every slot */
 #define VP_MAX_REQ_RATE_HZ    100   /* total request rate */
@@ -150,24 +151,34 @@ size_t vp_validate_json(const char *text, size_t len, const vp_validate_cfg_t *c
 typedef enum {
     VP_AT_CTX_ENGINE = 0,   /* commands the firmware itself generates */
     VP_AT_CTX_INIT   = 1,   /* extra commands listed in a profile's bus.init */
+    VP_AT_CTX_REQUEST = 2,  /* safe per-request BeforeCommands/AfterCommands */
 } vp_at_ctx_t;
 
 /*
  * AT whitelist: SH (whitelisted headers), CRA (reset or whitelisted
  * filter), CEA (off or one byte), CAF0, CAF1, ST hh (02..FF), SP h / SP Ah
  * (h = 0-9, A-C). VP_AT_CTX_ENGINE additionally accepts the fixed commands
- * the firmware itself sends: Z, E0, L0, S1, H0, H1, AT1, I, RV (link setup
- * and vehicle check) and MA, AR (monitor window). Everything else (PP, BRD,
- * BRT, WS, D, LP, MR, MT, SD, WM, KW, ...) and any non-AT command (STN
- * "ST..." extensions) is refused in both contexts. In VP_AT_CTX_INIT, CAF0
- * and CEA are refused too: they change the framing of every later request,
- * so the firmware only emits them around a single structured request; Z,
- * MA and the other firmware-only commands are refused there as well. The
+ * the firmware itself sends: Z, E0, L0, S1, S0, M0, AL, H0, H1, AT1, I, RV
+ * (link setup and vehicle check) and MA, AR (monitor window). Everything else (PP, BRD,
+ * BRT, WS, LP, MR, MT, SD, KW, ...) and any non-AT command (STN
+ * "ST..." extensions) is refused in both contexts. In VP_AT_CTX_INIT, reset/default
+ * commands Z, D, D0, common setup commands, and bounded legacy init commands
+ * (IB10, SW<hh>, IIA[<hh>], SI, FI, WM<hh...>, TAF1, CER) are allowed so a
+ * translated Car Scanner InitSequence can retain its original ordering; CAF0 and
+ * CEA remain refused because they change the framing of every later request. The
  * normalized command (upper case, no spaces/CR) is written to norm when it
  * is non-NULL. *why gets a short reason on refusal.
  */
 bool vp_at_check(const char *cmd, vp_at_ctx_t ctx, char *norm, size_t norm_cap,
                  const char **why);
+
+/* One narrowly scoped non-AT initialization frame used by Nissan Consult II
+ * profiles translated from Car Scanner. It is valid only in bus.init. */
+bool vp_init_raw_command(const char *cmd);
+
+/* Profile-only timing controls accepted in bus.init.  They are represented
+ * as strings to preserve the existing JSON format, but never go to ELM327. */
+bool vp_init_wait_ms(const char *token, uint16_t *out_ms);
 
 #ifdef __cplusplus
 }

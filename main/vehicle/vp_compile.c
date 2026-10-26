@@ -118,6 +118,10 @@ static void fill_header(vp_profile_t *p, const cJSON *root)
     p->hdr_functional = functional ? 1 : 0;
     p->atst = (uint8_t)jint(bus, "atst", VP_DEFAULT_ATST);
     p->gap_ms = (uint16_t)jint(bus, "gap_ms", VP_DEFAULT_GAP_MS);
+    copy_str(p->check_connection, sizeof(p->check_connection),
+             jstr(bus, "check_connection") ? jstr(bus, "check_connection") : "0100");
+    copy_str(p->tester_present, sizeof(p->tester_present), jstr(bus, "tester_present"));
+    p->tester_present_every_ms = (uint16_t)jint(bus, "tester_present_every_ms", 0);
 
     p->final_drive = jnum(dt, "fd", 0.0f);
     p->tire_m = jnum(dt, "tire_m", 0.0f);
@@ -490,6 +494,23 @@ static bool cstr_ok(const char *s, size_t cap)
 static bool request_ok(const vp_request_t *r)
 {
     vp_hdr_class_t hc = vp_classify_tx_id(r->hdr);
+    uint8_t side;
+    uint8_t i;
+
+    if (r->before_count > VP_MAX_REQ_COMMANDS || r->after_count > VP_MAX_REQ_COMMANDS ||
+        (r->rsv & (uint8_t)~VP_REQ_RSV_HDR_EXPLICIT) != 0) return false;
+    for (side = 0; side < 2; side++) {
+        const vp_at_cmd_t *cmds = side == 0 ? r->before : r->after;
+        uint8_t n = side == 0 ? r->before_count : r->after_count;
+        for (i = 0; i < n; i++) {
+            const char *why = NULL;
+            if (!cstr_ok(cmds[i].cmd, sizeof(cmds[i].cmd)) ||
+                !vp_at_check(cmds[i].cmd, VP_AT_CTX_REQUEST, NULL, 0, &why)) {
+                (void)why;
+                return false;
+            }
+        }
+    }
 
     if (r->tx_len == 0 || r->tx_len > 8 || r->expect_len == 0 || r->expect_len > 8) return false;
     if (hc == VP_HDR_INVALID) return false;
@@ -497,18 +518,19 @@ static bool request_ok(const vp_request_t *r)
     if (r->flags & VP_REQ_F_RX) {
         if (r->rx & VP_ID_29BIT) {
             if (((r->rx & VP_ID_MASK) & 0xFFFFFF00u) != 0x18DAF100u) return false;
-        } else if (!((r->rx >= 0x7E8u && r->rx <= 0x7EFu) || (r->rx >= 0x600u && r->rx <= 0x6FFu))) {
+        } else if (r->rx < 0x600u || r->rx > 0x7FFu || r->rx == 0x7DFu ||
+                   (r->rx >= 0x7E0u && r->rx <= 0x7E7u)) {
             return false;
         }
     }
     if (r->flags & VP_REQ_F_RAW) {
         vp_rawframe_t fr[2];
-        size_t nf = vp_rawframe_parse(r->tx, r->tx_len, fr), i;
+        size_t nf = vp_rawframe_parse(r->tx, r->tx_len, fr), j;
         bool found = false;
         if (nf == 0 || (r->flags & VP_REQ_F_CEA)) return false;
-        for (i = 0; i < nf; i++) {
-            uint8_t svc = r->tx[fr[i].off];
-            if (!vp_service_allowed(svc) || !vp_service_len_ok(svc, fr[i].len)) return false;
+        for (j = 0; j < nf; j++) {
+            uint8_t svc = r->tx[fr[j].off];
+            if (!vp_service_allowed(svc) || !vp_service_len_ok(svc, fr[j].len)) return false;
             if (svc == r->service) found = true;
         }
         if (!found) return false;

@@ -18,4 +18,5 @@ bool ra_compare(ra_case_t *c, const uint8_t *data, size_t len);
 void ra_observe(const ra_case_t *c, ra_observation_t *out);
 uint32_t ra_feed(ra_case_t *c, const uint8_t *data, size_t len);
 size_t ra_engine_size(void);
+size_t ra_rx_capacity(void);
 #endif

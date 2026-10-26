@@ -7,9 +7,33 @@ cleanups live in the git history.
 
 ---
 
+## Fix CAN Request Headers on ISO K-Line Protocols
+
+- Ordinary OBD requests on ISO 9141-2 / ISO KWP2000 no longer send CAN-style `ATSH` commands, including for imported profiles with an explicit `7E0`; they retain ELM327 native addressing and use `ATH0` to hide K-line response headers. Add a host regression test.
+
+## Fix Theme Video Stalls That Made Live Data Drop to Zero
+
+- Run theme-video SD reading and JPEG decoding below LVGL and OBD polling priority so both cores cannot be monopolized by video workers, which could stop UI handoff on one frame and let live signals become stale and render as the default `0`. Fullscreen boot video keeps its dedicated high-priority path.
+
 ## Increase the video JPEG frame limit
 
 - Raise the OBV1 / OBV2 JPEG frame limit from 48 KiB to 128 KiB and update the offline converter. Retain the OBV2 1.25 MiB one-second window plus wrap headroom and the OBV3 256 KiB combined-frame cap. Frames above the old limit require updated firmware; existing animations remain compatible.
+
+## Fix early boot-animation exit and missing sweep numbers
+
+- Skip expired intermediate OBV2 frames while retaining the first and last, instead of aborting after three consecutive late frames. Preserve the source timeline and keep real read/decode errors fatal. Add slow-decode, stalled-reader and decode-failure regressions.
+- Theme numeric labels, including custom fonts, share the same simulated 12 standard OBD signals as rules during the gauge sweep and restore live data afterward without overwriting it. Add stepped label-sweep, font and restoration regressions.
+
+## Fix excessive theme-video frame skipping and unnecessary alpha compositing
+
+- Play looping videos on the source timeline and cap FPS only when `target_fps` is explicitly set. Remove the default 24 fps ceiling and coarse frame-skipping tiers, recheck lateness after UI waits and ready display refresh as each frame is accepted. Keep fully opaque OBV3 frames in RGB565 while preserving real transparency and per-frame format changes; fix overlapping bytes during in-place alpha expansion. Add pacing, UI-wait, alpha-validation and frame-format regressions, plus diagnostics for decoder publication rate / cost and UI wait time.
+
+- Raise the core 0 SD reader to priority 5 so continuous LVGL redraws at priority 4 do not starve it. Use bulk file-descriptor `read` calls through a 16 KiB internal DMA read-ahead buffer that survives frame-padding skips, avoiding byte-by-byte stdio reads and repeated prefetch in the target newlib. Once a theme has started, resume on the next available frame after an underrun instead of repeatedly refilling a 400 ms watermark. Add slow-reader per-frame resume and cross-block read / seek regressions, plus logs for active SD throughput, average / maximum frame read time and UI frame handoff intervals.
+
+## Improve buffering and slow playback for looping theme videos
+
+- Increase looping theme-video prefetch from approximately 1.25 to 2.5 seconds and the ring ceiling from 1.25 to 2 MiB. Reserve PSRAM for both display buffers, the alpha plane and other UI work, shrinking the cache when memory is limited. Preserve the approximately 400 ms startup watermark and existing value-driven and OBV2 boot-animation policies.
+- Remove the five-second freeze during slow decoding and keep updating by skipping late frames on the source timeline. Add regressions for sustained slow playback, pacing recovery and ring memory budgets.
 
 ## Unify and validate firmware and Android releases
 

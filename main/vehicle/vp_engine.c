@@ -24,28 +24,33 @@
 #include "app_obd_dsp/signal_registry.h"
 #include "app_obd_dsp/signal_store.h"
 
-#define ENG_RX_CAP          512
-#define ENG_SCRATCH_CAP     256     /* parsed response bytes / reassembled payload */
+#define ENG_RX_CAP          5120
+#define ENG_SCRATCH_CAP     5120    /* parsed response bytes / reassembled payload */
+#define ENG_LINE_CAP        256     /* parsed bytes retained per response line */
 #define ENG_MAX_LINES       32
-#define ENG_STEPS           24
+#define ENG_STEPS           40
 #define ENG_CMD_CAP         20
+#define ENG_ISOTP_TIMEOUT   2500
+#define ENG_ISOTP_BLOCK_SIZE 8
 #if ENG_CMD_CAP < 14
 #error "state commands require prefix + 8 hex digits + NUL"
 #endif
 
-#define ENG_DEF_TIMEOUT     3000
+#define ENG_DEF_TIMEOUT     2500
 #define ENG_DEF_DETECT      2000
 #define ENG_DEF_LINK_HOLD   3000
 #define ENG_DEF_VBAT        5000
 #define ENG_DEF_HEAL        10000
 #define ENG_HEAL_RECONNECT  3       /* heals in a row before asking for a reconnect */
 #define ENG_AT_DELAY        30
+#define ENG_ELM_CHECK_DELAY 500
 #define ENG_DETECT_SETTLE   200
 #define ENG_DETECT_SP_DELAY 50
-#define ENG_DETECT_FALLBACK 6
-#define ENG_DETECT_LAST     12
-#define ENG_WARM_COUNT      3
+#define ENG_DETECT_ATTEMPTS 3
 #define ENG_WARM_DELAY      150
+#define ENG_STOPPED_DELAY   200
+#define ENG_STOPPED_RETRIES 1
+#define ENG_NISSAN_INIT_TIMEOUT 10000
 #define ENG_MA_STOP_MS      300
 #define ENG_CONT_WINDOW_MS  5000
 #define ENG_IDLE_MS         50
@@ -57,6 +62,17 @@
 #define ENG_ID_UNKNOWN      0xFFFFFFFFu   /* hdr / rx not known (never a valid id) */
 #define ENG_INDEX_NONE      0xFFu
 
+/* Default candidates for a normal ELM327.  Car Scanner's private protocol
+ * arrays are not recoverable with enough certainty from the shipped APK, so
+ * this is deliberately a firmware default rather than a claim about the
+ * app's exact private ordering.  Callers with stronger vehicle/adapter
+ * knowledge can provide an ordered list through vp_engine_cfg_t. */
+static const uint8_t k_detect_protocols[] = {
+    6, 7, 4, 5, 3, 1, 2, 8, 9, 10, 11
+};
+
+#define ENG_MAX_DETECT_PROTOCOLS 16
+
 #if VP_MAX_REQUESTS > 32
 #error "poll request mask requires VP_MAX_REQUESTS <= 32"
 #endif
@@ -64,8 +80,10 @@
 #define ENG_ST_UNKNOWN      (-2)
 #define ENG_CEA_OFF_VAL     0x100u        /* step value for "ATCEA" (off) */
 
-enum { K_AT = 0, K_INIT, K_STATE, K_DETECT, K_WARM, K_RV, K_REQ, K_MA };
-enum { ST_HDR = 0, ST_RX, ST_CEA, ST_CAF };
+enum { K_AT = 0, K_INIT, K_STATE, K_DETECT, K_WARM, K_TESTER, K_RV, K_REQ, K_MA,
+       K_REQ_AT,
+       K_ISO_FC, K_ISO_WAIT, K_DELAY, K_ELM_CHECK };
+enum { ST_HDR = 0, ST_RX, ST_CEA, ST_CAF, ST_CFC };
 enum { DONE_PROMPT = 0, DONE_TIMEOUT, DONE_FAIL };
 
 typedef struct {
@@ -75,6 +93,8 @@ typedef struct {
     uint16_t delay_ms;      /* pause after the response */
     uint16_t timeout_ms;    /* 0 = cfg.resp_timeout_ms */
     int16_t  req;           /* request index (K_REQ, K_STATE before a request), else -1 */
+    uint8_t  req_at_side;   /* 0 = BeforeCommands, 1 = deferred AfterCommands */
+    uint8_t  retry_count;   /* transient STOPPED retry count */
     uint32_t val;           /* state value (K_STATE), protocol (K_DETECT) */
 } eng_step_t;
 
@@ -124,7 +144,9 @@ struct vp_engine {
     uint8_t  link;
     uint8_t  run_proto;     /* protocol used for ATSP */
     uint8_t  det_proto;     /* detected this session (0 = none) */
-    uint8_t  detect_next;
+    uint8_t  detect_next;   /* current candidate index */
+    uint8_t  detect_attempt;
+    bool     skip_init_atz; /* adapter check already reset the ELM state */
     bool     mon_ok;
     bool     busy;
     bool     prompt;
@@ -144,10 +166,23 @@ struct vp_engine {
 
     /* what the adapter is believed to be set to */
     uint32_t hdr;
+    bool     hdr_explicit;
     uint32_t rx;            /* 0 = no filter */
     uint32_t base_rx;       /* filter set by bus.init, restored after rx requests */
     int16_t  cea;           /* ENG_CEA_OFF, 0..255, ENG_ST_UNKNOWN */
     int8_t   caf0;          /* 0 = CAF1, 1 = CAF0, ENG_ST_UNKNOWN */
+    int8_t   cfc0;          /* 0 = CFC1, 1 = CFC0, ENG_ST_UNKNOWN */
+
+    /* Manual ISO-TP response reassembly. */
+    bool     iso_active;
+    uint16_t iso_req;
+    uint16_t iso_total;
+    uint16_t iso_len;
+    uint8_t  iso_next_seq;
+    uint8_t  iso_block_count;
+    uint8_t  iso_block_size;
+    uint16_t iso_stmin_ms;
+    uint8_t  iso_payload[ENG_SCRATCH_CAP];
 
     /* polling rounds */
     uint8_t  round_req[VP_MAX_REQUESTS];
@@ -158,6 +193,9 @@ struct vp_engine {
     uint8_t  slot_req[1 + VP_MAX_EVERY_SIGNALS];
     uint8_t  slot_n;
     uint8_t  slot_pos;
+    int16_t  pending_after_req;
+    int16_t  chain_req;
+    bool     chain_failed;
     uint8_t  every_sig[VP_MAX_EVERY_SIGNALS];
     uint8_t  n_every;
     bool     req_sent;
@@ -178,6 +216,7 @@ struct vp_engine {
     uint32_t last_good_ms;  /* last good sample (self-heal) */
     uint32_t last_vbat_ms;
     uint32_t last_mon_ms;
+    uint32_t last_tester_ms;
     uint8_t  heal_count;
 
     /* derived signals */
@@ -195,7 +234,7 @@ struct vp_engine {
     eng_hold_t holds[VP_MAX_SOURCES];
     uint16_t   rx_len;
     char       rxbuf[ENG_RX_CAP + 1];
-    uint8_t    lines[ENG_SCRATCH_CAP];
+    uint8_t    lines[ENG_LINE_CAP];
     uint8_t    payload[ENG_SCRATCH_CAP];
 };
 
@@ -275,6 +314,33 @@ static uint32_t heal_after(const vp_engine_t *e)
     return e->cfg.heal_ms ? e->cfg.heal_ms : ENG_DEF_HEAL;
 }
 
+static bool detect_config_valid(const vp_engine_t *e)
+{
+    size_t n = e->cfg.detect_protocol_count;
+    size_t i;
+
+    if (!e->cfg.detect_protocols || n == 0 || n > ENG_MAX_DETECT_PROTOCOLS) return false;
+    for (i = 0; i < n; i++) {
+        if (e->cfg.detect_protocols[i] == 0 || e->cfg.detect_protocols[i] > 12) return false;
+    }
+    return true;
+}
+
+static size_t detect_count(const vp_engine_t *e)
+{
+    size_t def = sizeof(k_detect_protocols) / sizeof(k_detect_protocols[0]);
+
+    return detect_config_valid(e) ? e->cfg.detect_protocol_count : def;
+}
+
+static uint8_t detect_protocol(const vp_engine_t *e, size_t index)
+{
+    if (detect_config_valid(e) && index < e->cfg.detect_protocol_count) {
+        return e->cfg.detect_protocols[index];
+    }
+    return k_detect_protocols[index];
+}
+
 static bool mon_usable(const vp_engine_t *e)
 {
     return e->p->mon_mode != VP_MON_NONE && e->p->n_can > 0 && e->mon_ok;
@@ -340,6 +406,47 @@ static eng_step_t *q_push(vp_engine_t *e, uint8_t kind, const char *cmd, uint16_
     return s;
 }
 
+/* Insert an urgent continuation before steps already queued after the
+ * current command. ISO-TP flow control must run before restoring adapter
+ * framing or sending the next poll request. */
+static eng_step_t *q_push_front(vp_engine_t *e, uint8_t kind, const char *cmd,
+                                uint16_t delay_ms)
+{
+    eng_step_t *s;
+
+    if (e->q_n >= ENG_STEPS) {
+        elog(e, "step queue full, dropped %s", cmd);
+        return NULL;
+    }
+    e->q_head = (uint8_t)((e->q_head + ENG_STEPS - 1) % ENG_STEPS);
+    s = &e->q[e->q_head];
+    memset(s, 0, sizeof(*s));
+    for (size_t i = 0; i < sizeof(s->cmd) - 1 && cmd[i]; i++) {
+        s->cmd[i] = cmd[i];
+    }
+    s->kind = kind;
+    s->delay_ms = delay_ms;
+    s->req = -1;
+    e->q_n++;
+    return s;
+}
+
+static eng_step_t *push_init(vp_engine_t *e, const char *cmd, uint16_t delay_ms)
+{
+    const char *queued = cmd;
+    eng_step_t *s;
+
+    /* K-line response headers are not CAN address headers. Hide them in the
+     * adapter so response matching sees the OBD payload directly. */
+    if (e->run_proto >= 3 && e->run_proto <= 5 && !strcmp(cmd, "ATH1")) {
+        queued = "ATH0";
+    }
+    s = q_push(e, K_INIT, queued, delay_ms);
+
+    if (s && vp_init_raw_command(cmd)) s->timeout_ms = ENG_NISSAN_INIT_TIMEOUT;
+    return s;
+}
+
 static void q_pop(vp_engine_t *e, eng_step_t *out)
 {
     *out = e->q[e->q_head];
@@ -376,6 +483,10 @@ static void push_state(vp_engine_t *e, uint8_t st, uint32_t val, int16_t req)
             fmt_hex(c + 5, val & 0xFFu, 2);
         }
         break;
+    case ST_CFC:
+        c[0] = 'A'; c[1] = 'T'; c[2] = 'C'; c[3] = 'F'; c[4] = 'C';
+        c[5] = val ? '0' : '1'; c[6] = '\0';
+        break;
     default:
         c[0] = 'A'; c[1] = 'T';
         c[2] = 'C'; c[3] = 'A'; c[4] = 'F';
@@ -395,9 +506,10 @@ static void push_state(vp_engine_t *e, uint8_t st, uint32_t val, int16_t req)
 
 /*
  * One response line as bytes: 2-digit tokens (or compact even-length hex),
- * optional "N:" line number. Returns 1 with *n bytes, 0 when the line is not
- * a byte line (text such as NO DATA, a 3-digit byte count), -1 when the
- * scratch buffer is full.
+ * optional "N:" line number, and an optional leading CAN header emitted by
+ * ATH1 (for example "7E8 03 41 0C 0B B8" or "18DAF110 03410C0BB8").
+ * Returns 1 with *n bytes, 0 when the line is not a byte line (text such as
+ * NO DATA, a 3-digit byte count), -1 when the scratch buffer is full.
  */
 static int parse_byte_line(const char *s, size_t len, uint8_t *out, size_t cap, size_t *n,
                            bool *numbered)
@@ -413,6 +525,7 @@ static int parse_byte_line(const char *s, size_t len, uint8_t *out, size_t cap, 
         *numbered = true;
         i = j + 1;
     }
+    bool first_token = true;
     while (i < len) {
         size_t t0, tl, k;
         while (i < len && s[i] == ' ') i++;
@@ -420,6 +533,27 @@ static int parse_byte_line(const char *s, size_t len, uint8_t *out, size_t cap, 
         t0 = i;
         while (i < len && s[i] != ' ') i++;
         tl = i - t0;
+        if (first_token && (tl == 3 || tl == 8)) {
+            size_t next = i;
+            bool header = true;
+            while (next < len && s[next] == ' ') next++;
+            if (next < len) {
+                for (k = 0; k < tl; k++) {
+                    if (hexval(s[t0 + k]) < 0) {
+                        header = false;
+                        break;
+                    }
+                }
+                if (header) {
+                    /* A header is only unambiguous when payload follows it;
+                     * compact response bytes such as 410C0BB8 remain intact. */
+                    i = next;
+                    first_token = false;
+                    continue;
+                }
+            }
+        }
+        first_token = false;
         if (tl & 1u) return 0;
         /* Decode each nibble once. ELM responses commonly use compact
          * strings (e.g. 410C0BB8), so this removes a second full token scan. */
@@ -527,6 +661,175 @@ static bool resp_match(vp_engine_t *e, const uint8_t *exp, size_t elen, const ui
         }
     }
     return false;
+}
+
+/* Parse the current ELM response into byte lines.  The line scratch remains
+ * bounded because a CAN line is at most one frame; the assembled payload has
+ * the larger ISO-TP capacity above. */
+static size_t response_lines(vp_engine_t *e, eng_line_t *ln, size_t cap, bool *any_num)
+{
+    size_t nl = 0, used = 0;
+    const char *s = e->rxbuf;
+    const char *end = e->rxbuf + e->rx_len;
+
+    *any_num = false;
+    while (s < end && nl < cap) {
+        const char *le = s;
+        size_t got = 0;
+        bool num = false;
+        int r;
+
+        while (le < end && *le != '\r' && *le != '\n' && *le != '>') le++;
+        if (le > s) {
+            r = parse_byte_line(s, (size_t)(le - s), e->lines + used,
+                                sizeof(e->lines) - used, &got, &num);
+            if (r > 0) {
+                ln[nl].off = (uint16_t)used;
+                ln[nl].n = (uint8_t)(got > 255 ? 255 : got);
+                ln[nl].num = num;
+                *any_num |= num;
+                used += got;
+                nl++;
+            }
+        }
+        s = le + 1;
+        if (used >= sizeof(e->lines)) break;
+    }
+    return nl;
+}
+
+static void iso_reset(vp_engine_t *e)
+{
+    e->iso_active = false;
+    e->iso_req = 0;
+    e->iso_total = 0;
+    e->iso_len = 0;
+    e->iso_next_seq = 1;
+    e->iso_block_count = 0;
+    e->iso_block_size = ENG_ISOTP_BLOCK_SIZE;
+    e->iso_stmin_ms = 0;
+}
+
+/* A few adapters expose the ECU's ISO-TP flow-control frame while manual
+ * framing is active.  It is not needed for the normal fixed 30 08 00 path,
+ * but retaining it lets the receiver honor a smaller block size and keeps
+ * malformed flow-control records fail-closed. */
+static bool iso_flow_control(const vp_request_t *q, const uint8_t *frame, size_t n,
+                             uint8_t *block_size, uint16_t *stmin_ms)
+{
+    size_t pci = 0;
+    uint8_t st;
+
+    if ((q->flags & VP_REQ_F_CEA) && n > 0 && frame[0] == q->cea) pci = 1;
+    if (pci + 2 >= n || (frame[pci] >> 4) != 3) return false;
+    st = frame[pci + 2];
+    *block_size = frame[pci + 1];
+    if (st <= 0x7Fu) *stmin_ms = st;
+    else if (st >= 0xF1u && st <= 0xF9u) *stmin_ms = 1;
+    else return false;
+    return true;
+}
+
+/* Append one ISO-TP frame.  Returns false for malformed or out-of-order
+ * frames.  The first frame establishes the total application payload size;
+ * the data presented to vp_profile is the reassembled positive response,
+ * without PCI or extended-address bytes. */
+static bool iso_append_frame(vp_engine_t *e, const vp_request_t *q,
+                             const uint8_t *frame, size_t n, bool first)
+{
+    size_t pci = 0, data = 0, take = 0;
+    uint8_t type;
+    uint16_t total;
+
+    if ((q->flags & VP_REQ_F_CEA) && n > 0 && frame[0] == q->cea) pci = 1;
+    if (pci >= n) return false;
+    type = (uint8_t)(frame[pci] >> 4);
+    if (first) {
+        iso_reset(e);
+        if (type == 0) {
+            total = (uint16_t)(frame[pci] & 0x0Fu);
+            data = pci + 1;
+            e->iso_next_seq = 1;
+        } else if (type == 1 && pci + 1 < n) {
+            total = (uint16_t)(((frame[pci] & 0x0Fu) << 8) | frame[pci + 1]);
+            data = pci + 2;
+            e->iso_next_seq = 1;
+        } else {
+            return false;
+        }
+        if (total == 0 || total > sizeof(e->iso_payload) || data > n) return false;
+        e->iso_total = total;
+        e->iso_active = type == 1 && total > n - data;
+    } else {
+        if (!e->iso_active || type != 2 || (frame[pci] & 0x0Fu) != e->iso_next_seq) {
+            return false;
+        }
+        data = pci + 1;
+        if (data > n) return false;
+    }
+    take = n - data;
+    if (take > (size_t)e->iso_total - e->iso_len) take = (size_t)e->iso_total - e->iso_len;
+    if (take) memcpy(e->iso_payload + e->iso_len, frame + data, take);
+    e->iso_len = (uint16_t)(e->iso_len + take);
+    if (type == 2) {
+        e->iso_next_seq = (uint8_t)((e->iso_next_seq + 1u) & 0x0Fu);
+        e->iso_block_count++;
+    }
+    if (e->iso_len >= e->iso_total) e->iso_active = false;
+    return true;
+}
+
+/* Consume manual ISO-TP frames in the current response.  A normal ELM
+ * response returns false so the legacy matcher remains the fallback for
+ * numbered/CAF1 layouts. */
+static bool iso_consume(vp_engine_t *e, const vp_request_t *q, bool first,
+                        bool *complete, bool *need_fc)
+{
+    eng_line_t ln[ENG_MAX_LINES];
+    size_t nl, k;
+    bool any_num;
+    bool saw = false;
+
+    *complete = false;
+    *need_fc = false;
+    nl = response_lines(e, ln, ENG_MAX_LINES, &any_num);
+    if (any_num) return false;
+    for (k = 0; k < nl; k++) {
+        const uint8_t *frame = e->lines + ln[k].off;
+        size_t n = ln[k].n;
+        uint8_t type;
+        size_t pci = ((q->flags & VP_REQ_F_CEA) && n > 0 && frame[0] == q->cea) ? 1 : 0;
+        uint8_t block_size;
+        uint16_t stmin_ms;
+
+        if (pci >= n) continue;
+        type = (uint8_t)(frame[pci] >> 4);
+        if (type == 3) {
+            if (!iso_flow_control(q, frame, n, &block_size, &stmin_ms)) return false;
+            e->iso_block_size = block_size;
+            e->iso_stmin_ms = stmin_ms;
+            continue;
+        }
+        if (first && !saw) {
+            if (type != 0 && type != 1) continue;
+            if (!iso_append_frame(e, q, frame, n, true)) return false;
+            saw = true;
+        } else if (!first && !saw) {
+            if (type != 2) continue;
+            if (!iso_append_frame(e, q, frame, n, false)) return false;
+            saw = true;
+        } else if (type == 2) {
+            if (!iso_append_frame(e, q, frame, n, false)) return false;
+        }
+        if (e->iso_len >= e->iso_total) {
+            *complete = true;
+            break;
+        }
+    }
+    if (!saw) return false;
+    *need_fc = !*complete && e->iso_active && e->iso_block_size != 0 &&
+               e->iso_block_count >= e->iso_block_size;
+    return true;
 }
 
 typedef struct {
@@ -966,12 +1269,9 @@ static void req_index_append(vp_engine_t *e, uint16_t r, uint16_t si)
     e->req_tail[r] = source;
 }
 
-static void req_done(vp_engine_t *e, int r, bool answered, uint32_t now)
+static void req_complete(vp_engine_t *e, int r, bool match, const uint8_t *d,
+                         size_t n, uint32_t now)
 {
-    const vp_request_t *q = &e->req[r];
-    const uint8_t *d = NULL;
-    size_t n = 0;
-    bool match = answered && resp_match(e, q->expect, q->expect_len, &d, &n);
     uint8_t source;
 
     if (match) e->st.rx_ok++;
@@ -991,6 +1291,57 @@ static void req_done(vp_engine_t *e, int r, bool answered, uint32_t now)
             sig_fail(e, i, now);
         }
     }
+}
+
+static void req_done(vp_engine_t *e, int r, bool answered, uint32_t now)
+{
+    const vp_request_t *q = &e->req[r];
+    const uint8_t *d = NULL;
+    size_t n = 0;
+    bool match = answered && resp_match(e, q->expect, q->expect_len, &d, &n);
+
+    req_complete(e, r, match, d, n, now);
+}
+
+static void iso_complete(vp_engine_t *e, int r, uint32_t now)
+{
+    const vp_request_t *q = &e->req[r];
+    const uint8_t *d = NULL;
+    size_t n = 0;
+    bool match = try_match(e->iso_payload, e->iso_len, q->expect, q->expect_len, &d, &n);
+
+    req_complete(e, r, match, d, n, now);
+    iso_reset(e);
+}
+
+static void iso_fail(vp_engine_t *e, int r, uint32_t now)
+{
+    req_complete(e, r, false, NULL, 0, now);
+    iso_reset(e);
+}
+
+static bool push_iso_flow_control(vp_engine_t *e, int r)
+{
+    eng_step_t *s;
+
+    e->iso_req = (uint16_t)r;
+    e->iso_block_count = 0;
+    s = q_push_front(e, K_ISO_FC, "300800", 0);
+    if (!s) return false;
+    s->req = (int16_t)r;
+    s->timeout_ms = ENG_ISOTP_TIMEOUT;
+    return true;
+}
+
+static bool push_iso_wait(vp_engine_t *e, int r)
+{
+    eng_step_t *w = q_push_front(e, K_ISO_WAIT, "", 0);
+
+    if (!w) return false;
+    w->req = (int16_t)r;
+    w->timeout_ms = ENG_ISOTP_TIMEOUT;
+    w->delay_ms = e->iso_stmin_ms;
+    return true;
 }
 
 static void can_frame(vp_engine_t *e, uint32_t id, const uint8_t *d, size_t n, uint32_t now)
@@ -1115,15 +1466,253 @@ static void rv_done(vp_engine_t *e)
 /* bring-up                                                            */
 /* ------------------------------------------------------------------ */
 
+static bool init_has_exact(const vp_profile_t *p, const vp_at_cmd_t *init,
+                           const char *want)
+{
+    uint16_t i;
+    for (i = 0; i < p->n_init; i++) {
+        if (!strcmp(init[i].cmd, want)) return true;
+    }
+    return false;
+}
+
+static bool init_has_prefix(const vp_profile_t *p, const vp_at_cmd_t *init,
+                            const char *prefix)
+{
+    uint16_t i;
+    size_t n = strlen(prefix);
+    for (i = 0; i < p->n_init; i++) {
+        if (!strncmp(init[i].cmd, prefix, n)) return true;
+    }
+    return false;
+}
+
+static bool init_has_adaptive_timing(const vp_profile_t *p,
+                                     const vp_at_cmd_t *init)
+{
+    uint16_t i;
+    for (i = 0; i < p->n_init; i++) {
+        const char *s = init[i].cmd;
+        if (!strncmp(s, "ATAT", 4) && s[4] >= '0' && s[4] <= '2' && s[5] == '\0') {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool init_has_reset(const vp_profile_t *p, const vp_at_cmd_t *init)
+{
+    return init_has_exact(p, init, "ATZ") ||
+           init_has_exact(p, init, "ATD") ||
+           init_has_exact(p, init, "ATD0");
+}
+
+static bool init_is_common_command(const char *cmd)
+{
+    return !strcmp(cmd, "ATZ") || !strcmp(cmd, "ATD") || !strcmp(cmd, "ATD0") ||
+           !strcmp(cmd, "ATE0") || !strcmp(cmd, "ATH1") || !strcmp(cmd, "ATH0") ||
+           !strcmp(cmd, "ATS0") || !strcmp(cmd, "ATM0") ||
+           !strcmp(cmd, "ATAL") || !strncmp(cmd, "ATSP", 4) ||
+           (!strncmp(cmd, "ATAT", 4) && cmd[4] >= '0' && cmd[4] <= '2' &&
+            cmd[5] == '\0');
+}
+
+static bool init_has_common_command(const vp_profile_t *p,
+                                    const vp_at_cmd_t *init)
+{
+    uint16_t i;
+
+    for (i = 0; i < p->n_init; i++) {
+        if (init_is_common_command(init[i].cmd)) return true;
+    }
+    return false;
+}
+
+static const char *init_find_exact(const vp_profile_t *p,
+                                   const vp_at_cmd_t *init,
+                                   const char *want)
+{
+    uint16_t i;
+
+    for (i = 0; i < p->n_init; i++) {
+        if (!strcmp(init[i].cmd, want)) return init[i].cmd;
+    }
+    return NULL;
+}
+
+static const char *init_find_prefix(const vp_profile_t *p,
+                                    const vp_at_cmd_t *init,
+                                    const char *prefix)
+{
+    uint16_t i;
+
+    for (i = 0; i < p->n_init; i++) {
+        if (!strncmp(init[i].cmd, prefix, strlen(prefix))) return init[i].cmd;
+    }
+    return NULL;
+}
+
+static const char *init_find_adaptive_timing(const vp_profile_t *p,
+                                             const vp_at_cmd_t *init)
+{
+    uint16_t i;
+
+    for (i = 0; i < p->n_init; i++) {
+        if (!strncmp(init[i].cmd, "ATAT", 4) && init[i].cmd[4] >= '0' &&
+            init[i].cmd[4] <= '2' && init[i].cmd[5] == '\0') {
+            return init[i].cmd;
+        }
+    }
+    return NULL;
+}
+
+/* A profile owns the whole bring-up only when it carries the same common
+ * sequence shape as Car Scanner.  A lone ATZ/ATD is still a profile hint,
+ * not proof that the translated sequence is complete. */
+static bool init_has_complete_sequence(const vp_profile_t *p,
+                                       const vp_at_cmd_t *init)
+{
+    uint16_t i;
+    uint8_t step = 0;
+    bool reset = false;
+
+    for (i = 0; i < p->n_init; i++) {
+        const char *cmd = init[i].cmd;
+
+        if (!strcmp(cmd, "ATZ") || !strcmp(cmd, "ATD") || !strcmp(cmd, "ATD0")) {
+            if (step != 0) return false;
+            reset = true;
+            continue;
+        }
+        if (!reset || step >= 7) {
+            if (step >= 7) continue;
+            return false;
+        }
+        if (step == 0 && !strcmp(cmd, "ATE0")) step++;
+        else if (step == 1 && !strcmp(cmd, "ATH1")) step++;
+        else if (step == 2 && !strncmp(cmd, "ATSP", 4)) step++;
+        else if (step == 3 && !strcmp(cmd, "ATM0")) step++;
+        else if (step == 4 && !strcmp(cmd, "ATS0")) step++;
+        else if (step == 5 && !strncmp(cmd, "ATAT", 4) &&
+                 cmd[4] >= '0' && cmd[4] <= '2' && cmd[5] == '\0') step++;
+        else if (step == 6 && !strcmp(cmd, "ATAL")) step++;
+        else return false;
+    }
+    return reset && step == 7;
+}
+
+static void queue_profile_init(vp_engine_t *e, const vp_profile_t *p,
+                               const vp_at_cmd_t *init)
+{
+    uint16_t i;
+    bool default_commands_queued = false;
+    bool profile_has_sequence = init_has_reset(p, init) || init_has_common_command(p, init);
+    bool has_atd = init_has_exact(p, init, "ATD");
+    bool has_atd0 = init_has_exact(p, init, "ATD0");
+
+    for (i = 0; i < p->n_init; i++) {
+        uint16_t wait_ms;
+        bool reset = !strcmp(init[i].cmd, "ATZ") ||
+                     !strcmp(init[i].cmd, "ATD") ||
+                     !strcmp(init[i].cmd, "ATD0");
+
+        if (profile_has_sequence && !default_commands_queued && !reset) {
+            if (!has_atd) push_init(e, "ATD", ENG_AT_DELAY);
+            if (!has_atd0) push_init(e, "ATD0", ENG_AT_DELAY);
+            default_commands_queued = true;
+        }
+        if (vp_init_wait_ms(init[i].cmd, &wait_ms)) {
+            q_push(e, K_DELAY, "", wait_ms);
+        } else if (e->skip_init_atz && !strcmp(init[i].cmd, "ATZ")) {
+            /* CheckIsELM327 already sent ATZ and verified the prompt. */
+            continue;
+        } else {
+            push_init(e, init[i].cmd, ENG_AT_DELAY);
+        }
+    }
+    if (profile_has_sequence && !default_commands_queued) {
+        if (!has_atd) push_init(e, "ATD", ENG_AT_DELAY);
+        if (!has_atd0) push_init(e, "ATD0", ENG_AT_DELAY);
+    }
+}
+
+/* Complete a translated profile around the same common setup that Car
+ * Scanner uses.  A profile may contain only a reset, or may have ATSP and
+ * custom commands in an older/legacy order.  Keep the profile's concrete
+ * variants, but put the shared setup in a deterministic order and retain
+ * all non-common commands after it. */
+static void queue_partial_init(vp_engine_t *e, const vp_profile_t *p,
+                               const vp_at_cmd_t *init)
+{
+    static const char *const k_common[] = {
+        "ATE0", "ATH1", "ATSP", "ATM0", "ATS0", "ATAT1", "ATAL"
+    };
+    const char *cmd;
+    char generated[ENG_CMD_CAP];
+    uint16_t i;
+
+    /* Preserve one or more explicit reset commands, including the APK's
+     * ATD/ATD0 pair.  Profiles without a reset retain the historical ATZ
+     * fallback before the common setup. */
+    for (i = 0; i < p->n_init; i++) {
+        if (!strcmp(init[i].cmd, "ATZ") || !strcmp(init[i].cmd, "ATD") ||
+            !strcmp(init[i].cmd, "ATD0")) {
+            if (!(e->skip_init_atz && !strcmp(init[i].cmd, "ATZ"))) {
+                push_init(e, init[i].cmd, ENG_AT_DELAY);
+            }
+        }
+    }
+    if (!init_has_reset(p, init) && !e->skip_init_atz) {
+        q_push(e, K_AT, "ATZ", ENG_AT_DELAY);
+    }
+    if (!init_has_exact(p, init, "ATD")) {
+        push_init(e, "ATD", ENG_AT_DELAY);
+    }
+    if (!init_has_exact(p, init, "ATD0")) {
+        push_init(e, "ATD0", ENG_AT_DELAY);
+    }
+
+    for (i = 0; i < sizeof(k_common) / sizeof(k_common[0]); i++) {
+        if (!strcmp(k_common[i], "ATSP")) {
+            cmd = init_find_prefix(p, init, "ATSP");
+            if (!cmd) {
+                snprintf(generated, sizeof(generated), "ATSP%X",
+                         (unsigned)e->run_proto);
+                cmd = generated;
+            }
+        } else if (!strcmp(k_common[i], "ATAT1")) {
+            cmd = init_find_adaptive_timing(p, init);
+            if (!cmd) cmd = k_common[i];
+        } else {
+            cmd = init_find_exact(p, init, k_common[i]);
+            if (!cmd) cmd = k_common[i];
+        }
+        push_init(e, cmd, ENG_AT_DELAY);
+    }
+
+    for (i = 0; i < p->n_init; i++) {
+        uint16_t wait_ms;
+        if (vp_init_wait_ms(init[i].cmd, &wait_ms)) {
+            q_push(e, K_DELAY, "", wait_ms);
+        } else if (!init_is_common_command(init[i].cmd)) {
+            push_init(e, init[i].cmd, ENG_AT_DELAY);
+        }
+    }
+}
+
 static void start_init(vp_engine_t *e)
 {
     const vp_profile_t *p = e->p;
     const vp_at_cmd_t *init = vp_profile_init(p);
-    static const char *const k_base[] = { "ATZ", "ATE0", "ATL0", "ATS1", "ATH0", "ATAT1" };
+    static const char *const k_base[] = {
+        "ATZ", "ATD", "ATD0", "ATE0", "ATH1", "ATSP", "ATM0", "ATS0", "ATAT1", "ATAL"
+    };
     char c[ENG_CMD_CAP];
     eng_step_t *s;
     size_t k;
-    uint16_t i;
+    bool profile_has_reset = init_has_reset(p, init);
+    bool profile_has_common = init_has_common_command(p, init);
+    bool profile_owns_sequence = init_has_complete_sequence(p, init);
 
     e->phase = VP_ENGINE_PH_INIT;
     e->st.phase = e->phase;
@@ -1134,16 +1723,58 @@ static void start_init(vp_engine_t *e)
     e->base_rx = 0;
     e->cea = ENG_CEA_OFF;
     e->caf0 = 0;
-    for (k = 0; k < sizeof(k_base) / sizeof(k_base[0]); k++) q_push(e, K_AT, k_base[k], ENG_AT_DELAY);
-    snprintf(c, sizeof(c), "ATST%02X", (unsigned)(p->atst >= 2 ? p->atst : VP_DEFAULT_ATST));
-    q_push(e, K_AT, c, ENG_AT_DELAY);
-    snprintf(c, sizeof(c), "ATSP%X", (unsigned)e->run_proto);
-    q_push(e, K_AT, c, ENG_AT_DELAY);
-    push_state(e, ST_HDR, p->hdr, -1);
-    if (e->q_n) e->q[(e->q_head + e->q_n - 1) % ENG_STEPS].delay_ms = ENG_AT_DELAY;
-    for (i = 0; i < p->n_init; i++) q_push(e, K_INIT, init[i].cmd, ENG_AT_DELAY);
-    for (k = 0; k < ENG_WARM_COUNT; k++) q_push(e, K_WARM, "0100", ENG_WARM_DELAY);
-    s = q_push(e, K_RV, "ATRV", 0);
+    /* ELM327 resets with automatic flow control enabled. */
+    e->cfc0 = 0;
+
+    if (profile_owns_sequence) {
+        queue_profile_init(e, p, init);
+    } else if (profile_has_reset || profile_has_common) {
+        queue_partial_init(e, p, init);
+    } else if (!profile_owns_sequence) {
+        for (k = 0; k < sizeof(k_base) / sizeof(k_base[0]); k++) {
+            if (!strcmp(k_base[k], "ATSP")) {
+                if (init_has_prefix(p, init, "ATSP")) continue;
+                snprintf(c, sizeof(c), "ATSP%X", (unsigned)e->run_proto);
+                q_push(e, K_AT, c, ENG_AT_DELAY);
+            } else if (!strcmp(k_base[k], "ATZ") && e->skip_init_atz) {
+                continue;
+            } else if (!strcmp(k_base[k], "ATD") || !strcmp(k_base[k], "ATD0")) {
+                if (!init_has_exact(p, init, k_base[k])) {
+                    push_init(e, k_base[k], ENG_AT_DELAY);
+                }
+            } else if (!strcmp(k_base[k], "ATAT1")) {
+                if (!init_has_adaptive_timing(p, init)) {
+                    q_push(e, K_AT, k_base[k], ENG_AT_DELAY);
+                }
+            } else if (!strcmp(k_base[k], "ATH1") &&
+                       e->run_proto >= 3 && e->run_proto <= 5) {
+                q_push(e, K_AT, "ATH0", ENG_AT_DELAY);
+            } else if (!init_has_exact(p, init, k_base[k])) {
+                q_push(e, K_AT, k_base[k], ENG_AT_DELAY);
+            }
+        }
+    }
+
+    /* Profiles without a reset keep the existing common setup, then append
+     * their extras.  Complete reset-bearing sequences were sent verbatim;
+     * partial reset-bearing sequences were normalized above. */
+    if (!profile_owns_sequence && !profile_has_reset && !profile_has_common) {
+        queue_profile_init(e, p, init);
+    }
+
+    /* Complete profile sequences can bypass the common setup queue. Reassert
+     * header-off after profile init so K-line replies remain unprefixed. */
+    if (e->run_proto >= 3 && e->run_proto <= 5) {
+        q_push(e, K_AT, "ATH0", ENG_AT_DELAY);
+    }
+
+    /* The flag applies to this bring-up only.  A later self-heal must retain
+     * the established reset semantics instead of silently omitting ATZ. */
+    e->skip_init_atz = false;
+
+    /* CheckConnectionCommand is a single request in the APK's generic path;
+     * voltage is a periodic measurement, not part of link initialization. */
+    s = q_push(e, K_WARM, p->check_connection[0] ? p->check_connection : "0100", ENG_WARM_DELAY);
     (void)s;
     elog(e, "init %s proto %u", p->id, (unsigned)e->run_proto);
 }
@@ -1152,47 +1783,115 @@ static void start_detect(vp_engine_t *e)
 {
     e->phase = VP_ENGINE_PH_DETECT;
     e->st.phase = e->phase;
-    e->detect_next = 1;
+    e->detect_next = 0;
+    e->detect_attempt = 0;
+    e->run_proto = 0;
     q_clear(e);
-    q_push(e, K_AT, "ATZ", ENG_AT_DELAY);
-    q_push(e, K_AT, "ATE0", ENG_AT_DELAY);
-    q_push(e, K_AT, "ATAT1", ENG_AT_DELAY);
-    q_push(e, K_AT, "ATST19", ENG_DETECT_SETTLE);
-    elog(e, "protocol auto-detect");
+    elog(e, "protocol auto-detect across %u candidates",
+         (unsigned)detect_count(e));
+}
+
+/* Car Scanner performs an adapter-level check before ECU protocol probing.
+ * The ELM prompt is the only positive signal here; an ECU request such as
+ * 0100 must not be used to decide whether the BLE adapter is an ELM327. */
+static void elm_check_done(vp_engine_t *e, uint32_t now, bool answered)
+{
+    uint8_t pr;
+
+    if (!answered || strchr(e->rxbuf, '>') == NULL) {
+        elog(e, "ELM327 check failed");
+        q_clear(e);
+        e->phase = VP_ENGINE_PH_RECONNECT;
+        e->st.phase = e->phase;
+        if (e->sink.reconnect) {
+            e->sink.reconnect(e->sink.ctx);
+        } else {
+            e->phase = VP_ENGINE_PH_DOWN;
+            e->st.phase = e->phase;
+        }
+        return;
+    }
+
+    elog(e, "ELM327 check passed");
+    e->skip_init_atz = true;
+    pr = e->p->proto ? e->p->proto : (e->det_proto ? e->det_proto : e->cfg.proto);
+    if (pr == 0) {
+        start_detect(e);
+    } else {
+        e->run_proto = pr;
+        start_init(e);
+    }
+    (void)now;
 }
 
 static void detect_next(vp_engine_t *e)
 {
-    char c[ENG_CMD_CAP];
     eng_step_t *s;
+    char c[ENG_CMD_CAP];
+    uint8_t proto;
 
-    if (e->detect_next > ENG_DETECT_LAST) {
-        elog(e, "no protocol answered, using %d", ENG_DETECT_FALLBACK);
-        e->run_proto = ENG_DETECT_FALLBACK;
+    if (e->detect_attempt >= ENG_DETECT_ATTEMPTS) {
+        e->detect_next++;
+        e->detect_attempt = 0;
+    }
+    if (e->detect_next >= detect_count(e)) {
+        /* Keep the adapter in auto mode if every explicit candidate failed. */
+        elog(e, "ATSP0 did not answer, continuing in auto mode");
+        e->run_proto = 0;
         start_init(e);
         return;
     }
-    snprintf(c, sizeof(c), "ATSP%X", (unsigned)e->detect_next);
-    q_push(e, K_AT, c, ENG_DETECT_SP_DELAY);
-    s = q_push(e, K_DETECT, "010C", 0);
+    proto = detect_protocol(e, e->detect_next);
+    e->run_proto = proto;
+    e->detect_attempt++;
+    q_push(e, K_AT, "ATZ", ENG_AT_DELAY);
+    push_init(e, "ATD", ENG_AT_DELAY);
+    push_init(e, "ATD0", ENG_AT_DELAY);
+    q_push(e, K_AT, "ATE0", ENG_AT_DELAY);
+    q_push(e, K_AT, (proto >= 3 && proto <= 5) ? "ATH0" : "ATH1", ENG_AT_DELAY);
+    snprintf(c, sizeof(c), "ATSP%X", (unsigned)proto);
+    q_push(e, K_AT, c, ENG_AT_DELAY);
+    q_push(e, K_AT, "ATM0", ENG_AT_DELAY);
+    q_push(e, K_AT, "ATS0", ENG_AT_DELAY);
+    q_push(e, K_AT, "ATAT1", ENG_DETECT_SETTLE);
+    q_push(e, K_AT, "ATAL", ENG_AT_DELAY);
+    s = q_push(e, K_DETECT, e->p->check_connection[0] ? e->p->check_connection : "0100", 0);
     if (s) {
         s->timeout_ms = e->cfg.detect_timeout_ms ? e->cfg.detect_timeout_ms : ENG_DEF_DETECT;
-        s->val = e->detect_next;
+        s->val = 0;
     }
-    e->detect_next++;
+    elog(e, "probe protocol %u attempt %u/%u", (unsigned)proto,
+         (unsigned)e->detect_attempt, (unsigned)ENG_DETECT_ATTEMPTS);
 }
 
 static void detect_done(vp_engine_t *e, const eng_step_t *s, bool answered)
 {
-    static const uint8_t k_exp[2] = { 0x41, 0x0C };
+    uint8_t expect[8];
+    size_t expect_len = 0;
     const uint8_t *d;
     size_t n;
 
-    if (!answered || !resp_match(e, k_exp, sizeof(k_exp), &d, &n)) return;
-    e->det_proto = (uint8_t)s->val;
-    e->run_proto = (uint8_t)s->val;
-    elog(e, "protocol %u detected", (unsigned)s->val);
-    if (e->sink.on_proto_detected) e->sink.on_proto_detected(e->sink.ctx, (uint8_t)s->val);
+    (void)s;
+    /* Protocol probing must use the profile's connection check.  Hard-coding
+     * 010C makes a valid adapter look absent for profiles that intentionally
+     * omit the optional RPM PID.  Positive OBD responses retain the request
+     * parameters (0100 -> 4100, 0902 -> 4902, 22F190 -> 62F190). */
+    if (!vp_parse_hex_bytes(e->p->check_connection[0] ? e->p->check_connection : "0100",
+                            false, expect, sizeof(expect), &expect_len)) {
+        q_clear(e);
+        detect_next(e);
+        return;
+    }
+    expect[0] = (uint8_t)(expect[0] + 0x40u);
+    if (!answered || !resp_match(e, expect, expect_len, &d, &n)) {
+        /* APK retries each candidate before moving to the next protocol. */
+        q_clear(e);
+        detect_next(e);
+        return;
+    }
+    e->det_proto = e->run_proto;
+    if (e->sink.on_proto_detected) e->sink.on_proto_detected(e->sink.ctx, e->det_proto);
+    elog(e, "protocol %u accepted", (unsigned)e->det_proto);
     start_init(e);
 }
 
@@ -1200,15 +1899,38 @@ static void init_cmd_done(vp_engine_t *e, const eng_step_t *s, bool ok)
 {
     const char *c = s->cmd;
     uint32_t id = 0;
+    char *end = NULL;
+    unsigned long proto;
 
     if (!strncmp(c, "ATSH", 4)) {
         e->hdr = (ok && vp_classify_tx_header(c + 4, &id) != VP_HDR_INVALID) ? id : ENG_ID_UNKNOWN;
     } else if (!strncmp(c, "ATCRA", 5)) {
-        if (c[5] == '\0' || !vp_parse_rx_filter(c + 5, &id)) id = 0;
-        e->base_rx = id;
-        e->rx = ok ? id : ENG_ID_UNKNOWN;
+        if (ok && (c[5] == '\0' || vp_parse_rx_filter(c + 5, &id))) {
+            e->base_rx = id;
+            e->rx = id;
+        } else {
+            e->rx = ENG_ID_UNKNOWN;
+        }
+    } else if (!strncmp(c, "ATSP", 4)) {
+        proto = strtoul(c + 4, &end, 16);
+        if (ok && end && *end == '\0' && proto <= 12) e->run_proto = (uint8_t)proto;
+    } else if (!strcmp(c, "ATCAF0")) {
+        e->caf0 = ok ? 1 : ENG_ST_UNKNOWN;
     } else if (!strcmp(c, "ATCAF1")) {
         e->caf0 = ok ? 0 : ENG_ST_UNKNOWN;
+    } else if (!strncmp(c, "ATCEA", 5)) {
+        if (!ok) {
+            e->cea = ENG_ST_UNKNOWN;
+        } else if (c[5] == '\0') {
+            e->cea = ENG_CEA_OFF;
+        } else {
+            proto = strtoul(c + 5, &end, 16);
+            e->cea = (end && *end == '\0' && proto <= 0xFFu) ? (int16_t)proto : ENG_ST_UNKNOWN;
+        }
+    } else if (!strcmp(c, "ATCFC0")) {
+        e->cfc0 = ok ? 1 : ENG_ST_UNKNOWN;
+    } else if (!strcmp(c, "ATCFC1")) {
+        e->cfc0 = ok ? 0 : ENG_ST_UNKNOWN;
     }
 }
 
@@ -1221,6 +1943,7 @@ static void enter_run(vp_engine_t *e, uint32_t now)
     e->last_good_ms = now;
     e->last_vbat_ms = now;
     e->last_mon_ms = now;
+    e->last_tester_ms = now;
     e->in_round = false;
     e->slot_n = e->slot_pos = 0;
     for (i = 0; i < e->p->n_sig; i++) {
@@ -1238,6 +1961,12 @@ static bool poll_candidate(const vp_engine_t *e, int i)
 {
     if (!sig_driven(e, i) || e->sig[i].rate == VP_RATE_EVERY) return false;
     return cur_src(e, i)->kind == VP_SRC_REQ;
+}
+
+static bool request_header_same(const vp_request_t *a, const vp_request_t *b)
+{
+    return a->hdr == b->hdr &&
+           ((a->rsv ^ b->rsv) & VP_REQ_RSV_HDR_EXPLICIT) == 0;
 }
 
 static bool sig_due(const vp_engine_t *e, int i, uint32_t now)
@@ -1321,20 +2050,42 @@ static bool push_state_for(vp_engine_t *e, uint8_t r)
     const vp_request_t *q = &e->req[r];
     uint32_t want_rx = (q->flags & VP_REQ_F_RX) ? q->rx : e->base_rx;
     int16_t want_cea = (q->flags & VP_REQ_F_CEA) ? (int16_t)q->cea : (int16_t)ENG_CEA_OFF;
-    int8_t want_caf0 = (q->flags & VP_REQ_F_RAW) ? 1 : 0;
+    int8_t want_caf0 = (q->flags & (VP_REQ_F_RAW | VP_REQ_F_MULTI)) ? 1 : 0;
+    int8_t want_cfc0 = (q->flags & VP_REQ_F_MULTI) ? 1 : 0;
+    bool defer_same_header = e->pending_after_req >= 0 &&
+                             request_header_same(&e->req[e->pending_after_req], q);
 
-    if (e->hdr != q->hdr) {
-        push_state(e, ST_HDR, q->hdr, r);
-    } else if (e->rx != want_rx) {
-        push_state(e, ST_RX, want_rx, r);
-    } else if (e->cea != want_cea) {
-        push_state(e, ST_CEA, want_cea == ENG_CEA_OFF ? ENG_CEA_OFF_VAL : (uint32_t)want_cea, r);
-    } else if (e->caf0 != want_caf0) {
-        push_state(e, ST_CAF, (uint32_t)want_caf0, r);
-    } else {
-        return false;
+    if (e->hdr != q->hdr || e->hdr_explicit !=
+        ((q->rsv & VP_REQ_RSV_HDR_EXPLICIT) != 0)) {
+        /* ISO 9141 / KWP use protocol-specific K-line addressing, not CAN
+         * headers. Imported profiles may explicitly carry a CAN-style 7E0;
+         * keep native ELM addressing for these protocols regardless. */
+        if (e->run_proto >= 3 && e->run_proto <= 5) {
+            e->hdr = q->hdr;
+            e->hdr_explicit = (q->rsv & VP_REQ_RSV_HDR_EXPLICIT) != 0;
+        } else {
+            push_state(e, ST_HDR, q->hdr, r);
+            return true;
+        }
     }
-    return true;
+    if (e->rx != want_rx && ((q->flags & VP_REQ_F_RX) || !defer_same_header)) {
+        push_state(e, ST_RX, want_rx, r);
+        return true;
+    }
+    if (e->cea != want_cea && ((q->flags & VP_REQ_F_CEA) || !defer_same_header)) {
+        push_state(e, ST_CEA, want_cea == ENG_CEA_OFF ? ENG_CEA_OFF_VAL : (uint32_t)want_cea, r);
+        return true;
+    }
+    if (e->caf0 != want_caf0 &&
+        ((q->flags & (VP_REQ_F_RAW | VP_REQ_F_MULTI)) || !defer_same_header)) {
+        push_state(e, ST_CAF, (uint32_t)want_caf0, r);
+        return true;
+    }
+    if (e->cfc0 != want_cfc0 && ((q->flags & VP_REQ_F_MULTI) || !defer_same_header)) {
+        push_state(e, ST_CFC, (uint32_t)want_cfc0, r);
+        return true;
+    }
+    return false;
 }
 
 static void push_req(vp_engine_t *e, uint8_t r)
@@ -1355,11 +2106,62 @@ static void push_req(vp_engine_t *e, uint8_t r)
     if (s) s->req = r;
 }
 
+static void push_req_at(vp_engine_t *e, uint8_t r, const vp_at_cmd_t *cmd, uint8_t side)
+{
+    eng_step_t *s = q_push(e, K_REQ_AT, cmd->cmd, 0);
+
+    if (!s) return;
+    s->req = r;
+    s->req_at_side = side;
+}
+
+/* Car Scanner retains a request's AfterCommands until the next header change. */
+static bool push_pending_after(vp_engine_t *e, uint8_t next_req)
+{
+    int16_t pending = e->pending_after_req;
+    const vp_request_t *q;
+    uint8_t i;
+
+    if (pending < 0 || pending >= e->p->n_req ||
+        request_header_same(&e->req[pending], &e->req[next_req])) {
+        return false;
+    }
+    q = &e->req[pending];
+    for (i = 0; i < q->after_count; i++) {
+        push_req_at(e, (uint8_t)pending, &q->after[i], 1);
+    }
+    e->pending_after_req = -1;
+    return q->after_count != 0;
+}
+
+static void push_req_before(vp_engine_t *e, uint8_t r)
+{
+    const vp_request_t *q = &e->req[r];
+    uint8_t i;
+
+    e->chain_req = r;
+    e->chain_failed = false;
+    for (i = 0; i < q->before_count; i++) {
+        push_req_at(e, r, &q->before[i], 0);
+    }
+}
+
+/* Car Scanner restores automatic CAN formatting and adapter-managed flow
+ * control when a manually reassembled response is complete. Queue these
+ * changes immediately so the next request cannot observe the temporary
+ * CAF0/CFC0 state, even when it uses the same header. */
+static void restore_iso_state(vp_engine_t *e)
+{
+    if (e->caf0 != 0) push_state(e, ST_CAF, 0, -1);
+    if (e->cfc0 != 0) push_state(e, ST_CFC, 0, -1);
+}
+
 static void start_monitor(vp_engine_t *e, uint32_t now)
 {
     e->last_mon_ms = now;
     e->st.mon_windows++;
     if (e->caf0 != 0) push_state(e, ST_CAF, 0, -1);
+    if (e->cfc0 != 0) push_state(e, ST_CFC, 0, -1);
     if (e->cea != ENG_CEA_OFF) push_state(e, ST_CEA, ENG_CEA_OFF_VAL, -1);
     if (e->rx != 0) push_state(e, ST_RX, 0, -1);
     q_push(e, K_AT, "ATH1", 0);
@@ -1405,8 +2207,12 @@ static void plan_run(vp_engine_t *e, uint32_t now)
     for (guard = 0; guard < 4; guard++) {
         if (e->slot_pos < e->slot_n) {
             uint8_t r = e->slot_req[e->slot_pos];
+
+            if (push_pending_after(e, r)) return;
             if (!push_state_for(e, r)) {
+                push_req_before(e, r);
                 push_req(e, r);
+                if (e->req[r].after_count) e->pending_after_req = (int16_t)r;
                 e->slot_pos++;
             }
             return;
@@ -1424,6 +2230,12 @@ static void plan_run(vp_engine_t *e, uint32_t now)
         }
         if (mon_due(e, now)) {
             start_monitor(e, now);
+            return;
+        }
+        if (e->p->tester_present[0] && e->p->tester_present_every_ms &&
+            elapsed(now, e->last_tester_ms, e->p->tester_present_every_ms)) {
+            e->last_tester_ms = now;
+            q_push(e, K_TESTER, e->p->tester_present, 0);
             return;
         }
         start_round(e, now);
@@ -1461,6 +2273,62 @@ static bool resp_ok(const vp_engine_t *e)
     return strstr(e->rxbuf, "OK") != NULL;
 }
 
+static bool resp_stopped(const vp_engine_t *e)
+{
+    return strstr(e->rxbuf, "STOPPED") != NULL;
+}
+
+static bool resp_transient(const vp_engine_t *e)
+{
+    return resp_stopped(e) || strstr(e->rxbuf, "BUS INIT: ERROR") != NULL ||
+           strstr(e->rxbuf, "BUFFER FULL") != NULL;
+}
+
+static bool transient_retryable(uint8_t kind)
+{
+    return kind == K_AT || kind == K_INIT || kind == K_STATE ||
+           kind == K_DETECT || kind == K_WARM || kind == K_REQ_AT ||
+           kind == K_REQ || kind == K_ELM_CHECK;
+}
+
+static bool retry_transient(vp_engine_t *e, const eng_step_t *s)
+{
+    eng_step_t *retry;
+
+    if (!transient_retryable(s->kind) || s->retry_count >= ENG_STOPPED_RETRIES ||
+        !resp_transient(e)) return false;
+    retry = q_push_front(e, s->kind, s->cmd, ENG_STOPPED_DELAY);
+    if (!retry) return false;
+    retry->st = s->st;
+    retry->timeout_ms = s->timeout_ms;
+    retry->req = s->req;
+    retry->req_at_side = s->req_at_side;
+    retry->val = s->val;
+    retry->retry_count = (uint8_t)(s->retry_count + 1u);
+    elog(e, "%s transient adapter error, retry in %u ms", s->cmd,
+         (unsigned)ENG_STOPPED_DELAY);
+    return true;
+}
+
+static bool raw_init_response_ok(const vp_engine_t *e)
+{
+    static const char *const k_errors[] = {
+        "ERROR", "NO DATA", "STOPPED", "BUFFER FULL", "BUS INIT: ERROR", "?", NULL
+    };
+    size_t i;
+
+    for (i = 0; k_errors[i]; i++) {
+        if (strstr(e->rxbuf, k_errors[i])) return false;
+    }
+    return true;
+}
+
+static bool init_response_ok(const vp_engine_t *e, const eng_step_t *s, bool answered)
+{
+    if (!answered) return false;
+    return vp_init_raw_command(s->cmd) ? raw_init_response_ok(e) : resp_ok(e);
+}
+
 static void step_done(vp_engine_t *e, uint32_t now, int how)
 {
     eng_step_t s = e->cur;
@@ -1469,16 +2337,33 @@ static void step_done(vp_engine_t *e, uint32_t now, int how)
     e->busy = false;
     e->rxbuf[e->rx_len] = '\0';
     if (how == DONE_TIMEOUT && s.kind != K_MA) e->st.timeouts++;
+    /* Car Scanner retries bounded transient adapter errors after 200 ms. Do
+     * this before interpreting the response so detection retries the same
+     * protocol candidate and request retries do not repeat BeforeCommands. */
+    if (answered && retry_transient(e, &s)) {
+        e->next_ms = now + ENG_STOPPED_DELAY;
+        e->rx_len = 0;
+        e->rxbuf[0] = '\0';
+        e->prompt = false;
+        return;
+    }
     switch (s.kind) {
     case K_STATE: {
         bool ok = answered && resp_ok(e);
         switch (s.st) {
-        case ST_HDR: e->hdr = ok ? s.val : ENG_ID_UNKNOWN; break;
+        case ST_HDR:
+            e->hdr = ok ? s.val : ENG_ID_UNKNOWN;
+            if (ok) {
+                e->hdr_explicit = s.req >= 0 &&
+                    (e->req[s.req].rsv & VP_REQ_RSV_HDR_EXPLICIT) != 0;
+            }
+            break;
         case ST_RX:  e->rx = ok ? s.val : ENG_ID_UNKNOWN; break;
         case ST_CEA:
             e->cea = ok ? (s.val == ENG_CEA_OFF_VAL ? (int16_t)ENG_CEA_OFF : (int16_t)s.val)
                         : (int16_t)ENG_ST_UNKNOWN;
             break;
+        case ST_CFC:  e->cfc0 = ok ? (int8_t)s.val : (int8_t)ENG_ST_UNKNOWN; break;
         default:     e->caf0 = ok ? (int8_t)s.val : (int8_t)ENG_ST_UNKNOWN; break;
         }
         if (!ok) {
@@ -1492,20 +2377,97 @@ static void step_done(vp_engine_t *e, uint32_t now, int how)
         break;
     }
     case K_INIT:
-        init_cmd_done(e, &s, answered && resp_ok(e));
+        init_cmd_done(e, &s, init_response_ok(e, &s, answered));
         break;
+    case K_REQ_AT: {
+        bool ok = answered && resp_ok(e);
+
+        init_cmd_done(e, &s, ok);
+        if (!ok && s.req_at_side == 0 && s.req == e->chain_req) {
+            e->chain_failed = true;
+        }
+        break;
+    }
     case K_AT:
+        /* Protocol probes are queued as K_AT so they use the firmware-owned
+         * setup whitelist; retain the selected ATSP value for the probe and
+         * the subsequent init sequence. */
+        init_cmd_done(e, &s, answered && resp_ok(e));
         if (!strcmp(s.cmd, "ATAR")) e->rx = answered && resp_ok(e) ? 0 : ENG_ID_UNKNOWN;
         break;
     case K_DETECT:
         detect_done(e, &s, answered);
         break;
+    case K_ELM_CHECK:
+        elm_check_done(e, now, answered);
+        break;
     case K_RV:
         if (answered) rv_done(e);
         break;
-    case K_REQ:
-        req_done(e, s.req, answered, now);
+    case K_TESTER:
+        /* The keep-alive response is intentionally not decoded.  Any prompt
+         * proves the adapter accepted the command; the next poll remains the
+         * source of ECU data and link health. */
         break;
+    case K_REQ:
+        if (answered && (e->req[s.req].flags & VP_REQ_F_MULTI)) {
+            bool complete = false;
+            bool need_fc = false;
+            bool iso = iso_consume(e, &e->req[s.req], true, &complete, &need_fc);
+            if (iso && complete) {
+                iso_complete(e, s.req, now);
+                restore_iso_state(e);
+            } else if (iso && push_iso_flow_control(e, s.req)) {
+                /* The initial First Frame is retained in iso_payload; the
+                 * next step waits for Consecutive Frames after 30 08 00. */
+                (void)need_fc;
+            } else {
+                req_done(e, s.req, answered, now);
+                iso_reset(e);
+                restore_iso_state(e);
+            }
+        } else {
+            req_done(e, s.req, answered, now);
+            iso_reset(e);
+        }
+        /* A failed BeforeCommands chain is drained as synthetic failures so
+         * the queue remains ordered. It never sent the request, therefore its
+         * deferred AfterCommands must not leak into the next header switch. */
+        if (e->chain_failed && s.req == e->chain_req) e->pending_after_req = -1;
+        if (s.req == e->chain_req) e->chain_req = -1;
+        break;
+    case K_ISO_FC:
+        if (!answered || strstr(e->rxbuf, "?") != NULL) {
+            iso_fail(e, s.req, now);
+            restore_iso_state(e);
+        } else if (!push_iso_wait(e, s.req)) {
+            iso_fail(e, s.req, now);
+            restore_iso_state(e);
+        }
+        break;
+    case K_ISO_WAIT: {
+        const vp_request_t *q = &e->req[s.req];
+        bool complete = false;
+        bool need_fc = false;
+        bool iso = answered && iso_consume(e, q, false, &complete, &need_fc);
+        if (!iso) {
+            elog(e, "iso wait rejected: %s", e->rxbuf);
+            iso_fail(e, s.req, now);
+            restore_iso_state(e);
+        } else if (complete) {
+            iso_complete(e, s.req, now);
+            restore_iso_state(e);
+        } else if (need_fc) {
+            if (!push_iso_flow_control(e, s.req)) {
+                iso_fail(e, s.req, now);
+                restore_iso_state(e);
+            }
+        } else if (!push_iso_wait(e, s.req)) {
+            iso_fail(e, s.req, now);
+            restore_iso_state(e);
+        }
+        break;
+    }
     case K_MA:
         ma_done(e, now);
         break;
@@ -1522,7 +2484,23 @@ static void step_send(vp_engine_t *e, const eng_step_t *s, uint32_t now)
 {
     char norm[VP_AT_MAX_LEN + 1];
     const char *cmd = s->cmd;
-    bool is_at = s->kind != K_REQ && s->kind != K_DETECT && s->kind != K_WARM;
+    bool is_at = s->kind != K_REQ && s->kind != K_DETECT && s->kind != K_WARM &&
+                 s->kind != K_TESTER &&
+                 s->kind != K_ISO_FC && s->kind != K_ISO_WAIT && s->kind != K_DELAY &&
+                 !(s->kind == K_INIT && vp_init_raw_command(s->cmd));
+
+    /* A failed BeforeCommand invalidates the complete request chain. Drain
+     * remaining before commands and the request itself without transmitting. */
+    if ((s->kind == K_REQ || (s->kind == K_REQ_AT && s->req_at_side == 0)) &&
+        s->req == e->chain_req && e->chain_failed) {
+        e->cur = *s;
+        e->busy = true;
+        e->rx_len = 0;
+        e->rxbuf[0] = '\0';
+        e->prompt = false;
+        step_done(e, now, DONE_FAIL);
+        return;
+    }
 
     e->cur = *s;
     e->rx_len = 0;
@@ -1532,7 +2510,9 @@ static void step_send(vp_engine_t *e, const eng_step_t *s, uint32_t now)
     e->sent_ms = now;
     if (is_at) {
         const char *why = NULL;
-        if (!vp_at_check(s->cmd, VP_AT_CTX_ENGINE, norm, sizeof(norm), &why)) {
+        vp_at_ctx_t ctx = s->kind == K_REQ_AT ? VP_AT_CTX_REQUEST :
+                           (s->kind == K_INIT ? VP_AT_CTX_INIT : VP_AT_CTX_ENGINE);
+        if (!vp_at_check(s->cmd, ctx, norm, sizeof(norm), &why)) {
             elog(e, "AT refused: %s (%s)", s->cmd, why ? why : "?");
             step_done(e, now, DONE_FAIL);
             return;
@@ -1550,6 +2530,7 @@ static void step_send(vp_engine_t *e, const eng_step_t *s, uint32_t now)
         e->ma_refused = false;
         e->ma_end_ms = now + w;
     }
+    if (s->kind == K_ISO_WAIT) return;
     e->st.tx_cmds++;
     if (!e->sink.send(e->sink.ctx, cmd)) {
         elog(e, "send failed: %s", cmd);
@@ -1652,9 +2633,14 @@ static void reset_runtime(vp_engine_t *e, uint32_t now)
     e->base_rx = 0;
     e->cea = ENG_ST_UNKNOWN;
     e->caf0 = ENG_ST_UNKNOWN;
+    e->cfc0 = ENG_ST_UNKNOWN;
+    iso_reset(e);
     e->in_round = false;
     e->round_n = e->round_pos = 0;
     e->slot_n = e->slot_pos = 0;
+    e->pending_after_req = -1;
+    e->chain_req = -1;
+    e->chain_failed = false;
     e->round_no = 0;
     e->req_sent = false;
     e->mon_ok = true;
@@ -1775,20 +2761,16 @@ void vp_engine_destroy(vp_engine_t *e)
 void vp_engine_link_up(vp_engine_t *e)
 {
     uint32_t now;
-    uint8_t pr;
 
     if (!e) return;
     now = e->sink.now_ms(e->sink.ctx);
     reset_runtime(e, now);
     set_link(e, SIG_LINK_NO_DATA);
     if (e->sink.on_elm_link) e->sink.on_elm_link(e->sink.ctx, true);
-    pr = e->p->proto ? e->p->proto : (e->det_proto ? e->det_proto : e->cfg.proto);
-    if (pr == 0) {
-        start_detect(e);
-    } else {
-        e->run_proto = pr;
-        start_init(e);
-    }
+    e->phase = VP_ENGINE_PH_CHECK;
+    e->st.phase = e->phase;
+    q_push(e, K_DELAY, "", ENG_ELM_CHECK_DELAY);
+    q_push(e, K_ELM_CHECK, "ATZ", 0);
 }
 
 void vp_engine_link_down(vp_engine_t *e)
@@ -1867,11 +2849,15 @@ uint32_t vp_engine_run(vp_engine_t *e)
             plan(e, now);
             continue;
         }
-        if (e->q[e->q_head].kind == K_REQ && e->req_sent &&
+        if ((e->q[e->q_head].kind == K_REQ || e->q[e->q_head].kind == K_ISO_FC) && e->req_sent &&
             !elapsed(now, e->last_req_ms, e->p->min_req_ms)) {
             return cap_wait(e->p->min_req_ms - (now - e->last_req_ms));
         }
         q_pop(e, &s);
+        if (s.kind == K_DELAY) {
+            e->next_ms = now + s.delay_ms;
+            continue;
+        }
         step_send(e, &s, now);
     }
     return 1;

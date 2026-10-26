@@ -119,6 +119,7 @@ and auto-detects when neither is available. To lock a vehicle to a specific prot
 such as Jeep/BMW protocol 7 or BMW protocol 6, set `bus.proto` explicitly. Without
 `bus`, the other defaults are header `7E0`, `ATST=0x19` and a 30 ms request gap. Inherited standard requests use the
 vehicle's `bus.hdr`; special headers remain configurable through each `src.hdr`.
+For ISO 9141-2 / ISO KWP2000 (protocols 3–5), ordinary OBD requests retain the ELM327's native K-line addressing. Even if an imported profile contains CAN-style `bus.hdr` / `src.hdr` values such as `7E0`, the engine does not send `ATSH`; it uses `ATH0` to hide K-line response headers rather than parsing them as CAN headers.
 Drivetrain ratios and ratio-derived `obd.gear` are not inherited: declare a direct gear
 source or supply the vehicle's own `drivetrain`. Automatic completion does not imply
 ECU support for a PID; unavailable values still follow existing failure rules and
