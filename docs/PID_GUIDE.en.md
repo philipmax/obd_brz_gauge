@@ -75,12 +75,11 @@ disable a signal, add this entry to `signals`:
 
 Disabled entries allow only `id`, `disabled` and `notes`, and are excluded from polling.
 For fully custom requests or pure CAN monitoring, set root `"defaults": "none"`;
-`signals` must then be a nonempty array. When `bus.proto` is omitted, the engine reuses
-a saved or already-detected protocol and auto-detects if neither is available. Set
-`bus.proto` explicitly to lock a special vehicle protocol. Without `bus`, the other
+`signals` must then be a nonempty array. When `bus.proto` is 0 or omitted, a manually selected device protocol takes precedence. With `0 - Automatic`, detection results are cached only for the current session and do not overwrite the NVS selection. Sustained decode failures trigger another probe; an explicit `bus.proto` remains locked. Existing nonzero settings saved by older firmware cannot be distinguished from manual choices: select `0 - Automatic` once after upgrading. Without `bus`, the other
 defaults are header `7E0`, `ATST=0x19` and a 30 ms request gap. Inherited standard requests use the
 vehicle's `bus.hdr`; special headers remain configurable through each `src.hdr`.
-ISO 9141-2 / ISO KWP2000 (protocols 3–5) are an exception: these K-line protocols do not use CAN request headers. Even if imported data contains `7E0`, runtime ignores it and uses `ATH0` to receive responses.
+On J1850 / ISO 9141-2 / ISO KWP2000 (protocols 1–5), ordinary OBD requests retain the ELM327's native addressing. CAN-style `bus.hdr` / `src.hdr` values such as `7E0` do not cause `ATSH` commands; `ATH0` hides response headers. Protocols 7/9 map standard OBD request headers `7DF` and `7E0`–`7E7` to their 29-bit functional/physical equivalents; existing 29-bit headers are retained. CAN responses support compact `ATH1 + ATS0` output and 29-bit headers printed as separate bytes.
+An imported `ATSP0` does not overwrite an already selected concrete protocol. After adapter auto mode (`ATSP0` / `ATSPAh`), `ATDPN` confirms the actual protocol before polling. A rejected protocol-selection command cannot make a reply on the previous protocol count as a successful candidate. On protocols 7/9, standard receive filters `7E8`–`7EF` are also mapped to 29-bit addresses; native 29-bit physical requests support Mode 01 functional fallback. Ordinary request/setup timeouts also interrupt and wait for `>`; BLE write failures reconnect before another command can extend a partial line.
 Drivetrain ratios and ratio-derived `obd.gear` are not inherited: declare a direct gear
 source or supply the vehicle's own `drivetrain`. Automatic completion does not imply
 ECU support for a PID; unavailable values still follow existing failure rules and

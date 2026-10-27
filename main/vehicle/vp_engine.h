@@ -30,19 +30,28 @@
  *    profile commands;
  *  - protocol auto-detect probes the supported ELM protocol numbers in a
  *    deterministic order and reuses the accepted protocol on reconnect;
+ *    Auto re-probes after sustained decode failures and retains the user's
+ *    Automatic selection instead of persisting a detected value as a lock;
+ *    ATSP0 in profile init retains an already selected concrete protocol;
+ *    otherwise ATDPN resolves adapter-selected protocols before polling;
  *  - rounds: the current request of every due signal (round / slow every
  *    div rounds / period_ms), each distinct request once, in signal order;
  *    "every" requests run before each slot's regular request to minimize
  *    their latency; gap_ms after each slot;
- *  - a Mode 01 NRC 0x11 / 0x12 on physical 11-bit CAN retries that request
- *    once on functional header 7DF;
+ *  - standard 11-bit OBD request addresses are mapped to their 29-bit
+ *    equivalents on protocols 7/9, together with standard response filters;
+ *    legacy protocols 1..5 keep native addressing;
+ *  - a Mode 01 NRC 0x11 / 0x12 on a standard physical CAN address retries
+ *    once on the protocol's functional OBD address;
  *    on_demand is polled like round;
  *  - ATSH / ATCRA / ATCEA / ATCAF0 are sent only when the adapter state
  *    differs from what the next request needs (lazy restore);
- *  - monitor probe windows (ATH1 ATMA ... CR, ATAR) after a round when
+ *  - monitor probe windows (ATS1 ATH1 ATMA ... CR, ATAR, ATH0 ATS0) after a round when
  *    every_ms has elapsed; continuous mode re-enters ATMA every 5 s;
  *  - NO DATA, ?, STOPPED, CAN ERROR, negative responses and timeouts are
  *    sample failures; fail_after failures move to the next source;
+ *    timed-out steps interrupt and drain to '>' before queued work resumes;
+ *    a failed transport write requests reconnect before sending another line;
  *  - obd.gear derive/fallback "ratio" from rpm and speed with hysteresis;
  *  - sys.obd_link: 1 from link_up, 2 right before the first decoded write,
  *    back to 1 after link_hold_ms without a decode, 0 on link_down;
@@ -87,7 +96,7 @@ typedef struct {
     void     (*on_voltage)(void *ctx, float volts);
     void     (*on_elm_link)(void *ctx, bool up);
     /* Optional (may be NULL). */
-    void     (*on_proto_detected)(void *ctx, uint8_t proto); /* concrete detector result; caller owns persistence */
+    void     (*on_proto_detected)(void *ctx, uint8_t proto); /* session result; must not overwrite user's Auto selection */
     void     (*reconnect)(void *ctx);                        /* drop and reconnect the transport */
     void     (*log)(void *ctx, const char *msg);
 } vp_engine_sink_t;
@@ -97,7 +106,7 @@ typedef struct {
     const uint8_t *detect_protocols; /* optional caller-owned ATSP candidates; NULL = engine default */
     uint8_t  detect_protocol_count;  /* number of entries in detect_protocols */
     uint16_t resp_timeout_ms;    /* 0 = 2500 */
-    uint16_t detect_timeout_ms;  /* 0 = 2000 (adapter auto-detect check) */
+    uint16_t detect_timeout_ms;  /* connection probe/warm check; 0 = protocol default (2/5/10/30 s) */
     uint16_t link_hold_ms;       /* 0 = 3000 */
     uint16_t vbat_every_ms;      /* ATRV period, 0 = 5000 */
     uint16_t heal_ms;            /* 0 = 10000 */

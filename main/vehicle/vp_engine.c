@@ -38,6 +38,8 @@
 
 #define ENG_DEF_TIMEOUT     2500
 #define ENG_DEF_DETECT      2000
+#define ENG_SLOW_INIT_TIMEOUT 10000
+#define ENG_FAST_INIT_TIMEOUT 5000
 #define ENG_DRAIN_TIMEOUT   1500
 #define ENG_DEF_LINK_HOLD   3000
 #define ENG_DEF_VBAT        5000
@@ -83,7 +85,7 @@ static const uint8_t k_detect_protocols[] = {
 
 enum { K_AT = 0, K_INIT, K_STATE, K_DETECT, K_DRAIN, K_WARM, K_TESTER, K_RV, K_REQ, K_MA,
        K_REQ_AT,
-       K_ISO_FC, K_ISO_WAIT, K_DELAY, K_ELM_CHECK };
+       K_ISO_FC, K_ISO_WAIT, K_DELAY, K_ELM_CHECK, K_PROTOCOL };
 enum { ST_HDR = 0, ST_RX, ST_CEA, ST_CAF, ST_CFC };
 enum { DONE_PROMPT = 0, DONE_TIMEOUT, DONE_FAIL };
 
@@ -302,6 +304,44 @@ static uint32_t resp_timeout(const vp_engine_t *e)
     return e->cfg.resp_timeout_ms ? e->cfg.resp_timeout_ms : ENG_DEF_TIMEOUT;
 }
 
+/* Slow K-line initiation alone takes longer than the normal CAN deadline.
+ * A caller-supplied detection deadline remains authoritative for tests and
+ * adapters with known timing. */
+static uint16_t connection_timeout(const vp_engine_t *e)
+{
+    if (e->cfg.detect_timeout_ms) return e->cfg.detect_timeout_ms;
+    if (e->run_proto == 3 || e->run_proto == 4) return ENG_SLOW_INIT_TIMEOUT;
+    if (e->run_proto == 5) return ENG_FAST_INIT_TIMEOUT;
+    if (e->run_proto == 0) return 30000; /* ELM's complete automatic search */
+    return ENG_DEF_DETECT;
+}
+
+static bool legacy_obd_protocol(const vp_engine_t *e)
+{
+    return e->run_proto >= 1 && e->run_proto <= 5;
+}
+
+static uint32_t request_header(const vp_engine_t *e, uint32_t hdr)
+{
+    if (e->run_proto == 7 || e->run_proto == 9) {
+        /* Standard OBD addresses in profiles are usually written as 11-bit
+         * ids. Retain their meaning on a detected 29-bit ISO 15765 bus. */
+        if (hdr == 0x7DFu) return VP_ID_29BIT | 0x18DB33F1u;
+        if (hdr >= 0x7E0u && hdr <= 0x7E7u) {
+            return VP_ID_29BIT | 0x18DA10F1u | ((hdr - 0x7E0u) << 8);
+        }
+    }
+    return hdr;
+}
+
+static uint32_t response_filter(const vp_engine_t *e, uint32_t rx)
+{
+    if ((e->run_proto == 7 || e->run_proto == 9) && rx >= 0x7E8u && rx <= 0x7EFu) {
+        return VP_ID_29BIT | (0x18DAF110u + rx - 0x7E8u);
+    }
+    return rx;
+}
+
 static uint32_t link_hold(const vp_engine_t *e)
 {
     return e->cfg.link_hold_ms ? e->cfg.link_hold_ms : ENG_DEF_LINK_HOLD;
@@ -438,10 +478,19 @@ static eng_step_t *push_init(vp_engine_t *e, const char *cmd, uint16_t delay_ms)
 {
     const char *queued = cmd;
     eng_step_t *s;
+    char selected_proto[8];
 
-    /* K-line response headers are not CAN address headers. Hide them in the
+    if (legacy_obd_protocol(e) && !strncmp(cmd, "ATSH", 4)) return NULL;
+    /* ATSP0 in a translated profile means automatic protocol selection.
+     * Keep a concrete protocol already selected by the detector/user instead
+     * of undoing it during the second bring-up. */
+    if (!strcmp(cmd, "ATSP0") && e->run_proto != 0) {
+        snprintf(selected_proto, sizeof(selected_proto), "ATSP%X", (unsigned)e->run_proto);
+        queued = selected_proto;
+    }
+    /* Legacy OBD response headers are not CAN address headers. Hide them in the
      * adapter so response matching sees the OBD payload directly. */
-    if (e->run_proto >= 3 && e->run_proto <= 5 && !strcmp(cmd, "ATH1")) {
+    if (legacy_obd_protocol(e) && !strcmp(cmd, "ATH1")) {
         queued = "ATH0";
     }
     s = q_push(e, K_INIT, queued, delay_ms);
@@ -510,7 +559,7 @@ static void push_state(vp_engine_t *e, uint8_t st, uint32_t val, int16_t req)
 /*
  * One response line as bytes: 2-digit tokens (or compact even-length hex),
  * optional "N:" line number, and an optional leading CAN header emitted by
- * ATH1 (for example "7E8 03 41 0C 0B B8" or "18DAF110 03410C0BB8").
+ * ATH1, including ATS0 compact ids and 29-bit ids printed as four bytes.
  * Returns 1 with *n bytes, 0 when the line is not a byte line (text such as
  * NO DATA, a 3-digit byte count), -1 when the scratch buffer is full.
  */
@@ -518,6 +567,7 @@ static int parse_byte_line(const char *s, size_t len, uint8_t *out, size_t cap, 
                            bool *numbered)
 {
     size_t i = 0, cnt = 0, j;
+    bool header_consumed = false;
 
     *numbered = false;
     *n = 0;
@@ -528,7 +578,26 @@ static int parse_byte_line(const char *s, size_t len, uint8_t *out, size_t cap, 
         *numbered = true;
         i = j + 1;
     }
-    bool first_token = true;
+    if (!*numbered) {
+        char id[9];
+        size_t pos = i, digits = 0;
+        uint32_t rx_id;
+        /* ELM prints 29-bit OBD response ids either as four bytes or one
+         * token; ATS0 also joins the id directly to the ISO-TP data. The
+         * diagnostic response range is unambiguous with headerless payloads. */
+        while (pos < len && digits < 8) {
+            if (s[pos] == ' ') { pos++; continue; }
+            if (hexval(s[pos]) < 0) break;
+            id[digits++] = s[pos++];
+        }
+        id[digits] = '\0';
+        if (digits == 8 && pos < len && vp_parse_rx_filter(id, &rx_id) &&
+            (rx_id & VP_ID_29BIT)) {
+            i = pos;
+            header_consumed = true;
+        }
+    }
+    bool first_token = !header_consumed;
     while (i < len) {
         size_t t0, tl, k;
         while (i < len && s[i] == ' ') i++;
@@ -536,17 +605,35 @@ static int parse_byte_line(const char *s, size_t len, uint8_t *out, size_t cap, 
         t0 = i;
         while (i < len && s[i] != ' ') i++;
         tl = i - t0;
-        if (first_token && (tl == 3 || tl == 8)) {
+        if (first_token && !*numbered && tl > 3 && (tl & 1u)) {
+            unsigned id = 0;
+            for (k = 0; k < 3; k++) {
+                int h = hexval(s[t0 + k]);
+                if (h < 0) return 0;
+                id = (id << 4) | (unsigned)h;
+            }
+            if (id > 0x7FFu) return 0;
+            /* A compact 11-bit id has three nibbles, so its length cannot
+             * be confused with a headerless sequence of complete bytes. */
+            t0 += 3;
+            tl -= 3;
+            first_token = false;
+        }
+        if (first_token && !*numbered && (tl == 3 || tl == 8)) {
             size_t next = i;
             bool header = true;
+            uint32_t id = 0;
             while (next < len && s[next] == ' ') next++;
             if (next < len) {
                 for (k = 0; k < tl; k++) {
-                    if (hexval(s[t0 + k]) < 0) {
+                    int h = hexval(s[t0 + k]);
+                    if (h < 0) {
                         header = false;
                         break;
                     }
+                    id = (id << 4) | (uint32_t)h;
                 }
+                if (id > (tl == 3 ? 0x7FFu : VP_ID_MASK)) header = false;
                 if (header) {
                     /* A header is only unambiguous when payload follows it;
                      * compact response bytes such as 410C0BB8 remain intact. */
@@ -1789,7 +1876,7 @@ static void start_init(vp_engine_t *e)
                     q_push(e, K_AT, k_base[k], ENG_AT_DELAY);
                 }
             } else if (!strcmp(k_base[k], "ATH1") &&
-                       e->run_proto >= 3 && e->run_proto <= 5) {
+                       legacy_obd_protocol(e)) {
                 q_push(e, K_AT, "ATH0", ENG_AT_DELAY);
             } else if (!init_has_exact(p, init, k_base[k])) {
                 q_push(e, K_AT, k_base[k], ENG_AT_DELAY);
@@ -1805,8 +1892,8 @@ static void start_init(vp_engine_t *e)
     }
 
     /* Complete profile sequences can bypass the common setup queue. Reassert
-     * header-off after profile init so K-line replies remain unprefixed. */
-    if (e->run_proto >= 3 && e->run_proto <= 5) {
+     * header-off after profile init so legacy OBD replies remain unprefixed. */
+    if (legacy_obd_protocol(e)) {
         q_push(e, K_AT, "ATH0", ENG_AT_DELAY);
     }
 
@@ -1817,7 +1904,7 @@ static void start_init(vp_engine_t *e)
     /* CheckConnectionCommand is a single request in the APK's generic path;
      * voltage is a periodic measurement, not part of link initialization. */
     s = q_push(e, K_WARM, p->check_connection[0] ? p->check_connection : "0100", ENG_WARM_DELAY);
-    (void)s;
+    if (s) s->timeout_ms = connection_timeout(e);
     elog(e, "init %s proto %u", p->id, (unsigned)e->run_proto);
 }
 
@@ -1878,7 +1965,7 @@ static void detect_next(vp_engine_t *e)
     }
     if (e->detect_next >= detect_count(e)) {
         /* Keep the adapter in auto mode if every explicit candidate failed. */
-        elog(e, "ATSP0 did not answer, continuing in auto mode");
+        elog(e, "all protocol probes failed, continuing with ATSP0");
         e->run_proto = 0;
         start_init(e);
         return;
@@ -1890,7 +1977,7 @@ static void detect_next(vp_engine_t *e)
     push_init(e, "ATD", ENG_AT_DELAY);
     push_init(e, "ATD0", ENG_AT_DELAY);
     q_push(e, K_AT, "ATE0", ENG_AT_DELAY);
-    q_push(e, K_AT, (proto >= 3 && proto <= 5) ? "ATH0" : "ATH1", ENG_AT_DELAY);
+    q_push(e, K_AT, legacy_obd_protocol(e) ? "ATH0" : "ATH1", ENG_AT_DELAY);
     snprintf(c, sizeof(c), "ATSP%X", (unsigned)proto);
     q_push(e, K_AT, c, ENG_AT_DELAY);
     q_push(e, K_AT, "ATM0", ENG_AT_DELAY);
@@ -1899,7 +1986,7 @@ static void detect_next(vp_engine_t *e)
     q_push(e, K_AT, "ATAL", ENG_AT_DELAY);
     s = q_push(e, K_DETECT, e->p->check_connection[0] ? e->p->check_connection : "0100", 0);
     if (s) {
-        s->timeout_ms = e->cfg.detect_timeout_ms ? e->cfg.detect_timeout_ms : ENG_DEF_DETECT;
+        s->timeout_ms = connection_timeout(e);
         s->val = 0;
     }
     elog(e, "probe protocol %u attempt %u/%u", (unsigned)proto,
@@ -1970,7 +2057,11 @@ static void init_cmd_done(vp_engine_t *e, const eng_step_t *s, bool ok)
         }
     } else if (!strncmp(c, "ATSP", 4)) {
         proto = strtoul(c + 4, &end, 16);
-        if (ok && end && *end == '\0' && proto <= 12) e->run_proto = (uint8_t)proto;
+        if (ok && c[4] == 'A' && c[5] != '\0') {
+            e->run_proto = 0; /* ATSPAh allows the adapter to choose another protocol */
+        } else if (ok && end && *end == '\0' && proto <= 12) {
+            e->run_proto = (uint8_t)proto;
+        }
     } else if (!strcmp(c, "ATCAF0")) {
         e->caf0 = ok ? 1 : ENG_ST_UNKNOWN;
     } else if (!strcmp(c, "ATCAF1")) {
@@ -2122,10 +2213,10 @@ static bool push_state_for(vp_engine_t *e, uint8_t r)
 {
     const vp_request_t *q = &e->req[r];
     bool functional_fallback = (e->functional_fallback_mask & (UINT32_C(1) << r)) != 0;
-    uint32_t want_hdr = functional_fallback ? 0x7DFu : q->hdr;
+    uint32_t want_hdr = request_header(e, functional_fallback ? 0x7DFu : q->hdr);
     bool want_hdr_explicit = functional_fallback ||
                              ((q->rsv & VP_REQ_RSV_HDR_EXPLICIT) != 0);
-    uint32_t want_rx = (q->flags & VP_REQ_F_RX) ? q->rx : e->base_rx;
+    uint32_t want_rx = response_filter(e, (q->flags & VP_REQ_F_RX) ? q->rx : e->base_rx);
     int16_t want_cea = (q->flags & VP_REQ_F_CEA) ? (int16_t)q->cea : (int16_t)ENG_CEA_OFF;
     int8_t want_caf0 = (q->flags & (VP_REQ_F_RAW | VP_REQ_F_MULTI)) ? 1 : 0;
     int8_t want_cfc0 = (q->flags & VP_REQ_F_MULTI) ? 1 : 0;
@@ -2133,10 +2224,10 @@ static bool push_state_for(vp_engine_t *e, uint8_t r)
                              request_header_same(&e->req[e->pending_after_req], q);
 
     if (e->hdr != want_hdr || e->hdr_explicit != want_hdr_explicit) {
-        /* ISO 9141 / KWP use protocol-specific K-line addressing, not CAN
+        /* J1850 / ISO 9141 / KWP use native OBD addressing, not CAN
          * headers. Imported profiles may explicitly carry a CAN-style 7E0;
          * keep native ELM addressing for these protocols regardless. */
-        if (e->run_proto >= 3 && e->run_proto <= 5) {
+        if (legacy_obd_protocol(e)) {
             e->hdr = want_hdr;
             e->hdr_explicit = want_hdr_explicit;
         } else {
@@ -2240,10 +2331,12 @@ static void start_monitor(vp_engine_t *e, uint32_t now)
     if (e->cfc0 != 0) push_state(e, ST_CFC, 0, -1);
     if (e->cea != ENG_CEA_OFF) push_state(e, ST_CEA, ENG_CEA_OFF_VAL, -1);
     if (e->rx != 0) push_state(e, ST_RX, 0, -1);
+    q_push(e, K_AT, "ATS1", 0); /* parse_can_line consumes space-separated CAN bytes */
     q_push(e, K_AT, "ATH1", 0);
     q_push(e, K_MA, "ATMA", 0);
     q_push(e, K_AT, "ATAR", 0);
     q_push(e, K_AT, "ATH0", 0);
+    q_push(e, K_AT, "ATS0", 0);
 }
 
 static bool mon_due(const vp_engine_t *e, uint32_t now)
@@ -2269,7 +2362,15 @@ static void heal(vp_engine_t *e, uint32_t now)
         }
     }
     e->last_good_ms = now;
-    start_init(e);
+    if (e->p->proto == 0 && e->cfg.proto == 0) {
+        /* A previous auto result is a hint, never a permanent protocol lock.
+         * Discard it when normal polling cannot decode any data. */
+        e->det_proto = 0;
+        e->functional_fallback_mask = 0;
+        start_detect(e);
+    } else {
+        start_init(e);
+    }
 }
 
 static void plan_run(vp_engine_t *e, uint32_t now)
@@ -2405,10 +2506,42 @@ static bool init_response_ok(const vp_engine_t *e, const eng_step_t *s, bool ans
     return vp_init_raw_command(s->cmd) ? raw_init_response_ok(e) : resp_ok(e);
 }
 
+static void protocol_done(vp_engine_t *e)
+{
+    const char *s = e->rxbuf;
+    while (*s) {
+        const char *end = s;
+        const char *next;
+        size_t n;
+        int proto;
+        while (*end && *end != '\r' && *end != '\n' && *end != '>') end++;
+        next = *end ? end + 1 : end;
+        while (s < end && *s == ' ') s++;
+        while (end > s && end[-1] == ' ') end--;
+        n = (size_t)(end - s);
+        if (n == 2 && (*s == 'A' || *s == 'a')) { s++; n--; }
+        proto = n == 1 ? hexval(*s) : -1;
+        if (proto >= 1 && proto <= 12) {
+            e->run_proto = (uint8_t)proto;
+            if (e->p->proto == 0 && e->cfg.proto == 0) {
+                e->det_proto = e->run_proto;
+                if (e->sink.on_proto_detected) e->sink.on_proto_detected(e->sink.ctx, e->det_proto);
+            }
+            if (legacy_obd_protocol(e)) q_push_front(e, K_AT, "ATH0", ENG_AT_DELAY);
+            elog(e, "adapter selected protocol %u", (unsigned)e->run_proto);
+            return;
+        }
+        s = next;
+    }
+    elog(e, "adapter did not report a concrete protocol");
+}
+
 static void step_done(vp_engine_t *e, uint32_t now, int how)
 {
     eng_step_t s = e->cur;
     bool answered = how == DONE_PROMPT;
+    bool need_drain = how == DONE_TIMEOUT && s.kind != K_DETECT &&
+                      s.kind != K_DRAIN && s.kind != K_ELM_CHECK;
 
     e->busy = false;
     e->rxbuf[e->rx_len] = '\0';
@@ -2470,14 +2603,21 @@ static void step_done(vp_engine_t *e, uint32_t now, int how)
          * setup whitelist; retain the selected ATSP value for the probe and
          * the subsequent init sequence. */
         init_cmd_done(e, &s, answered && resp_ok(e));
+        if (e->phase == VP_ENGINE_PH_DETECT && !strncmp(s.cmd, "ATSP", 4) &&
+            (!answered || !resp_ok(e))) {
+            /* A clone that rejects protocol selection may still answer OBD
+             * requests on its old protocol. That is not proof of this candidate. */
+            q_clear(e);
+            detect_next(e);
+        }
         if (!strcmp(s.cmd, "ATAR")) e->rx = answered && resp_ok(e) ? 0 : ENG_ID_UNKNOWN;
         break;
     case K_DETECT:
         detect_done(e, &s, how);
         break;
     case K_DRAIN:
-        if (answered || resp_stopped(e)) {
-            detect_next(e);
+        if (answered) {
+            if (s.val == 0) detect_next(e);
         } else {
             elog(e, "ELM did not return a prompt after interrupt; reconnecting");
             q_clear(e);
@@ -2490,6 +2630,14 @@ static void step_done(vp_engine_t *e, uint32_t now, int how)
     case K_ELM_CHECK:
         elm_check_done(e, now, answered);
         break;
+    case K_WARM:
+        /* ATSP0 / ATSPAh may resolve to any bus. Learn it before planning
+         * CAN headers or decoding legacy headers during normal polling. */
+        if (answered && e->run_proto == 0) q_push_front(e, K_PROTOCOL, "ATDPN", ENG_AT_DELAY);
+        break;
+    case K_PROTOCOL:
+        if (answered) protocol_done(e);
+        break;
     case K_RV:
         if (answered) rv_done(e);
         break;
@@ -2500,13 +2648,15 @@ static void step_done(vp_engine_t *e, uint32_t now, int how)
         break;
     case K_REQ:
         if (answered && !(e->req[s.req].flags & (VP_REQ_F_RAW | VP_REQ_F_MULTI)) &&
-            (e->run_proto == 6 || e->run_proto == 7) &&
-            e->req[s.req].hdr >= 0x7E0u && e->req[s.req].hdr <= 0x7E7u &&
+            (e->run_proto >= 6 && e->run_proto <= 9) &&
+            ((e->req[s.req].hdr >= 0x7E0u && e->req[s.req].hdr <= 0x7E7u) ||
+             ((e->req[s.req].hdr & (VP_ID_29BIT | 0xFFFF00FFu)) ==
+              (VP_ID_29BIT | 0x18DA00F1u))) &&
             !(e->functional_fallback_mask & (UINT32_C(1) << s.req)) &&
             resp_mode01_unsupported(e, e->req[s.req].service)) {
             e->functional_fallback_mask |= UINT32_C(1) << s.req;
             if (e->slot_pos > 0) e->slot_pos--;
-            elog(e, "Mode 01 request %u rejected on physical header, retrying functional 7DF",
+            elog(e, "Mode 01 request %u rejected on physical header, retrying functional OBD address",
                  (unsigned)s.req);
             iso_reset(e);
             if (s.req == e->chain_req) e->chain_req = -1;
@@ -2576,6 +2726,21 @@ static void step_done(vp_engine_t *e, uint32_t now, int how)
     default:
         break;
     }
+    if (need_drain && e->phase != VP_ENGINE_PH_DOWN &&
+        e->phase != VP_ENGINE_PH_RECONNECT) {
+        /* Preserve the planned continuation, but never let a late ECU reply
+         * or a still-running initialization become the next command's reply. */
+        eng_step_t *drain = q_push_front(e, K_DRAIN, "", 0);
+        if (drain) {
+            drain->timeout_ms = ENG_DRAIN_TIMEOUT;
+            drain->val = 1; /* resume queued work after the prompt, not detection */
+        } else {
+            q_clear(e);
+            e->phase = e->st.phase = VP_ENGINE_PH_RECONNECT;
+            if (e->sink.reconnect) e->sink.reconnect(e->sink.ctx);
+            else e->phase = e->st.phase = VP_ENGINE_PH_DOWN;
+        }
+    }
     e->next_ms = now + s.delay_ms;
     e->rx_len = 0;
     e->rxbuf[0] = '\0';
@@ -2606,6 +2771,7 @@ static void step_send(vp_engine_t *e, const eng_step_t *s, uint32_t now)
     }
 
     e->cur = *s;
+    if (s->kind == K_WARM) e->cur.timeout_ms = connection_timeout(e);
     e->rx_len = 0;
     e->rxbuf[0] = '\0';
     e->prompt = false;
@@ -2638,6 +2804,14 @@ static void step_send(vp_engine_t *e, const eng_step_t *s, uint32_t now)
     if (!e->sink.send(e->sink.ctx, cmd)) {
         elog(e, "send failed: %s", cmd);
         step_done(e, now, DONE_FAIL);
+        /* A failed transport write may have delivered a partial command.
+         * Reset the link before another line can be appended to that prefix. */
+        if (e->phase != VP_ENGINE_PH_DOWN && e->phase != VP_ENGINE_PH_RECONNECT) {
+            q_clear(e);
+            e->phase = e->st.phase = VP_ENGINE_PH_RECONNECT;
+            if (e->sink.reconnect) e->sink.reconnect(e->sink.ctx);
+            else e->phase = e->st.phase = VP_ENGINE_PH_DOWN;
+        }
     }
 }
 
@@ -2942,10 +3116,6 @@ uint32_t vp_engine_run(vp_engine_t *e)
             if (e->cur.kind == K_MA) {
                 uint32_t w = 1;
                 if (!ma_poll(e, now, &w)) return w;
-                continue;
-            }
-            if (e->cur.kind == K_DRAIN && resp_stopped(e)) {
-                step_done(e, now, DONE_PROMPT);
                 continue;
             }
             if (e->prompt) {

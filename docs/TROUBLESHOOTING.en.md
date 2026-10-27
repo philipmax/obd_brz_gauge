@@ -36,30 +36,32 @@ Still misbehaving ──→ Step 4, last resorts
   (Car Scanner, Torque, …)
 - If a phone app holds the connection the gauge cannot join — disable the
   app's auto-reconnect
+- BLE channels support both Write Request and Write Without Response. Only the subscribed data characteristic feeds ELM responses, so notifications from other characteristics cannot corrupt them.
 
 ## Step 2: protocol
 
 ### Protocol auto-detection
 
-With the protocol set to **0 (auto)** and no reusable protocol in the current
-session or NVS, the gauge runs a probe:
+With the protocol set to **0 (auto)** and no `bus.proto` lock in the profile, the gauge probes:
 
 ```
-init (ATZ → ATE0 → ATL0 → ATS1 → ATH0 → ATAT1 → ATST … → 01 00 capability probe)
+ATZ → wait for >
    ↓
-try protocols 1-12 in order: ATSP<n> → send 01 0C (read RPM)
-   ├─ valid response → save protocol to NVS, start normal polling
-   └─ 2 s timeout → next protocol
+6 → 7 → 4 → 5 → 3 → 1 → 2 → 8 → 9 → A → B
    ↓
-all failed → fall back to protocol 6, log
-"Protocol auto-detect FAILED, using fallback protocol 6"
+ATZ / ATD / ATD0 → common setup → ATSP<n> → check_connection (default 0100)
+   ├─ positive response → cache session protocol → init → polling
+   └─ failure → retry candidate (up to 3 attempts) → next candidate
+   ↓
+all failed → ATSP0 → init → polling
 ```
 
-- 2 s per protocol × 12 = 24 s worst case, usually 3–8 s
-- During detection only RPM is probed; no garbage reaches the display
-- Success is saved; later reconnects reuse the detected protocol when available
-  instead of waiting for a full probe every time
-- Force re-detection: set protocol 0 → disconnect → reconnect
+- Each connection check defaults to 2 seconds; protocols 3/4 allow 10 seconds, protocol 5 allows 5 seconds, and fallback `ATSP0` allows 30 seconds. With setup, retries and timeout draining, a full search can take several minutes.
+- After a timeout, the engine interrupts the adapter and waits for `>`; a missing prompt triggers reconnection so another command cannot collide with ongoing initialization.
+- Detection uses the profile's `bus.check_connection` (default `0100`) and accepts only a matching positive response. Probe data is not displayed as gauge data.
+- Successful results are reused only in the current session and do not change the NVS Automatic selection into a fixed protocol. After 10 seconds without valid polling data, Auto probes again. Profile or manual protocol locks retain their normal self-heal/reconnect behavior.
+- Older firmware may have saved an automatic result as a nonzero setting. After upgrading, select `0 - Automatic` once on the protocol page, then long-press to save and reboot.
+- CAN reception supports compact `ATH1 + ATS0` output; protocols 7/9 use the corresponding 29-bit standard OBD request addresses, while protocols 1–5 retain native addressing and `ATH0`.
 
 ### Selecting a protocol manually
 

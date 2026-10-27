@@ -75,7 +75,8 @@ the Logo, and a failed theme preparation falls back to the built-in page. Theme 
 **Hidden entries**:
 
 - **Double-tap the logo page** → OBD protocol roller (**long-press 2 s** saves
-  and reboots; protocol 0 = auto-detect)
+  and reboots; protocol 0 = auto-detect, and detection retains that selection;
+  select 0 once again if older firmware saved a nonzero protocol)
 - **10 rapid taps on the version page** → showroom demo mode (sweep animation)
 
 When data times out or BLE drops, gauge pages show a **NO SIGNAL** banner.

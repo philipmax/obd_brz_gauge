@@ -37,9 +37,9 @@
 | 三连表 | 一块主表读 OBD，其余从表通过 ESP-NOW 零负载同步显示 |
 | 传感器 | ADS1115 油压 ADC（V1 板，部分车型可用 OBD 直读油压替代）|
 
-## 车型适配（17 个档案，固件仅内置 1 个）
+## 车型适配（18 个档案，固件仅内置 1 个）
 
-固件只内置 `OBD2 Generic`（标准 OBD2）。其余 16 个车型是 JSON 档案，
+固件只内置 `OBD2 Generic`（标准 OBD2）。其余 17 个车型是 JSON 档案，
 从 SD 卡（`/OBD/IMPORT`）、配套 App（经 `/api/v1/vehicles` 接口）或车机
 **Vehicle 页**安装后，激活并
 重启生效。完整的目录表格、安装步骤、行为变化见
@@ -47,12 +47,12 @@
 
 `OBD2 Generic` · `ZN/C6 CAN` · `ZN/C6 PID` · `ZD8 OBD` · `ZD8` · `MX-5 ND` ·
 `BMW F/G` · `Supra A90` · `BMW G OBD` · `BMW E` · `JCW F56` · `MINI R55` ·
-`POS 997.2` · `POS 997.1` · `GIULIA 2.0T` · `jeep` · `Honda Integra`
+`POS 997.2` · `POS 997.1` · `POS 987.1` · `GIULIA 2.0T` · `jeep` · `Honda Integra`
 
 当前仅在 Subaru BRZ ZN/C6 上完整验证；其余车型已配置，部分仍需上车验证。
 
-可编辑配置另见 [vehicles/import/](vehicles/import/README.md)：**18 份独立导入模板**
-（现有 17 份的 `custom.*` 副本 + BMW G 直接挡位），明确请求头、位解码和轮询间隔。
+可编辑配置另见 [vehicles/import/](vehicles/import/README.md)：**19 份独立导入模板**
+（现有 18 份的 `custom.*` 副本 + BMW G 直接挡位），明确请求头、位解码和轮询间隔。
 将选中的 JSON 放进 SD 卡 `OBD/IMPORT/`，安装后激活并重启。
 
 新增车型可以只写特有信号，未声明的 9 个标准信号默认走 OBD2；支持单项
@@ -61,7 +61,7 @@
 
 ## 核心特性
 
-- **JSON 车型档案系统**：17 个档案，固件仅内置 `OBD2 Generic`，其余经 SD/App/Vehicle 页安装+激活+重启启用；各车型独立传动比（最高 8 挡）、油温读取策略、协议锁定、功能寻址；挡位优先用 CAN/DID 直读，无效时按传动比估算
+- **JSON 车型档案系统**：18 个档案，固件仅内置 `OBD2 Generic`，其余经 SD/App/Vehicle 页安装+激活+重启启用；各车型独立传动比（最高 8 挡）、油温读取策略、协议锁定、功能寻址；挡位优先用 CAN/DID 直读，无效时按传动比估算
 - **CAN 广播帧监听**：仅 `ZN/C6 CAN` 走 ATMA 高速通道（0x140 节气门、0x360 油温水温）；其余车型保持单线程 OBD 轮询，避免适配器抢占
 - **厂商油温路径**：丰田/斯巴鲁 Mode 21、马自达 / MINI / BMW Mode 22、FCA UDS 扩展寻址等，主策略失败自动回退
 - **三连表（ESP-NOW）**：主表广播、从表零额外 OBD 负载，走真蓝牙配对（主表广播 `SkyGauge-XXYY`），断电记忆
@@ -70,7 +70,7 @@
 - **App OTA**：配套手机 App 走 WiFi 热点传输，SHA256 校验 + 15 秒开机自检失败自动回滚
 - **开机动画**：OFF / RACE / VIDEO 三模式，VIDEO 模式可从手机 App 上传自制动画（360×360 圆形安全区）
 - **RaceChrono BLE 输出**：可作为 RaceChrono DIY 设备向手机 App 提供数据
-- **自愈连接**：数据中断自动重初始化重连，上车通电无需手动操作
+- **自愈连接**：数据中断自动重初始化重连；自动协议保留自动设置，无有效数据时重新探测，兼容 11/29 位 CAN、J1850 和 K 线响应
 
 ## 快速开始
 

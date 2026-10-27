@@ -20,13 +20,13 @@ Adding standard data preserves custom or disabled items and complete manufacture
 
 ## Vehicle profile catalog
 
-The catalog repo currently holds **17 profiles**
+The catalog repo currently holds **18 profiles**
 ([vehicles/catalog/](../vehicles/catalog/)); the firmware only has
-`obd2.generic` built in, the other 16 are JSON files waiting to be installed:
+`obd2.generic` built in, the other 17 are JSON files waiting to be installed:
 
 | id | Name | Protocol | Addressing | Gear source | Boost | Oil pressure (OBD) | Notes |
 |---|---|---|---|---|---|---|---|
-| `obd2.generic` | `OBD2 Generic` | Auto | Physical 7E0 | Ratio estimate | — | — | **Firmware-builtin**, generic SAE J1979 |
+| `obd2.generic` | `OBD2 Generic` | Auto | Functional 7DF (`18DB33F1` on protocols 7/9) | Ratio estimate | — | — | **Firmware-builtin**, generic SAE J1979 |
 | `subaru.zc6.can` | `ZN/C6 CAN` | 6 locked | Physical 7E0 | Ratio estimate | — | — | The only profile using CAN broadcast monitoring (`ATMA`, `monitor` block); RPM still comes from OBD |
 | `subaru.zc6.pid` | `ZN/C6 PID` | 6 locked | Physical 7E0 | Ratio estimate | — | — | Pure-OBD fallback for adapters that don't support ATMA |
 | `subaru.zd8.obd` | `ZD8 OBD` | 6 locked | Physical 7E0 | Ratio estimate | — | — | Same polling as `subaru.zd8.pid`; both profiles are kept so the legacy NVS index maps 1:1 |
@@ -40,6 +40,7 @@ The catalog repo currently holds **17 profiles**
 | `mini.r55` | `MINI R55` | 6 locked | Functional 7DF | Ratio estimate | ✓ | — | N14/N18/N16; UDS `22 58 22` always goes over physical 7E0 (see behavior changes below) |
 | `porsche.997_2` | `POS 997.2` | 6 locked | Physical 7E0 | Ratio estimate (7-speed) | — | — | 987.2/997.2 DFI |
 | `porsche.997_1` | `POS 997.1` | 6 locked | Physical 7E0 | Ratio estimate | — | — | 987.1/997.1 M96/M97 |
+| `porsche.987_1` | `POS 987.1` | 3 locked | ISO 9141-2 native addressing | Ratio estimate | — | — | ELM protocol 3 verified on a 987.1; initial ratios copied from 997.1 need gearbox calibration |
 | `alfa.giulia_20t` | `GIULIA 2.0T` | 7 locked | 29-bit functional `18DB33F1` | Ratio estimate | ✓ | — | Giorgio platform; 50 ms poll gap (slow UDS responses) |
 | `jeep.generic` | `jeep` | 7 locked | 29-bit functional `18DB33F1` | Ratio estimate | — | — | Generic placeholder; ratios/tire still need to be refined for the real car |
 | `honda.integra` | `Honda Integra` | 7 locked | 29-bit functional `18DB33F1` | Disabled (CVT) | ✓ | — | 11th-gen Civic platform L15C7; non-Type-R trims may lack a physical oil-temp sensor |
@@ -51,9 +52,9 @@ whitelist, static validation rules).
 
 ## Editable import pack
 
-[vehicles/import/](../vehicles/import/README.en.md) provides **18 complete importable
-templates**: independent `custom.*` copies of all 17 catalog profiles, plus
-`custom.bmw.g.gear`. The original catalog still has 17 profiles. Templates expose
+[vehicles/import/](../vehicles/import/README.en.md) provides **19 complete importable
+templates**: independent `custom.*` copies of all 18 catalog profiles, plus
+`custom.bmw.g.gear`. The original catalog has 18 profiles. Templates expose
 request headers, response prefixes and polling intervals for customization. Copy
 a selected JSON to the SD card's `OBD/IMPORT/`, then select the profile and reboot.
 
@@ -113,13 +114,11 @@ disable a signal, add this entry to `signals`:
 
 Disabled entries allow only `id`, `disabled` and `notes`, and are excluded from polling.
 For fully custom requests or pure CAN monitoring, set root `"defaults": "none"`;
-`signals` must then be a nonempty array. When `bus.proto` is omitted, standard OBD-II
-protocol selection is used: the engine reuses a saved or already-detected protocol,
-and auto-detects when neither is available. To lock a vehicle to a specific protocol,
-such as Jeep/BMW protocol 7 or BMW protocol 6, set `bus.proto` explicitly. Without
+`signals` must then be a nonempty array. When `bus.proto` is 0 or omitted, a manually selected device protocol takes precedence. With `0 - Automatic`, detection results are cached only for the current session and do not overwrite the NVS selection. Sustained decode failures trigger another probe; an explicit `bus.proto` remains locked. Existing nonzero settings saved by older firmware cannot be distinguished from manual choices: select `0 - Automatic` once after upgrading. Without
 `bus`, the other defaults are header `7E0`, `ATST=0x19` and a 30 ms request gap. Inherited standard requests use the
 vehicle's `bus.hdr`; special headers remain configurable through each `src.hdr`.
-For ISO 9141-2 / ISO KWP2000 (protocols 3–5), ordinary OBD requests retain the ELM327's native K-line addressing. Even if an imported profile contains CAN-style `bus.hdr` / `src.hdr` values such as `7E0`, the engine does not send `ATSH`; it uses `ATH0` to hide K-line response headers rather than parsing them as CAN headers.
+On J1850 / ISO 9141-2 / ISO KWP2000 (protocols 1–5), ordinary OBD requests retain the ELM327's native addressing. CAN-style `bus.hdr` / `src.hdr` values such as `7E0` do not cause `ATSH` commands; `ATH0` hides response headers. Protocols 7/9 map standard OBD request headers `7DF` and `7E0`–`7E7` to their 29-bit functional/physical equivalents; existing 29-bit headers are retained. CAN responses support compact `ATH1 + ATS0` output and 29-bit headers printed as separate bytes.
+An imported `ATSP0` does not overwrite an already selected concrete protocol. After adapter auto mode (`ATSP0` / `ATSPAh`), `ATDPN` confirms the actual protocol before polling. A rejected protocol-selection command cannot make a reply on the previous protocol count as a successful candidate. On protocols 7/9, standard receive filters `7E8`–`7EF` are also mapped to 29-bit addresses; native 29-bit physical requests support Mode 01 functional fallback. Ordinary request/setup timeouts also interrupt and wait for `>`; BLE write failures reconnect before another command can extend a partial line.
 Drivetrain ratios and ratio-derived `obd.gear` are not inherited: declare a direct gear
 source or supply the vehicle's own `drivetrain`. Automatic completion does not imply
 ECU support for a PID; unavailable values still follow existing failure rules and
@@ -257,9 +256,7 @@ These differences come from the old-vs-new comparison tests in
   `monitor.stale_ms` (15000 ms), legacy firmware wrote coolant as -40 and
   marked oil invalid; the new engine marks both invalid (no more fake -40°C)
 - **`mazda.mx5nd` / `mini.jcw_f56` / `obd2.generic`'s `ATSP0`**: when
-  `bus.proto` is 0, the engine sends `ATSP` with the previously saved or
-  auto-detected protocol (`nvs_user_cfg_t.protocol` -> `vp_engine_cfg_t.proto`),
-  matching legacy behavior — not a regression
+  `bus.proto` is 0, the engine retains the user's manual/automatic selection. Auto results are session hints and are discarded after sustained decode failures, rather than saved as a forced NVS protocol
 
 ## ADS1115 oil-pressure sensor (V1 hardware) fallback
 
