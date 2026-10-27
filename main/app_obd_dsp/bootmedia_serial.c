@@ -13,6 +13,7 @@
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "app_tasks.h"
 #include "app_obd_dsp/storage_util.h"
 #include "app_obd_dsp/upload_sink.h"
 #include "app_obd_dsp/theme_bundle.h"
@@ -358,6 +359,6 @@ static void bootmedia_serial_task(void *arg)
 
 esp_err_t bootmedia_serial_start(void)
 {
-    BaseType_t ok = xTaskCreate(bootmedia_serial_task, "bootmedia_usb", 8192, NULL, 5, NULL);
-    return ok == pdPASS ? ESP_OK : ESP_ERR_NO_MEM;
+    return app_task_start(APP_TASK_BOOTMEDIA_USB, bootmedia_serial_task, NULL)
+        ? ESP_OK : ESP_ERR_NO_MEM;
 }

@@ -18,6 +18,7 @@
 #include "app_obd_dsp/storage_service.h"
 #include "app_obd_dsp/storage_util.h"
 #include "app_obd_dsp/theme_library.h"
+#include "app_tasks.h"
 #include "export_path/ui_ext.h"
 #include "media/video_elem.h"
 #include "media/video_player.h"
@@ -124,7 +125,7 @@ static bool storage_job_start(st_job_t job)
         s_themes = heap_caps_calloc(2 * THEME_MAX, sizeof(theme_lib_entry_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     }
     s_job_busy = true;
-    if (xTaskCreate(storage_job_task, "ui_sd_job", 8192, (void *)(intptr_t)job, 3, NULL) != pdPASS) {
+    if (!app_task_start(APP_TASK_SD_JOB, storage_job_task, (void *)(intptr_t)job)) {
         ESP_LOGE(TAG, "worker task create failed");
         s_job_busy = false;
         return false;

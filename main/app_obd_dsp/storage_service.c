@@ -20,12 +20,11 @@
 #include "app_obd_dsp/storage_util.h"
 #include "app_obd_dsp/theme_library.h"
 #include "app_obd_dsp/theme_bundle.h"
+#include "app_tasks.h"
 
 static const char *TAG = "storage";
 
 #if CONFIG_OBD_SD_SLOT_SDMMC_1BIT
-#define TASK_STACK     8192
-#define TASK_PRIO      (tskIDLE_PRIORITY + 1)
 #define FIRST_RUN_MS   5000     /* let the boot video / UI start first */
 #define RETRY_MS       10000    /* busy (theme write, UI job): try again */
 #define STACK_WARN     1024     /* log when the high-water mark leaves less */
@@ -139,8 +138,8 @@ esp_err_t storage_service_start(void)
 #if CONFIG_OBD_SD_SLOT_SDMMC_1BIT
     if (s_task) return ESP_OK;
     /* internal-RAM stack (xTaskCreate default): the jobs write flash / nvs_app */
-    if (xTaskCreate(service_task, "storage", TASK_STACK, NULL, TASK_PRIO, &s_task) != pdPASS) {
-        s_task = NULL;
+    s_task = app_task_start(APP_TASK_STORAGE, service_task, NULL);
+    if (!s_task) {
         ESP_LOGE(TAG, "task create failed");
         return ESP_ERR_NO_MEM;
     }

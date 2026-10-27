@@ -27,6 +27,7 @@
 #include <sys/socket.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "app_tasks.h"
 
 #include "esp_log.h"
 #include "esp_err.h"
@@ -1261,7 +1262,7 @@ static bool ota_wifi_server_start_impl(ota_wifi_info_t *info)
     set_state(OTA_WIFI_STATE_READY);
     ESP_LOGI(TAG, "WiFi OTA started: SSID=%s IP=%s", s_ap_ssid, info->ip);
 
-    xTaskCreate(ota_timeout_task, "ota_timeout", 3072, NULL, tskIDLE_PRIORITY + 1, NULL);
+    app_task_start(APP_TASK_OTA_TIMEOUT, ota_timeout_task, NULL);
     return true;
 }
 

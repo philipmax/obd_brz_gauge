@@ -241,6 +241,7 @@ struct vp_engine {
     eng_sig_t  sigs[VP_MAX_SIGNALS];
     eng_hold_t holds[VP_MAX_SOURCES];
     uint16_t   rx_len;
+    bool       frame_end;   /* sticky: a prompt-terminated frame just finished */
     char       rxbuf[ENG_RX_CAP + 1];
     uint8_t    lines[ENG_LINE_CAP];
     uint8_t    payload[ENG_SCRATCH_CAP];
@@ -2601,6 +2602,7 @@ static void step_done(vp_engine_t *e, uint32_t now, int how)
     bool need_drain = how == DONE_TIMEOUT && s.kind != K_DETECT &&
                       s.kind != K_DRAIN && s.kind != K_ELM_CHECK;
 
+    if (answered) e->frame_end = true;   /* transport may flush its RX now */
     e->busy = false;
     e->rxbuf[e->rx_len] = '\0';
     if (how == DONE_TIMEOUT && s.kind != K_MA) e->st.timeouts++;
@@ -2677,12 +2679,12 @@ static void step_done(vp_engine_t *e, uint32_t now, int how)
         if (answered) {
             if (s.val == 0) detect_next(e);
         } else {
-            elog(e, "ELM did not return a prompt after interrupt; reconnecting");
-            q_clear(e);
-            e->phase = VP_ENGINE_PH_RECONNECT;
-            e->st.phase = e->phase;
-            if (e->sink.reconnect) e->sink.reconnect(e->sink.ctx);
-            else e->phase = e->st.phase = VP_ENGINE_PH_DOWN;
+            /* The adapter ignored the drain/CR interrupt. A single timeout must
+             * not tear down a healthy TCP link: soft-reset the adapter (ATZ +
+             * init) on the current transport; if that also fails, elm_check_done
+             * asks the transport to rebuild the link. */
+            elog(e, "ELM did not return a prompt after interrupt; resetting adapter");
+            vp_engine_link_up(e);
         }
         break;
     case K_ELM_CHECK:
@@ -3156,6 +3158,13 @@ void vp_engine_on_rx(vp_engine_t *e, const uint8_t *data, size_t len)
         mon_consume(e, e->sink.now_ms(e->sink.ctx), false);
         e->rxbuf[e->rx_len] = '\0';
     }
+}
+
+bool vp_engine_take_frame_end(vp_engine_t *e)
+{
+    if (!e || !e->frame_end) return false;
+    e->frame_end = false;
+    return true;
 }
 
 uint32_t vp_engine_run(vp_engine_t *e)

@@ -37,21 +37,17 @@ static const char *TAG = "sd_card";
 #include "sdmmc_cmd.h"
 #include "driver/gpio.h"
 #include "driver/sdmmc_host.h"
+#include "bsp_obd_dsp/hw/hw_board.h"
 
-//sd pin settings
-#if CONFIG_OBD_HW_VERSION_V2_NEW || CONFIG_OBD_HW_VERSION_V3_NEW
-
-#define SD_PIN_CLK          GPIO_NUM_3
-#define SD_PIN_CMD          GPIO_NUM_4
-#define SD_PIN_D0           GPIO_NUM_2
-#define SD_PIN_D1           GPIO_NUM_1
-#define SD_PIN_D2           GPIO_NUM_6
-#define SD_PIN_D3           GPIO_NUM_5
-
-#else
-#define SD_PIN_CLK          GPIO_NUM_14
-#define SD_PIN_CMD          GPIO_NUM_17
-#define SD_PIN_D0           GPIO_NUM_16
+/* SD pins come from the selected board profile (bsp_obd_dsp/hw/hw_board.h).
+ * V1 has a 1-bit TF slot; V2/V3 are wired 4-bit. */
+#define SD_PIN_CLK          HW_SD_PIN_CLK
+#define SD_PIN_CMD          HW_SD_PIN_CMD
+#define SD_PIN_D0           HW_SD_PIN_D0
+#if HW_SD_BUS_WIDTH > 1
+#define SD_PIN_D1           HW_SD_PIN_D1
+#define SD_PIN_D2           HW_SD_PIN_D2
+#define SD_PIN_D3           HW_SD_PIN_D3
 #endif
 
 
@@ -73,7 +69,7 @@ static volatile sd_state_t s_state = SD_STATE_ABSENT;
 static bool              s_inited;
 static uint32_t          s_freq_khz;
 static uint32_t          s_pref_khz = SD_FREQ_FAST_KHZ;
-#if CONFIG_OBD_HW_VERSION_V2_NEW || CONFIG_OBD_HW_VERSION_V3_NEW
+#if HW_SD_BUS_WIDTH > 1
 static bool              s_pref_4bit = true;  /* last width that worked; retry it first */
 #endif
 static uint8_t           s_fail_cnt;    /* CMD13 failures (mounted) / probe misses (ejected) */
@@ -103,7 +99,7 @@ static void quiet_logs(bool quiet, esp_log_level_t saved[QUIET_N])
 static void lock(void)   { xSemaphoreTake(s_lock, portMAX_DELAY); }
 static void unlock(void) { xSemaphoreGive(s_lock); }
 
-#if CONFIG_OBD_HW_VERSION_V2_NEW || CONFIG_OBD_HW_VERSION_V3_NEW
+#if HW_SD_BUS_WIDTH > 1
 /* sdmmc_host_deinit() resets slot pins to floating. Before a 1-bit attempt,
  * hold DAT1..DAT3 as pulled-up inputs: DAT3 must idle high or the card selects
  * SPI mode instead of SD and stops answering on CMD. */
@@ -126,7 +122,7 @@ static void slot_config(sdmmc_slot_config_t *slot, bool four_bit)
     s.clk = SD_PIN_CLK;
     s.cmd = SD_PIN_CMD;
     s.d0  = SD_PIN_D0;
-#if CONFIG_OBD_HW_VERSION_V2_NEW || CONFIG_OBD_HW_VERSION_V3_NEW
+#if HW_SD_BUS_WIDTH > 1
     if (four_bit) {
         s.width = 4;
         s.d1 = SD_PIN_D1;
@@ -148,7 +144,7 @@ static void slot_config(sdmmc_slot_config_t *slot, bool four_bit)
 static void host_config(sdmmc_host_t *host, uint32_t khz, bool four_bit)
 {
     sdmmc_host_t h = SDMMC_HOST_DEFAULT();
-#if CONFIG_OBD_HW_VERSION_V2_NEW || CONFIG_OBD_HW_VERSION_V3_NEW
+#if HW_SD_BUS_WIDTH > 1
     h.flags = (four_bit ? SDMMC_HOST_FLAG_4BIT : SDMMC_HOST_FLAG_1BIT) |
               SDMMC_HOST_FLAG_DEINIT_ARG;
 #else
@@ -171,7 +167,7 @@ static esp_err_t mount_at(uint32_t khz, bool four_bit)
     sdmmc_slot_config_t slot;
     host_config(&host, khz, four_bit);
     slot_config(&slot, four_bit);
-#if CONFIG_OBD_HW_VERSION_V2_NEW || CONFIG_OBD_HW_VERSION_V3_NEW
+#if HW_SD_BUS_WIDTH > 1
     if (!four_bit) park_data_pins_high();
 #endif
 
@@ -191,7 +187,7 @@ static esp_err_t do_mount_locked(bool quiet)
     if (quiet) quiet_logs(true, saved);
 
     bool four_bit = false;
-#if CONFIG_OBD_HW_VERSION_V2_NEW || CONFIG_OBD_HW_VERSION_V3_NEW
+#if HW_SD_BUS_WIDTH > 1
     four_bit = s_pref_4bit;
 #endif
     esp_err_t err = mount_at(s_pref_khz, four_bit);
@@ -204,7 +200,7 @@ static esp_err_t do_mount_locked(bool quiet)
         err = mount_at(SD_FREQ_SLOW_KHZ, four_bit);
         if (err == ESP_OK) s_pref_khz = SD_FREQ_SLOW_KHZ;
     }
-#if CONFIG_OBD_HW_VERSION_V2_NEW || CONFIG_OBD_HW_VERSION_V3_NEW
+#if HW_SD_BUS_WIDTH > 1
     /* 4-bit can fail on miswired DAT1..DAT3 while 1-bit still works; retry with
      * those pins parked high (see park_data_pins_high()). */
     if (four_bit && err != ESP_OK && err != ESP_FAIL && !(quiet && err == ESP_ERR_TIMEOUT)) {
@@ -253,7 +249,7 @@ static bool probe_card_present_locked(void)
      * configured width; DAT3 parked high keeps the card in SD mode. */
     host_config(&host, SD_FREQ_SLOW_KHZ, false);
     slot_config(&slot, false);
-#if CONFIG_OBD_HW_VERSION_V2_NEW || CONFIG_OBD_HW_VERSION_V3_NEW
+#if HW_SD_BUS_WIDTH > 1
     park_data_pins_high();
 #endif
 

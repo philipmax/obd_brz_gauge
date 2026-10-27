@@ -17,6 +17,7 @@
 #include "bsp_obd_dsp/nvs_app.h"
 #include "bsp_obd_dsp/sd_card.h"
 #include "app_obd_dsp/ota_wifi_server.h"
+#include "app_tasks.h"
 #include "nvs.h"
 
 
@@ -26,8 +27,6 @@ static const char *TAG = "theme_lib";
 #define KEY_WRITING   "th_wr"     /* legacy interrupted Flash copy */
 #define KEY_MAN_CRC   "th_mc"     /* legacy manifest CRC */
 #define KEY_CURRENT   "th_cur"    /* str: selected SD theme key */
-#define TASK_STACK    4096
-#define TASK_PRIO     (tskIDLE_PRIORITY + 2)
 #define PATH_LEN      128
 
 static portMUX_TYPE               s_mux = portMUX_INITIALIZER_UNLOCKED;
@@ -249,7 +248,7 @@ esp_err_t theme_library_activate(const char *key)
     if (busy) return ESP_ERR_INVALID_STATE;
     strlcpy(s_job_key, key, sizeof(s_job_key));
     s_err[0] = 0;
-    if (xTaskCreate(select_task, "theme_lib", TASK_STACK, NULL, TASK_PRIO, NULL) != pdPASS) {
+    if (!app_task_start(APP_TASK_THEME_LIB, select_task, NULL)) {
         set_state(THEME_LIB_IDLE, 0);
         return ESP_ERR_NO_MEM;
     }

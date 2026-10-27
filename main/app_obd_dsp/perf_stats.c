@@ -10,6 +10,7 @@
 #include "freertos/task.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "app_tasks.h"
 
 static const char *const s_names[PERF_METRIC_COUNT] = {
     "lvgl_wait", "lvgl_handler", "lcd_submit", "ui_tick", "theme_tick", "elm_run",
@@ -70,7 +71,7 @@ void perf_stats_start(void)
 {
     if (s_started) return;
     for (unsigned i = 0; i < PERF_METRIC_COUNT; i++) perf_hist_reset(&s_hist[i]);
-    if (xTaskCreate(perf_task, "perf_stats", 4096, NULL, tskIDLE_PRIORITY + 1, NULL) != pdPASS) {
+    if (!app_task_start(APP_TASK_PERF_STATS, perf_task, NULL)) {
         ESP_LOGW("perf", "cannot create performance logger");
         return;
     }

@@ -18,6 +18,7 @@
 #include "esp_mac.h"
 
 #include "app_obd_dsp/signal_store.h"
+#include "app_tasks.h"
 #include "bsp_obd_dsp/ble_hub.h"
 #include "bsp_obd_dsp/nvs_storage.h"
 #include "bsp_obd_dsp/espnow_link.h"
@@ -736,7 +737,7 @@ void racechrono_ble_diy_start(bool enable_racechrono)
     }
 
     if (s_rc_enabled && !s_stream_task) {
-        xTaskCreate(stream_task, "rc_stream", 4096, NULL, 4, &s_stream_task);
+        s_stream_task = app_task_start(APP_TASK_RC_STREAM, stream_task, NULL);
     }
 
     s_started = true;

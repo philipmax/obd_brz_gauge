@@ -36,6 +36,7 @@
 
 #include "app_obd_dsp/perf_stats.h"
 #include "app_obd_dsp/lvgl_runtime.h"
+#include "app_tasks.h"
 #include "media/video_player.h"
 
 #include <errno.h>
@@ -91,11 +92,6 @@ extern SemaphoreHandle_t lvgl_mux;   /* app_main.c */
 
 #define VP_FLUSH_WAIT_MS     200u
 #define VP_STOP_WAIT_MS      1000u
-
-#define VP_READER_STACK      4096
-#define VP_DECODER_STACK     6144
-#define VP_BOOT_WORKER_PRIO  5u
-#define VP_THEME_WORKER_PRIO 3u
 
 #define EV_WAKE_READER       BIT0
 #define EV_WAKE_DECODER      BIT1
@@ -1290,14 +1286,14 @@ static void session_halt(vp_session_t *s)
     }
 }
 
-static bool spawn(vp_session_t *s, TaskFunction_t fn, const char *name, uint32_t stack,
-                  UBaseType_t prio, BaseType_t core)
+static bool spawn(vp_session_t *s, TaskFunction_t fn, app_task_id_t id)
 {
     session_ref(s);
-    if (xTaskCreatePinnedToCore(fn, name, stack, s, prio, NULL, core) == pdPASS) return true;
+    if (app_task_start(id, fn, s)) return true;
     session_unref(s);
+    const app_task_policy_t *p = app_task_policy(id);
     ESP_LOGE(TAG, "cannot create %s (internal free %u, largest %u, PSRAM free %u)",
-             name,
+             p ? p->name : "worker",
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
              (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL),
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
@@ -1370,13 +1366,14 @@ esp_err_t video_player_start(const video_config_t *config)
      * while priority 5 on both workers can starve LVGL/OBD long enough for the
      * signal store to become stale (the UI then renders a default zero). Fullscreen
      * boot playback owns the panel and keeps its original high-priority path. */
-    const UBaseType_t worker_prio = s->mode == VIDEO_MODE_COMPOSITE
-        ? VP_THEME_WORKER_PRIO : VP_BOOT_WORKER_PRIO;
-    bool ok = spawn(s, decoder_task, "vid_dec", VP_DECODER_STACK, worker_prio, 1);
+    const bool fullscreen = s->mode == VIDEO_MODE_FULLSCREEN;
+    bool ok = spawn(s, decoder_task, fullscreen ? APP_TASK_VIDEO_DECODER_BOOT
+                                                : APP_TASK_VIDEO_DECODER_THEME);
     if (!ok) xEventGroupSetBits(s->ev, EV_DECODER_DONE);
     /* Composite SD reads are deliberately cooperative with the OBD task. Ring
      * space waits still block this task whenever prefetch is full. */
-    ok = ok && spawn(s, reader_task, "vid_read", VP_READER_STACK, worker_prio, 0);
+    ok = ok && spawn(s, reader_task, fullscreen ? APP_TASK_VIDEO_READER_BOOT
+                                                : APP_TASK_VIDEO_READER_THEME);
     if (!ok) {
         session_halt(s);
         session_unref(s);

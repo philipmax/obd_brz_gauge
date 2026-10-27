@@ -36,6 +36,7 @@
 
 #include "app_obd_dsp/obd_data_cache.h"
 #include "app_obd_dsp/signal_store.h"
+#include "app_tasks.h"
 #include "bsp_obd_dsp/nvs_storage.h"
 #include "vehicle/vp_engine.h"
 #include "vehicle/vp_manager.h"
@@ -50,8 +51,6 @@ static const char *TAG = "elm327_wifi";
 #define ELM327_WIFI_DIAG_LOG 0
 #endif
 
-#define TASK_STACK             5120
-#define TASK_PRIO              4
 #define RX_BUF_BYTES           1024
 #define RX_CHUNK               128
 #define RX_DRAIN_MAX           16
@@ -62,9 +61,12 @@ static const char *TAG = "elm327_wifi";
 #define SETTLE_US              (300LL * 1000)
 #define STATS_EVERY_US         (60LL * 1000 * 1000)
 #define TCP_CONNECT_TIMEOUT_MS 5000
-#define TCP_CHUNK_TIMEOUT_MS   1000
+#define TCP_RECV_TIMEOUT_MS    250     /* short read timeout bounds recovery latency */
+#define TCP_SEND_TIMEOUT_MS    1000
 #define WIFI_JOIN_TIMEOUT_MS   15000
 #define LINK_RETRY_MS          2000
+#define TCP_REOPEN_SETTLE_MS   500     /* let a single-client adapter free the old session */
+#define TCP_RX_STALL_US        (15LL * 1000 * 1000)  /* engine polling but no TCP data */
 
 #define EV_GOT_IP       BIT0
 #define EV_DISCONNECTED BIT1
@@ -78,6 +80,7 @@ static EventGroupHandle_t  s_ev;
 static volatile int        s_sock = -1;
 static volatile bool       s_tcp_up;
 static volatile bool       s_paused;
+static volatile bool       s_drop_req;   /* obd task asks the link task to close */
 static volatile bool       s_started;
 static volatile bool       s_scanning;
 static volatile bool       s_scan_stop;
@@ -96,6 +99,8 @@ static uint16_t              s_obd_demand_mask;
 static volatile bool         s_quiet;
 static volatile int64_t      s_up_us;
 static volatile uint32_t     s_rx_dropped;
+static uint8_t               s_conn_fail_run;   /* consecutive join/TCP failures (backoff) */
+static volatile uint8_t      s_last_disc_reason; /* last STA disconnect reason */
 
 /* ---- runtime diagnostics (never logs OBD payloads) ---- */
 static volatile uint32_t     s_rx_bytes;
@@ -122,10 +127,11 @@ static void on_wifi_event(void *arg, esp_event_base_t base, int32_t id, void *da
     if (base == WIFI_EVENT) {
         if (id == WIFI_EVENT_STA_DISCONNECTED) {
             const wifi_event_sta_disconnected_t *d = (const wifi_event_sta_disconnected_t *)data;
-            /* reason 8 = we left on purpose (reconfig / disconnect) */
-            if (d && d->reason != WIFI_REASON_ASSOC_LEAVE) {
-                ESP_LOGW(TAG, "STA disconnected (reason %d)", d->reason);
-            }
+            /* reason 8 = we left on purpose (reconfig / disconnect): ignore it,
+             * otherwise wifi_join() aborts its own wait on a stale event. */
+            if (d && d->reason == WIFI_REASON_ASSOC_LEAVE) return;
+            s_last_disc_reason = d ? d->reason : 0;
+            ESP_LOGW(TAG, "STA disconnected (reason %d)", d ? d->reason : -1);
             xEventGroupSetBits(s_ev, EV_DISCONNECTED);
         } else if (id == WIFI_EVENT_SCAN_DONE) {
             xEventGroupSetBits(s_ev, EV_SCAN_DONE);
@@ -189,24 +195,30 @@ static bool wifi_ensure_started(void)
         return false;
     }
     esp_wifi_set_ps(WIFI_PS_NONE);
+    /* Adapter APs are 20 MHz; forcing HT20 avoids extra sensitivity loss and
+     * retries from a 40 MHz attempt on a narrow-band hotspot. */
+    esp_wifi_set_bandwidth(WIFI_IF_STA, WIFI_BW_HT20);
     return true;
 }
 
-static bool wifi_join(void)
+/* Associated but without a lease (stale DHCP after an AP drop) would keep
+ * tcp_open() failing forever; require a real IPv4 address to skip rejoining. */
+static bool sta_has_ip(void)
 {
-    if (!wifi_ensure_started()) return false;
+    esp_netif_t *nif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    esp_netif_ip_info_t ip = { 0 };
+    return nif && esp_netif_get_ip_info(nif, &ip) == ESP_OK && ip.ip.addr != 0;
+}
 
-    wifi_ap_record_t ap;
-    if (esp_wifi_sta_get_ap_info(&ap) == ESP_OK &&
-        strcmp((const char *)ap.ssid, s_ssid) == 0) {
-        return true;
-    }
-
+/* One association attempt with the fixed WPA2 password. */
+static bool join_once(void)
+{
     xEventGroupClearBits(s_ev, EV_GOT_IP | EV_DISCONNECTED);
+    s_last_disc_reason = 0;
     wifi_config_t wc = {0};
     strlcpy((char *)wc.sta.ssid, s_ssid, sizeof(wc.sta.ssid));
     strlcpy((char *)wc.sta.password, WIFI_OBD_AP_PASSWORD, sizeof(wc.sta.password));
-    wc.sta.threshold.authmode = WIFI_AUTH_OPEN;   /* adapter APs may be open or WPA2 */
+    wc.sta.threshold.authmode = WIFI_AUTH_OPEN;   /* driver raises it when a PSK is used */
     if (esp_wifi_set_config(WIFI_IF_STA, &wc) != ESP_OK) return false;
 
     esp_wifi_disconnect();
@@ -214,6 +226,21 @@ static bool wifi_join(void)
     EventBits_t b = xEventGroupWaitBits(s_ev, EV_GOT_IP | EV_DISCONNECTED, pdFALSE, pdFALSE,
                                         pdMS_TO_TICKS(WIFI_JOIN_TIMEOUT_MS));
     return (b & EV_GOT_IP) != 0;
+}
+
+static bool wifi_join(void)
+{
+    if (!wifi_ensure_started()) return false;
+
+    wifi_ap_record_t ap;
+    if (sta_has_ip() && esp_wifi_sta_get_ap_info(&ap) == ESP_OK &&
+        strcmp((const char *)ap.ssid, s_ssid) == 0) {
+        return true;
+    }
+
+    if (join_once()) return true;
+    ESP_LOGW(TAG, "join '%s' failed (reason %u)", s_ssid, (unsigned)s_last_disc_reason);
+    return false;
 }
 
 /* ------------------------------------------------------------------ */
@@ -225,6 +252,10 @@ static void close_sock(void)
     int s = s_sock;
     if (s >= 0) {
         s_sock = -1;
+        /* Abortive close (RST): single-client ELM327 clones keep a FIN-closed
+         * session alive and then refuse the next connect until it times out. */
+        struct linger lg = { .l_onoff = 1, .l_linger = 0 };
+        setsockopt(s, SOL_SOCKET, SO_LINGER, &lg, sizeof(lg));
         close(s);
     }
     s_tcp_up = false;
@@ -266,9 +297,12 @@ static int tcp_open(void)
         return -1;
     }
     fcntl(s, F_SETFL, flags & ~O_NONBLOCK);
-    struct timeval rtv = { .tv_sec = TCP_CHUNK_TIMEOUT_MS / 1000, .tv_usec = 0 };
+    struct timeval rtv = { .tv_sec = TCP_RECV_TIMEOUT_MS / 1000,
+                           .tv_usec = (TCP_RECV_TIMEOUT_MS % 1000) * 1000 };
+    struct timeval stv = { .tv_sec = TCP_SEND_TIMEOUT_MS / 1000,
+                           .tv_usec = (TCP_SEND_TIMEOUT_MS % 1000) * 1000 };
     setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &rtv, sizeof(rtv));
-    setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &rtv, sizeof(rtv));
+    setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &stv, sizeof(stv));
     return s;
 }
 
@@ -312,6 +346,25 @@ static void log_link_status(uint32_t *last_rx_bytes, int64_t *last_log_us)
 }
 #endif   /* ELM327_WIFI_DIAG_LOG */
 
+/* A cached TCP socket survives an AP-side drop: recv() then only returns
+ * EAGAIN on its SO_RCVTIMEO and the transport would stay "connected" forever.
+ * Check the STA association so the link task can rejoin and re-open TCP. */
+static bool sta_lost(void)
+{
+    if (!s_ev) return false;
+    if (xEventGroupGetBits(s_ev) & EV_DISCONNECTED) return true;
+    wifi_ap_record_t ap;
+    return esp_wifi_sta_get_ap_info(&ap) != ESP_OK;
+}
+
+/* Single-client ELM327 clones refuse a new TCP connection until the old one is
+ * released, so consecutive failures back off instead of hammering the AP. */
+static uint32_t link_retry_ms(void)
+{
+    uint8_t n = s_conn_fail_run < 3 ? s_conn_fail_run : 3;
+    return (uint32_t)LINK_RETRY_MS << n;      /* 2 / 4 / 8 / 16 s */
+}
+
 static void link_task(void *arg)
 {
     (void)arg;
@@ -333,20 +386,41 @@ static void link_task(void *arg)
             vTaskDelay(pdMS_TO_TICKS(OTA_WAIT_MS));
             continue;
         }
+        if (s_drop_req) {
+            /* Only this task owns close(sock), so obd_task just raises the flag. */
+            s_drop_req = false;
+            if (s_sock >= 0) {
+                s_reconnects++;
+                ESP_LOGW(TAG, "send failed, rebuilding TCP link");
+                close_sock();
+                vTaskDelay(pdMS_TO_TICKS(TCP_REOPEN_SETTLE_MS));
+            }
+        }
+        if (s_sock >= 0 && sta_lost()) {
+            xEventGroupClearBits(s_ev, EV_DISCONNECTED);
+            s_reconnects++;
+            ESP_LOGW(TAG, "STA link lost, dropping TCP");
+            close_sock();
+            vTaskDelay(pdMS_TO_TICKS(TCP_REOPEN_SETTLE_MS));
+        }
         if (s_sock < 0) {
             if (!wifi_join()) {
-                vTaskDelay(pdMS_TO_TICKS(LINK_RETRY_MS));
+                if (s_conn_fail_run < 3) s_conn_fail_run++;
+                vTaskDelay(pdMS_TO_TICKS(link_retry_ms()));
                 continue;
             }
             int s = tcp_open();
             if (s < 0) {
                 s_tcp_fails++;
-                ESP_LOGW(TAG, "TCP %s:%u connect failed", s_host, (unsigned)s_port);
-                vTaskDelay(pdMS_TO_TICKS(LINK_RETRY_MS));
+                if (s_conn_fail_run < 3) s_conn_fail_run++;
+                ESP_LOGW(TAG, "TCP %s:%u connect failed (retry in %u ms)",
+                         s_host, (unsigned)s_port, (unsigned)link_retry_ms());
+                vTaskDelay(pdMS_TO_TICKS(link_retry_ms()));
                 continue;
             }
             s_sock = s;
             s_tcp_up = true;
+            s_conn_fail_run = 0;
             s_up_us = esp_timer_get_time();
             s_last_rx_us = s_up_us;
             ESP_LOGI(TAG, "connected to %s:%u via '%s'", s_host, (unsigned)s_port, s_ssid);
@@ -361,6 +435,16 @@ static void link_task(void *arg)
             if (sent < (size_t)n) s_rx_dropped += (uint32_t)((size_t)n - sent);
             wake_task();
         } else if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)) {
+            /* Silent stall (AP gone but the socket was not reset): rebuild.
+             * Only while the engine is actually polling; init/detection may be
+             * legitimately quiet and must not restart the link. */
+            int64_t idle = esp_timer_get_time() - s_last_rx_us;
+            if (!s_quiet && s_engine_up && idle > TCP_RX_STALL_US) {
+                s_reconnects++;
+                ESP_LOGW(TAG, "no TCP data for %lld ms, reconnecting", (long long)(idle / 1000));
+                close_sock();
+                vTaskDelay(pdMS_TO_TICKS(LINK_RETRY_MS));
+            }
             continue;
         } else {
             s_reconnects++;
@@ -415,7 +499,7 @@ void elm327_wifi_scan_start(int duration_s, wifi_scan_found_cb_t cb)
     s_scan_secs = duration_s;
     s_scan_stop = false;
     s_scanning = true;
-    if (xTaskCreate(scan_task, "wifi_scan", 4096, NULL, 3, NULL) != pdPASS) {
+    if (!app_task_start(APP_TASK_WIFI_SCAN, scan_task, NULL)) {
         s_scanning = false;
         s_scan_cb = NULL;
         ESP_LOGW(TAG, "scan task create failed");
@@ -447,7 +531,10 @@ static bool sink_send(void *ctx, const char *cmd)
     while (off < n) {
         int w = send(s, buf + off, n - off, 0);
         if (w <= 0) {
-            ESP_LOGW(TAG, "send failed (errno=%d)", errno);
+            /* Do not close the socket from this task: raise the flag so the link
+             * task (the sole owner of the fd) rebuilds the connection. */
+            ESP_LOGW(TAG, "send failed (errno=%d), requesting reconnect", errno);
+            s_drop_req = true;
             return false;
         }
         off += (size_t)w;
@@ -532,7 +619,7 @@ static void sink_reconnect(void *ctx)
 {
     (void)ctx;
     ESP_LOGW(TAG, "no data after repeated re-init, reconnecting");
-    close_sock();
+    s_drop_req = true;   /* link_task owns close() and rebuilds the connection */
 }
 
 static void sink_log(void *ctx, const char *msg)
@@ -680,6 +767,9 @@ static void obd_task(void *arg)
         vp_engine_set_obd_demand_mask(s_engine, s_obd_demand_mask);
         wait_ms = vp_engine_run(s_engine);
         PERF_END(PERF_ELM_RUN, perf_elm_start, 1);
+        /* Each completed ELM327 frame flushes the TCP RX buffer: late or
+         * duplicated bytes must not be parsed as part of the next response. */
+        if (vp_engine_take_frame_end(s_engine)) rx_discard();
 
         if (now - last_stats > STATS_EVERY_US) {
             last_stats = now;
@@ -706,6 +796,8 @@ void elm327_wifi_start_default(const char *ssid)
     s_port = nv.wifi_obd_port ? nv.wifi_obd_port : WIFI_OBD_DEFAULT_PORT;
 
     s_paused = false;   /* resume a previously stopped/OTA-paused link */
+    s_drop_req = false;
+    s_conn_fail_run = 0;
     if (s_started) {
         if (ssid_changed) close_sock();   /* link_task rejoins the new AP */
         wake_task();
@@ -719,13 +811,13 @@ void elm327_wifi_start_default(const char *ssid)
         return;
     }
 
-    TaskHandle_t t = NULL;
-    if (xTaskCreate(obd_task, "obd_poll", TASK_STACK, NULL, TASK_PRIO, &t) != pdPASS) {
+    TaskHandle_t t = app_task_start(APP_TASK_OBD_POLL_WIFI, obd_task, NULL);
+    if (!t) {
         ESP_LOGE(TAG, "obd_poll create failed");
         return;
     }
     s_task = t;
-    if (xTaskCreate(link_task, "wifi_link", 4096, NULL, TASK_PRIO, NULL) != pdPASS) {
+    if (!app_task_start(APP_TASK_WIFI_LINK, link_task, NULL)) {
         ESP_LOGE(TAG, "wifi_link create failed");
         return;
     }

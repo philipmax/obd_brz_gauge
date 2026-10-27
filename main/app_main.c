@@ -22,8 +22,9 @@
 #include "cJSON.h"
 
 /* Waveshare BSP drivers */
+#include "bsp_obd_dsp/hw/hw_board.h"               /* selects V1 / V2 / V3 pins+features */
 #include "bsp_obd_dsp/i2c_driver/I2C_Driver.h"
-#if CONFIG_OBD_HW_VERSION_V1_WAVESHARE
+#if HW_HAS_TCA9554
 #include "bsp_obd_dsp/exio/TCA9554PWR.h"
 #endif
 #include "bsp_obd_dsp/lcd_driver/ST77916.h"       // internally includes CST816.h & TCA9554PWR.h
@@ -37,7 +38,7 @@
 #include "bsp_obd_dsp/obd_link.h"
 #include "bsp_obd_dsp/espnow_link.h"
 #include "bsp_obd_dsp/racechrono_ble_diy.h"
-#if CONFIG_OBD_HW_VERSION_V1_WAVESHARE
+#if HW_HAS_ADS1115_OIL_PRESSURE
 #include "bsp_obd_dsp/ads1115_oil_pressure.h"
 #endif
 #include "app_obd_dsp/coredump_store.h"
@@ -45,6 +46,7 @@
 #include "app_obd_dsp/bootmedia_serial.h"
 #include "app_obd_dsp/lvgl_runtime.h"
 #include "app_obd_dsp/signal_store.h"
+#include "app_tasks.h"
 #include "app_obd_dsp/app_event.h"
 #include "app_obd_dsp/perf_stats.h"
 #include "vehicle/vp_manager.h"
@@ -94,6 +96,61 @@ SemaphoreHandle_t lvgl_mux = NULL; // non-static: used by BLE scan page
 #define LVGL_TICK_PERIOD_MS         2
 #define LVGL_TASK_STACK_SIZE        (8 * 1024)
 #define LVGL_TASK_PRIORITY          4   // raised (was 2): less prone to dropping frames from preemption by BLE/OBD (priority 4) during animations
+
+/* ------------------------------------------------------------------ */
+/* task policy: every firmware task's name/stack/prio/core lives here   */
+/* ------------------------------------------------------------------ */
+
+/* Priority bands:
+ *   5 - startup-critical paths (boot video workers, USB boot media);
+ *   4 - interaction + comms trunk (LVGL, OBD poll, links, ESP-NOW, RC);
+ *   3 - theme video workers and file jobs;
+ *   1-2 - background maintenance (storage, theme library, perf, OTA helpers).
+ * Core map: data plane (OBD poll + WiFi link) and the video reader stay on
+ * core 0 with the WiFi/BT stacks; LVGL and the video decoder own core 1, so
+ * needle rendering cannot delay an ELM327 round trip. */
+static const app_task_policy_t s_task_policy[APP_TASK_COUNT] = {
+    [APP_TASK_LVGL]                = { "LVGL",           LVGL_TASK_STACK_SIZE, LVGL_TASK_PRIORITY,       -1 },
+    [APP_TASK_OBD_POLL_BLE]        = { "obd_poll",       5120,                 4,                        -1 },
+    [APP_TASK_OBD_POLL_WIFI]       = { "obd_poll",       5120,                 4,                        -1 },
+    [APP_TASK_WIFI_LINK]           = { "wifi_link",      4096,                 4,                        -1 },
+    [APP_TASK_WIFI_SCAN]           = { "wifi_scan",      4096,                 3,                       -1 },
+    [APP_TASK_VIDEO_READER_BOOT]   = { "vid_read",       4096,                 5,                        0 },
+    [APP_TASK_VIDEO_DECODER_BOOT]  = { "vid_dec",        6144,                 5,                        1 },
+    [APP_TASK_VIDEO_READER_THEME]  = { "vid_read",       4096,                 3,                        0 },
+    [APP_TASK_VIDEO_DECODER_THEME] = { "vid_dec",        6144,                 3,                        1 },
+    [APP_TASK_ESPNOW_TX]           = { "espnow_tx",      3584,                 4,                       -1 },
+    [APP_TASK_ESPNOW_PRES]         = { "espnow_pres",    2560,                 4,                       -1 },
+    [APP_TASK_RC_STREAM]           = { "rc_stream",      4096,                 4,                       -1 },
+    [APP_TASK_OIL_PRESSURE]        = { "oil_press",      3072,                 4,                       -1 },
+    [APP_TASK_THEME_BOOT]          = { "theme_boot",     6144,                 3,                       -1 },
+    [APP_TASK_SD_JOB]              = { "ui_sd_job",      8192,                 3,                       -1 },
+    [APP_TASK_THEME_LIB]           = { "theme_lib",      4096, tskIDLE_PRIORITY + 2,                       -1 },
+    [APP_TASK_STORAGE]             = { "storage",        8192, tskIDLE_PRIORITY + 1,                       -1 },
+    [APP_TASK_PERF_STATS]          = { "perf_stats",     4096, tskIDLE_PRIORITY + 1,                       -1 },
+    [APP_TASK_OTA_VALID]           = { "ota_valid",      4096, tskIDLE_PRIORITY + 1,                       -1 },
+    [APP_TASK_OTA_TIMEOUT]         = { "ota_timeout",    3072, tskIDLE_PRIORITY + 1,                       -1 },
+    [APP_TASK_BOOTMEDIA_USB]       = { "bootmedia_usb",  8192,                 5,                       -1 },
+};
+
+const app_task_policy_t *app_task_policy(app_task_id_t id)
+{
+    if ((unsigned)id >= (unsigned)APP_TASK_COUNT) return NULL;
+    const app_task_policy_t *p = &s_task_policy[id];
+    return p->name ? p : NULL;
+}
+
+TaskHandle_t app_task_start(app_task_id_t id, TaskFunction_t fn, void *arg)
+{
+    const app_task_policy_t *p = app_task_policy(id);
+    if (!p || !fn) return NULL;
+
+    TaskHandle_t h = NULL;
+    BaseType_t ok = (p->core < 0)
+        ? xTaskCreate(fn, p->name, p->stack, arg, p->prio, &h)
+        : xTaskCreatePinnedToCore(fn, p->name, p->stack, arg, p->prio, &h, p->core);
+    return ok == pdPASS ? h : NULL;
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////// LVGL callbacks /////////////////////////////////////////////////////////////////////////////////////
@@ -223,7 +280,7 @@ void app_main(void)
     I2C_Init();
 
     /* 3. IO expander init (TCA9554PWR, I2C address 0x20) — V1 board only; V2/V3 have no expander */
-#if CONFIG_OBD_HW_VERSION_V1_WAVESHARE
+#if HW_HAS_TCA9554
     EXIO_Init();
 #endif
 
@@ -283,13 +340,20 @@ void app_main(void)
     /* 6. Start LVGL task */
     lvgl_mux = xSemaphoreCreateMutex();
     assert(lvgl_mux);
-    xTaskCreate(lvgl_runtime_task, "LVGL", LVGL_TASK_STACK_SIZE, lvgl_mux, LVGL_TASK_PRIORITY, NULL);
+    app_task_start(APP_TASK_LVGL, lvgl_runtime_task, lvgl_mux);
 
     /* 6.5 Bring up the BLE stack BEFORE the UI to claim internal RAM early. Every
-     *     BLE user (ELM327, RaceChrono, gauge pairing) registers through ble_hub. */
-    esp_err_t ble_err = ble_hub_init();
-    if (ble_err != ESP_OK) {
-        ESP_LOGE(TAG, "BLE stack init failed (%s)", esp_err_to_name(ble_err));
+     *     BLE user (ELM327, RaceChrono, gauge pairing) registers through ble_hub.
+     *     WiFi OBD skips it entirely: the single radio belongs to the STA link,
+     *     and any BLE page initializes the stack lazily on demand. */
+    bool wifi_obd_boot = (user_cfg.conn_type == 1 && user_cfg.wifi_obd_ssid[0] != '\0');
+    if (!wifi_obd_boot) {
+        esp_err_t ble_err = ble_hub_init();
+        if (ble_err != ESP_OK) {
+            ESP_LOGE(TAG, "BLE stack init failed (%s)", esp_err_to_name(ble_err));
+        }
+    } else {
+        ESP_LOGI(TAG, "WiFi OBD configured: BLE stack not initialized (radio dedicated to STA)");
     }
 
     /* 7. Start UI - Logo displayed first, then theme loading */
@@ -364,7 +428,7 @@ void app_main(void)
         /* 8.2 External ADS1115 oil pressure (V1 board only). Skipped when the active
                profile reads oil pressure over OBD, so the ADC never overwrites OBD data.
                The slot is marked local: valid without an OBD link, kept on link loss. */
-#if CONFIG_OBD_HW_VERSION_V1_WAVESHARE
+#if HW_HAS_ADS1115_OIL_PRESSURE
         if (!vp_manager_has_signal(SIG_OBD_OIL_PRESSURE)) {
             signal_store_set_local(SIG_OBD_OIL_PRESSURE, true);
             oil_pressure_start();
@@ -397,8 +461,7 @@ void app_main(void)
         ESP_LOGW(TAG, "Failed to start USB boot-media receiver");
     }
 
-    BaseType_t valid_task_started = xTaskCreate(mark_app_valid_task, "ota_valid", 4096, NULL, tskIDLE_PRIORITY + 1, NULL);
-    if (valid_task_started != pdPASS) {
+    if (!app_task_start(APP_TASK_OTA_VALID, mark_app_valid_task, NULL)) {
         ESP_LOGW(TAG, "Failed to create OTA validity task");
     }
 }

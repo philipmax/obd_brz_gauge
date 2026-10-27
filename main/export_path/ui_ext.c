@@ -19,6 +19,7 @@
 #include "bsp_obd_dsp/espnow_link.h"
 #include "bsp_obd_dsp/lcd_driver/ST77916.h"
 #include "app_obd_dsp/obd_data_cache.h"
+#include "app_tasks.h"
 #include "app_obd_dsp/signal_store.h"
 #include "app_obd_dsp/theme_library.h"
 #include "media/boot_video.h"
@@ -316,7 +317,7 @@ void ui_ext_boot_prepare(void)
         if (s_boot_theme_job) {
             atomic_store_explicit(&s_boot_theme_ready, false, memory_order_relaxed);
             lv_timer_t *poll = lv_timer_create(boot_theme_poll, 20, NULL);
-            if (!poll || xTaskCreate(boot_theme_worker, "theme_boot", 6144, s_boot_theme_job, 3, NULL) != pdPASS) {
+            if (!poll || !app_task_start(APP_TASK_THEME_BOOT, boot_theme_worker, s_boot_theme_job)) {
                 // Cancel without running: do not perform the conversion under
                 // the LVGL mutex on allocation failure.
                 if (poll) lv_timer_del(poll);

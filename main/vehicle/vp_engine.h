@@ -163,6 +163,11 @@ void vp_engine_set_obd_demand_mask(vp_engine_t *e, uint16_t mask);
 /* Bytes received from the adapter (any chunking). */
 void vp_engine_on_rx(vp_engine_t *e, const uint8_t *data, size_t len);
 
+/* True once after a prompt-terminated frame (any kind: data, NO DATA, AT reply)
+ * has been fully handled. Transports use it to drop bytes still queued in their
+ * own RX buffer so a late tail cannot leak into the next command's response. */
+bool vp_engine_take_frame_end(vp_engine_t *e);
+
 /* Advance the state machine (may call sink->send). Returns the number of ms
  * until the next call is useful (1..100); call earlier when bytes arrive. */
 uint32_t vp_engine_run(vp_engine_t *e);

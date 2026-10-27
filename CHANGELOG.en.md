@@ -7,12 +7,27 @@ cleanups live in the git history.
 
 ---
 
+## Fix WiFi OBD not reconnecting after a drop
+
+- When the adapter's hotspot drops, a cached TCP socket may never report an error: `recv()` just keeps returning `EAGAIN` on its 1 s timeout and the transport stays "connected" forever. Each loop now checks the STA association (disconnect event or a failing `esp_wifi_sta_get_ap_info()`) and closes the socket, rejoins the AP and reopens TCP; a failed send is turned into a drop request handled by the link task, which stays the only owner of the fd.
+- An associated STA without a DHCP lease no longer skips re-joining, so `connect()` cannot fail forever without re-acquiring an IP.
+- A TCP link that receives nothing for 15 s while the engine is polling is treated as a silent drop and reconnected; reconnects back off exponentially at 2 / 4 / 8 / 16 s so single-client adapters can release the old connection; the STA is pinned to HT20 (adapter hotspots are 20 MHz), reducing retransmits and drops on weak signals.
+- `ASSOC_LEAVE` (reason 8) from our own `esp_wifi_disconnect()` no longer sets the lost-link flag, fixing the first-join wait being aborted by a stale event.
+- TCP close now sends RST (`SO_LINGER` 0) and waits 500 ms before reopening, and the socket read timeout drops from 1 s to 250 ms: single-client adapters release the old session immediately, so recovery after a drop is faster and more reliable.
+- When a request times out and the drain gets no `>`, the engine now soft-resets the adapter (ATZ + init) on the current connection instead of rebuilding TCP at once; only a failed soft reset drops the link, so one timeout no longer costs a 1.5 s re-init.
+- WiFi OBD now really skips BLE stack init at boot (previously only BLE users were skipped, the controller still owned radio time); switching back to BLE at runtime restores the ESP-NOW broadcast.
+
 ## Add a WiFi OBD connection mode
 
-- Swiping up from the version page now opens a connection-type chooser. The new WIFI OBD page scans for the ELM327 WiFi adapter's hotspot (password fixed to `12345678`) and sends ELM327 commands over TCP `192.168.0.10:35000`, sharing the same vehicle, protocol and signal pipeline as the BLE transport. The transport is stored in NVS `conn_type` and applied at boot; the ESP-NOW multi-gauge broadcast is paused while WiFi OBD is active.
+- Swiping up from the version page now opens a connection-type chooser. The new WIFI OBD page scans for the ELM327 WiFi adapter's hotspot (password fixed to `12345678`) and sends ELM327 commands over TCP `192.168.4.1:35000`, sharing the same vehicle, protocol and signal pipeline as the BLE transport. The transport is stored in NVS `conn_type` and applied at boot; the ESP-NOW multi-gauge broadcast is paused while WiFi OBD is active.
 - Add a ← back button in the top-left corner of the BLE SCAN and WIFI OBD pages, equivalent to the left/right swipe.
 - WiFi OBD no longer initializes the BLE stack at boot (RaceChrono / pairing unavailable) so the STA link owns the radio. Deleting the saved hotspot drops WiFi immediately; selecting BLE or another hotspot then reinitializes the matching transport at runtime. Only the first BLE-to-WiFi switch still reboots.
 - WiFi OBD runtime diagnostics (link, RSSI, RX rate, drops, TCP failures, reconnects, engine link, idle time, heap headroom) and theme-video underrun / pacing statistics now sit behind the `ELM327_WIFI_DIAG_LOG` / `VP_DIAG_LOG` build macros, off by default. They never print OBD payloads and no longer flood the console or steal time from OBD communication.
+- The BOOST gauge now shows intake vacuum: its needle range moves from 0~+2.0 bar to -1.0~+2.0 bar, and the generic OBD2 profile gains `obd.boost` (`010B`, `A-100` kPa, clamped to -100~155) so idle and overrun vacuum is no longer flattened; turbo vehicle profiles relax their clamp lower bound to -100.
+- Raise the coolant / oil temperature ceiling from 150 °C to 255 °C across data filtering, signal ranges, needle scales, the ESP-NOW temperature check and vehicle-profile `valid` ranges, so hot readings are no longer discarded and held at the previous value.
+- Stop smoothing speed in the data layer (300/500 ms) and store raw samples instead, leaving smoothing to the UI, so gear estimation and the ESP-NOW multi-gauge link no longer lag.
+- Enable responsive OBD polling: RPM / speed are scheduled first against 50 / 100 ms deadlines, with at most two motion requests plus one background request per slot for fairness; repeatedly failing requests back off exponentially up to 16 s instead of slowing the whole round; idle waits follow the nearest RPM / speed deadline.
+- Fullscreen and timed video now decode ahead into the free strip and start the DMA transfer only at the deadline, overlapping decode with waiting to reduce dropped frames; pausing keeps the committed frame and shifts the timeline, and pacing waits are excluded from decode-time statistics.
 
 ## Fix CAN Request Headers on ISO K-Line Protocols
 

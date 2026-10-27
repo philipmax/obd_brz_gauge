@@ -182,7 +182,10 @@ static void elem_tick(void)
             .mode = VIDEO_MODE_COMPOSITE,
             .source = VIDEO_SRC_SD,
             .path = st->path,
-            .target_fps = 0,
+            /* Cap theme playback at 24 fps: every frame is a full-screen blit
+             * on the same QSPI bus as LVGL's UI flush, so native 30/60 fps
+             * competes with the 16 ms needle redraw while OBD data refreshes. */
+            .target_fps = 24,
             .loop = true,
             .video_view = obj,
             .value_driven = st->value_driven,

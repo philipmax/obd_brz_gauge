@@ -25,6 +25,7 @@
 #include "esp_heap_caps.h"
 #include "app_obd_dsp/obd_data_cache.h"
 #include "app_obd_dsp/signal_store.h"
+#include "app_tasks.h"
 #include "bsp_obd_dsp/nvs_storage.h"
 #include "vehicle/vp_manager.h"
 
@@ -348,7 +349,8 @@ void espnow_link_start_master(void) {
     add_broadcast_peer();
 
     ESP_ERROR_CHECK(esp_now_register_recv_cb(recv_cb));   // receive slave presence/HELLO/control packets
-    if (xTaskCreate(master_task, "espnow_tx", 3584, NULL, 4, &s_master_task_handle) != pdPASS) {
+    s_master_task_handle = app_task_start(APP_TASK_ESPNOW_TX, master_task, NULL);
+    if (!s_master_task_handle) {
         portENTER_CRITICAL(&s_linktest_mux);
         s_linktest_accepting = false;
         s_linktest_active = false;
@@ -586,7 +588,7 @@ void espnow_link_start_slave(void) {
     // A slave also needs the broadcast peer to be able to send presence
     add_broadcast_peer();
     ESP_ERROR_CHECK(esp_now_register_recv_cb(recv_cb));
-    xTaskCreate(slave_task, "espnow_pres", 2560, NULL, 4, &s_slave_task_handle);
+    s_slave_task_handle = app_task_start(APP_TASK_ESPNOW_PRES, slave_task, NULL);
     ESP_LOGI(TAG, "ESP-NOW SLAVE up (listening ch%d, presence %dms)", ESPNOW_CHANNEL, PRESENCE_INTERVAL_MS);
 }
 

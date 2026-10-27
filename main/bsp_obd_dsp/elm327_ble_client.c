@@ -31,6 +31,7 @@
 
 #include "app_obd_dsp/obd_data_cache.h"
 #include "app_obd_dsp/signal_store.h"
+#include "app_tasks.h"
 #include "bsp_obd_dsp/ble_adv_util.h"
 #include "bsp_obd_dsp/ble_hub.h"
 #include "bsp_obd_dsp/nvs_storage.h"
@@ -44,8 +45,6 @@ static const char *TAG = "elm327_ble";
 #define UUID16_CCCD          0x2902
 #define SVC_COUNT            3
 
-#define TASK_STACK           5120
-#define TASK_PRIO            4
 #define RX_BUF_BYTES         1024
 #define RX_CHUNK             128
 #define RX_DRAIN_MAX         16          /* chunks per loop */
@@ -926,8 +925,8 @@ static void start_task(void)
     }
     if (!s_tx_done) s_tx_done = xSemaphoreCreateBinaryStatic(&s_tx_done_storage);
     if (!s_rx) s_rx = xStreamBufferCreateWithCaps(RX_BUF_BYTES, 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    TaskHandle_t t = NULL;
-    if (!s_rx || xTaskCreate(obd_task, "obd_poll", TASK_STACK, NULL, TASK_PRIO, &t) != pdPASS) {
+    TaskHandle_t t = s_rx ? app_task_start(APP_TASK_OBD_POLL_BLE, obd_task, NULL) : NULL;
+    if (!t) {
         ESP_LOGE(TAG, "obd_poll start failed (rx %p)", (void *)s_rx);
         portENTER_CRITICAL(&s_lock);
         s_task_started = false;

@@ -161,7 +161,7 @@ static esp_err_t del(esp_lcd_touch_handle_t tp)
 
 static esp_err_t reset(esp_lcd_touch_handle_t tp)
 {
-#if CONFIG_OBD_HW_VERSION_V1_WAVESHARE
+#if HW_TOUCH_RST_VIA_TCA9554
     /* V1 Waveshare: touch reset is wired to the TCA9554 IO expander (EXIO1). */
     Set_EXIO(TCA9554_EXIO1,false);
     vTaskDelay(pdMS_TO_TICKS(10));

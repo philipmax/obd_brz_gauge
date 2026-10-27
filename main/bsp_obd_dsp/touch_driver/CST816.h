@@ -44,18 +44,12 @@ esp_err_t esp_lcd_touch_new_i2c_cst816(i2c_master_bus_handle_t i2c_bus, const es
 // #define I2C_Touch_RST_IO            -1              /*!< GPIO number used for I2C master clock */
 // #define I2C_Touch_MASTER_FREQ_HZ    400000          /*!< I2C master clock frequency */
 
-// I2C settings
-#if CONFIG_OBD_HW_VERSION_V2_NEW || CONFIG_OBD_HW_VERSION_V3_NEW
-#define I2C_Touch_SDA_IO            7               /*!< GPIO number used for I2C master data  (new boards) */
-#define I2C_Touch_SCL_IO            8               /*!< GPIO number used for I2C master clock (new boards) */
-#define I2C_Touch_INT_IO            -1              /*!< GPIO number used for I2C master data  */
-#define I2C_Touch_RST_IO            40              /*!< GPIO number used for I2C master clock */
-#else
-#define I2C_Touch_SDA_IO            11               /*!< GPIO number used for I2C master data  */
-#define I2C_Touch_SCL_IO            10               /*!< GPIO number used for I2C master clock */
-#define I2C_Touch_INT_IO            4               /*!< GPIO number used for I2C master data  */
-#define I2C_Touch_RST_IO            -1              /*!< GPIO number used for I2C master clock (EXIO1) */
-#endif
+// I2C settings (pins come from the selected board profile, bsp_obd_dsp/hw/hw_board.h)
+#include "bsp_obd_dsp/hw/hw_board.h"
+#define I2C_Touch_SDA_IO            HW_TOUCH_I2C_SDA_IO
+#define I2C_Touch_SCL_IO            HW_TOUCH_I2C_SCL_IO
+#define I2C_Touch_INT_IO            HW_TOUCH_INT_IO
+#define I2C_Touch_RST_IO            HW_TOUCH_RST_IO
 #define I2C_Touch_MASTER_FREQ_HZ    400000          /*!< I2C master clock frequency */
 
 extern esp_lcd_touch_handle_t tp;

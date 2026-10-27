@@ -11,6 +11,7 @@
 
 #include "bsp_obd_dsp/i2c_driver/I2C_Driver.h"
 #include "app_obd_dsp/obd_data_cache.h"
+#include "app_tasks.h"
 
 #define TAG "oil_press"
 
@@ -123,5 +124,5 @@ void oil_pressure_start(void)
     }
 
     s_started = true;
-    xTaskCreate(oil_pressure_task, "oil_press", 3072, NULL, 4, NULL);
+    app_task_start(APP_TASK_OIL_PRESSURE, oil_pressure_task, NULL);
 }

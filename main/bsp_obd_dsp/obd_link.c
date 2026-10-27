@@ -4,6 +4,7 @@
 
 #include "bsp_obd_dsp/elm327_ble_client.h"
 #include "bsp_obd_dsp/elm327_wifi_client.h"
+#include "bsp_obd_dsp/espnow_link.h"
 #include "bsp_obd_dsp/racechrono_ble_diy.h"
 
 static const char *TAG = "obd_link";
@@ -75,6 +76,11 @@ void obd_link_switch_to_ble(const uint8_t mac[6], const char *name)
         s_ble_started = true;
     }
     elm327_ble_connect_by_addr(mac, name);
+    if (was_wifi && nvs_cfg_read().device_role == ESPNOW_ROLE_MASTER) {
+        /* WiFi OBD paused the broadcast at boot; restore it now that the STA
+         * link is gone. Only on the WiFi->BLE transition (never double-start). */
+        espnow_link_start_master();
+    }
     ESP_LOGI(TAG, "runtime switch: BLE%s", was_wifi ? " (WiFi OBD stopped)" : "");
 }
 

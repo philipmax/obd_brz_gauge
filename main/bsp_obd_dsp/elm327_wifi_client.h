@@ -2,7 +2,7 @@
 /*
  * elm327_wifi_client - ELM327 over WiFi (TCP) transport.
  *
- * The gauge joins the adapter's own AP (password fixed, see
+ * The gauge joins the adapter's own AP (WPA2 password fixed to
  * WIFI_OBD_AP_PASSWORD), then speaks the same ELM327 command stream over a TCP
  * socket (default 192.168.4.1:35000). The "obd_poll" task drives vp_engine
  * exactly like the BLE transport, so profiles, protocol auto-detect and the
