@@ -7,6 +7,23 @@ cleanups live in the git history.
 
 ---
 
+## Transparent custom gauge tracks
+
+- Runtime theme arc/bar elements accept optional `bg_opacity`, affecting only the track while retaining an opaque foreground. Older themes default to 100%. Editor preview/export are synchronized and parser plus real LVGL style host tests are added. Hardware checks confirm full-screen image coverage, video alignment, stable page-entry sizing and background transparency.
+
+## Pressure and high temperature fixes, acquisition and video timing
+
+- Add generic MAP relative pressure and preserve profile vacuum readings; extend coolant/oil limits to 255°C and update catalog/import profiles. Prioritize RPM/speed independently, back off failed requests and remove duplicate speed-cache smoothing. Fullscreen video decodes ahead and submits alternating DMA strips on deadline, including OBV2 pause, stop and catch-up paths. Host tests pass and release firmware is built.
+
+## Clear Installed Vehicle Profiles Over Web USB
+
+- Add explicitly confirmed `vehicle.clear` management requests to remove installed config JSON and SD mirrors, then reboot with builtin Generic. Retain the running compiled profile, media and templates. The web flasher adds scope information, confirmation, old-firmware guidance and separate restart retry; partial deletion failures are not reported as success.
+
+## Fix Automatic Protocol Detection With Replies but No Data
+
+- Fix compact `ATH1 + ATS0` CAN responses and byte-separated 29-bit response headers. Map standard OBD request headers to 29-bit addressing on protocols 7/9, and retain native addressing with `ATH0` on J1850. Extend K-line initialization deadlines and wait for `>` after timeout interrupts. Cache automatic results only for the session, preserving the user's Automatic selection and probing again after sustained decode failures. Add host regression cases for response formats, slow initiation and recovery; subsequent host regression checks completed.
+- Preserve detected protocols across profile `ATSP0`, query `ATDPN` after adapter auto selection, and reject probes whose `ATSP` failed. Map standard receive filters with 29-bit addressing and support Mode 01 fallback for native 29-bit requests. Drain ordinary timeouts before continuing and reconnect after write failures. Monitor windows temporarily enable `ATS1` and restore `ATS0`; BLE supports writes without response and isolates other characteristic notifications. Add corresponding regression cases.
+
 ## Fix CAN Request Headers on ISO K-Line Protocols
 
 - Ordinary OBD requests on ISO 9141-2 / ISO KWP2000 no longer send CAN-style `ATSH` commands, including for imported profiles with an explicit `7E0`; they retain ELM327 native addressing and use `ATH0` to hide K-line response headers. Add a host regression test.
