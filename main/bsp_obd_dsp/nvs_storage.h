@@ -49,7 +49,7 @@ typedef struct {
                                  // see the load_blob grow logic comment in nvs_storage.c.
     uint8_t conn_type;           // OBD transport: 0=BLE (default), 1=WiFi TCP; applied at boot
     char    wifi_obd_ssid[33];   // selected ELM327 WiFi adapter AP SSID (empty = not configured)
-    char    wifi_obd_host[16];   // TCP host, empty = default "192.168.0.10"
+    char    wifi_obd_host[16];   // TCP host, empty = default "192.168.4.1"
     uint16_t wifi_obd_port;      // TCP port, 0 = default 35000
                                  // NOTE: appended fields must ALSO be listed in the MERGE_CFG_FIELD
                                  // table in nvs_storage.c, otherwise nvs_cfg_update() drops the change.

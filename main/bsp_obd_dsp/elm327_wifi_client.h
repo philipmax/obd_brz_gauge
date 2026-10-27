@@ -4,7 +4,7 @@
  *
  * The gauge joins the adapter's own AP (password fixed, see
  * WIFI_OBD_AP_PASSWORD), then speaks the same ELM327 command stream over a TCP
- * socket (default 192.168.0.10:35000). The "obd_poll" task drives vp_engine
+ * socket (default 192.168.4.1:35000). The "obd_poll" task drives vp_engine
  * exactly like the BLE transport, so profiles, protocol auto-detect and the
  * signal store behave identically.
  *
@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-#define WIFI_OBD_DEFAULT_HOST   "192.168.0.10"
+#define WIFI_OBD_DEFAULT_HOST   "192.168.4.1"
 #define WIFI_OBD_DEFAULT_PORT   35000
 #define WIFI_OBD_AP_PASSWORD    "12345678"
 

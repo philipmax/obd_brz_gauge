@@ -1,7 +1,7 @@
 // WiFi OBD page: pick the ELM327 adapter's hotspot from a WiFi scan.
 // Layout mirrors the BLE scan page: saved network (with delete) + nearby list.
 // The AP password is fixed (12345678); the TCP address defaults to
-// 192.168.0.10:35000 and is stored in NVS.
+// 192.168.4.1:35000 and is stored in NVS.
 //
 // Selecting a network persists conn_type=WiFi + SSID. If the WiFi transport is
 // already active it rejoins at runtime; switching from BLE still reboots

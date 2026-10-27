@@ -93,7 +93,7 @@ corner**; it is equivalent to the left/right swipe and stops the active scan.
 
 **WIFI OBD page**: entered from CONNECTION, it scans nearby WiFi hotspots. Tap
 the ELM327 WiFi adapter's hotspot (AP password is fixed to `12345678`; the TCP
-address defaults to `192.168.0.10:35000` and can be changed in NVS). Switching
+address defaults to `192.168.4.1:35000` and can be changed in NVS). Switching
 from BLE to WiFi saves and reboots once (the BLE stack must be released); later
 selections rejoin at runtime without a reboot. **The BLE stack is not
 initialized while WiFi OBD is active and the ESP-NOW multi-gauge broadcast is
