@@ -174,6 +174,7 @@ static void init_fixture(fixture_t *f, bool suppressed)
         el->id = ids[i]; el->kind = kinds[i]; el->width = 100; el->height = 12;
         el->start_angle = 0; el->end_angle = 270; el->angle_min = 0; el->angle_max = 270;
         el->color = 0xeeeeee; el->bg_color = 0x222222; el->line_width = 2;
+        el->bg_opacity = 100;
         el->opacity = i == 5 ? 40 : i == 6 ? 35 : 100;
         el->text = "BASE"; el->asset = "base"; el->format = "%.0f"; el->divisor = 1;
         it->el = el; it->kind = kinds[i]; it->lo = 0; it->hi = 100;
@@ -650,6 +651,24 @@ static void test_staged_boot_page(void)
     free(blob);
 }
 
+static void test_track_opacity(void)
+{
+    const double percentages[] = {0, 35, 100};
+    for (unsigned i = 0; i < 3; i++) {
+        lv_obj_t *scr = lv_obj_create(NULL);
+        tl_elem_t el = {.width=100, .height=100, .line_width=10, .end_angle=270,
+                        .color=0xffffff, .bg_color=0x222222, .bg_opacity=percentages[i]};
+        te_item_t arc = {.el=&el}, bar = {.el=&el};
+        te_create_arc(scr, &arc); te_create_bar(scr, &bar);
+        lv_opa_t want = (lv_opa_t)tl_round(percentages[i] * 255.0 / 100.0);
+        TH_CHECK(lv_obj_get_style_arc_opa(arc.obj, LV_PART_MAIN) == want);
+        TH_CHECK(lv_obj_get_style_arc_opa(arc.obj, LV_PART_INDICATOR) == LV_OPA_COVER);
+        TH_CHECK(lv_obj_get_style_bg_opa(bar.obj, 0) == want);
+        TH_CHECK(lv_obj_get_style_bg_opa(bar.fg, 0) == LV_OPA_COVER);
+        lv_obj_del(scr);
+    }
+}
+
 int main(void)
 {
     lv_init();
@@ -660,6 +679,7 @@ int main(void)
     lv_disp_drv_init(&drv); drv.hor_res = drv.ver_res = 360;
     drv.draw_buf = &draw; drv.flush_cb = flush;
     lv_disp_t *disp = lv_disp_drv_register(&drv);
+    test_track_opacity();
     test_sweep_rule_inputs(); test_sweep_color_preserves_track(); test_transitions();
     test_sweep_label_values(); test_video_layer_order(); test_sweep_video_opacity(); test_replay();
     test_staged_boot_page(); test_value_video_binding();

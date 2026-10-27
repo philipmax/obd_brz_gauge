@@ -66,6 +66,7 @@ typedef struct {
     const char *font_asset;   // NULL when absent / empty
     uint8_t video_value;      // OBV1 position follows data_source instead of time
     double video_step;        // 0 = every frame; positive = input quantization
+    double bg_opacity;        // arc/bar track only, 0..100; omitted = 100
 } tl_elem_t;
 
 typedef struct {

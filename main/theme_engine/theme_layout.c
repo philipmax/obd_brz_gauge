@@ -172,6 +172,7 @@ static void tl_add_element(tl_ctx_t *c, const cJSON *o)
     e.divisor = tl_num(o, "divisor", 0);
     e.font_size = tl_num(o, "font_size", 16);
     e.opacity = fmax(0.0, fmin(100.0, tl_num(o, "opacity", 100)));
+    e.bg_opacity = fmax(0.0, fmin(100.0, tl_num(o, "bg_opacity", 100)));
 
     if (kind == TR_KIND_LABEL) {
         e.color = tl_color(o, "color", c->def->text_primary);

@@ -1435,7 +1435,9 @@ static void te_create_arc(lv_obj_t *scr, te_item_t *it)
     lv_obj_set_style_arc_rounded(o, false, LV_PART_MAIN);
     lv_obj_set_style_arc_rounded(o, false, LV_PART_INDICATOR);
     lv_obj_set_style_arc_color(o, lv_color_hex(el->bg_color), LV_PART_MAIN);
+    lv_obj_set_style_arc_opa(o, (lv_opa_t)tl_round(el->bg_opacity * 255.0 / 100.0), LV_PART_MAIN);
     lv_obj_set_style_arc_color(o, lv_color_hex(el->color), LV_PART_INDICATOR);
+    lv_obj_set_style_arc_opa(o, LV_OPA_COVER, LV_PART_INDICATOR);
     lv_arc_set_rotation(o, 0);
     lv_arc_set_bg_angles(o, te_deg360(el->start_angle), te_deg360(el->end_angle));
     lv_arc_set_range(o, 0, 10000);
@@ -1453,7 +1455,7 @@ static void te_create_bar(lv_obj_t *scr, te_item_t *it)
     te_plain(bg);
     lv_obj_set_pos(bg, (lv_coord_t)tl_px(el->x), (lv_coord_t)tl_px(el->y));
     lv_obj_set_size(bg, (lv_coord_t)tl_px(el->width), (lv_coord_t)tl_px(el->height));
-    lv_obj_set_style_bg_opa(bg, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_opa(bg, (lv_opa_t)tl_round(el->bg_opacity * 255.0 / 100.0), 0);
     lv_obj_set_style_bg_color(bg, lv_color_hex(el->bg_color), 0);
     lv_obj_set_style_radius(bg, radius, 0);
 

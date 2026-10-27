@@ -602,3 +602,9 @@ older partition tables need one full reflash because OTA cannot change the table
 ## Video decode ahead and double buffering
 
 Playback retains sequential SD read-ahead, a PSRAM compressed-frame ring and a persistent JPEG decoder. Fullscreen mode decodes the next frame's first MCU strip or whole image ahead of time and starts panel transfer at its source deadline. Two internal DMA strips alternate by parity; submission waits for the previous transfer and never overwrites an in-flight buffer. Composite themes retain front/back frame buffers and LVGL handoff. OBV2 also decodes ahead, retaining compressed frames and shifting the timeline on pause; expired frames follow existing skip rules. Decode timing excludes deadline sleep. Actual FPS still requires device measurement; host tests do not establish a fixed hardware frame rate.
+
+## Arc and bar track opacity
+
+Runtime arc/bar layouts accept optional `bg_opacity` (0–100, default 100, clamped). Zero hides the track and 100 keeps it opaque. Arcs use LVGL arc opacity on `LV_PART_MAIN`; bars set only the container background opacity, leaving the indicator arc, foreground bar and child object opacity unchanged. Editor projects, previews and exports use the same track opacity. Older themes retain opaque defaults; older firmware ignores the new field, so transparent tracks require upgraded firmware.
+
+Community publication and ZIP export now share image/video sizing, including layer-sized video posters. Videos padded to multiples of 8 use integer centering consistent with device cropping. Older community packages whose assets differ from layout sizes must be exported/published again from the original editable project; firmware upgrades do not rewrite those files. Automatic community cover PNG pixels are clipped to the round dial.

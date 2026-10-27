@@ -186,9 +186,21 @@ static void test_value_video_layout(void)
     TH_CHECK(g_live == 0);
 }
 
+static void test_track_opacity(void)
+{
+    tl_layout_t *l = parse("{\"elements\":[{\"type\":\"arc\"},{\"type\":\"arc\",\"bg_opacity\":0},"
+        "{\"type\":\"bar\",\"bg_opacity\":35},{\"type\":\"bar\",\"bg_opacity\":200}]}");
+    TH_CHECK(l && l->n == 4);
+    if (l) {
+        TH_CHECK(l->el[0].bg_opacity == 100 && l->el[1].bg_opacity == 0);
+        TH_CHECK(l->el[2].bg_opacity == 35 && l->el[3].bg_opacity == 100);
+    }
+    tl_free(l, &A); TH_CHECK(g_live == 0);
+}
+
 int main(void)
 {
-    test_round();
+    test_round(); test_track_opacity();
     test_elements();
     test_limits(); test_value_video_layout();
     return th_report("layout");
