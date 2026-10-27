@@ -553,7 +553,7 @@ static void test_v5(void)
     CHECK_EQ(espnow_rx_apply(&f, false, &ops), 2);
     for (int i = 2; i < 12; i++) CHECK(!t.valid[i]);
 
-    /* hand-built legacy packet: oil temp outside [-20,150] holds, -100 invalidates */
+    /* hand-built legacy packet: oil temp 200 C is valid through 255 C, -100 invalidates */
     espnow_snapshot_init(&s);
     CHECK(espnow_snapshot_put(&s, ESPNOW_ID_OIL_TEMP, 100));
     len = espnow_v5_encode(&s, buf, sizeof(buf));
@@ -564,7 +564,7 @@ static void test_v5(void)
     ops = fake_ops(&t);
     t.valid[7] = true;  t.value[7] = 88;
     espnow_rx_apply(&f, false, &ops);
-    CHECK(t.valid[7] && t.value[7] == 88 && t.sets[7] == 0 && t.invals[7] == 0);
+    CHECK(t.valid[7] && t.value[7] == 200 && t.sets[7] == 1 && t.invals[7] == 0);
     wr16(buf + 17, (uint16_t)-100);
     CHECK(espnow_v5_decode(buf, len, &f));
     espnow_rx_apply(&f, false, &ops);

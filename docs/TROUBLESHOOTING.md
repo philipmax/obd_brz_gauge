@@ -30,27 +30,32 @@ BLE 能扫到并连上？ ──否──→ 第一步
 
 - 先用手机 OBD App（Car Scanner、Torque 等）连同一设备验证其工作正常
 - 适配器被手机 App 占用时仪表无法连接 —— 关掉手机 App 的自动重连
+- BLE 通道同时支持 Write Request 和 Write Without Response；接收只处理订阅的数据特征，避免其他特征的通知混入 ELM 应答。
 
 ## 第二步：协议
 
 ### 协议自动检测
 
-协议设为 **0（自动）**，且没有当前会话或 NVS 中可复用的协议时，仪表会自动探测：
+协议设为 **0（自动）**且车型未锁定 `bus.proto` 时，仪表会自动探测：
 
 ```
-初始化（ATZ → ATE0 → ATL0 → ATS1 → ATH0 → ATAT1 → ATST … → 01 00 能力探测）
+ATZ → wait for >
    ↓
-依次尝试协议 1–12：ATSP<n> → 发 01 0C（读转速）测试
-   ├─ 有效响应 → 保存协议到 NVS，进入正常轮询
-   └─ 2 秒超时 → 下一个协议
+6 → 7 → 4 → 5 → 3 → 1 → 2 → 8 → 9 → A → B
    ↓
-全部失败 → 回退协议 6，日志 "Protocol auto-detect FAILED, using fallback protocol 6"
+ATZ / ATD / ATD0 → common setup → ATSP<n> → check_connection (default 0100)
+   ├─ positive response → cache session protocol → init → polling
+   └─ failure → retry candidate (up to 3 attempts) → next candidate
+   ↓
+all failed → ATSP0 → init → polling
 ```
 
-- 每协议 2 秒 × 12 个 = 最多约 24 秒，通常 3–8 秒内命中
-- 检测期间只测 RPM，不会把异常数据刷进显示
-- 检测成功自动保存；后续重连优先复用已检测协议，避免每次等待完整探测
-- 强制重检：协议设为 0 → 断开 → 重连
+- 每次连接测试默认等待 2 秒；协议 3/4 为 10 秒，协议 5 为 5 秒，回退 `ATSP0` 为 30 秒。计入初始化、重试和超时后的排空等待，完整探测可能需要数分钟。
+- 超时后发送中断并等待 `>`，未收到提示符则重连，避免下一条命令撞上尚未结束的初始化。
+- 检测使用车型的 `bus.check_connection`（默认 `0100`），只有匹配的正响应才接受该协议；检测数据不直接显示到仪表。
+- 成功结果仅在本次会话复用，不把 NVS 的自动选择改成固定协议；正常轮询持续 10 秒无有效数据时重新探测。车型或用户手动锁定的协议仍按原设置自愈重连。
+- 旧固件可能已将自动结果存成非零值；升级后在协议页重新选择一次 `0 - Automatic` 并长按保存重启，恢复自动模式。
+- CAN 接收兼容 `ATH1 + ATS0` 紧凑格式；协议 7/9 使用对应的 29 位标准 OBD 请求头，协议 1–5 使用原生寻址和 `ATH0`。
 
 ### 手动选择协议
 

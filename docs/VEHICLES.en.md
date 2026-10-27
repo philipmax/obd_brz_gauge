@@ -15,18 +15,18 @@ Other vehicles are installed and activated through the web UI or App; changes ta
 ```
 
 The web editor at `/vehicles/editor` starts with standard OBD2, local JSON or a community profile, lists collection data and PIDs, and supports editing or adding items.
-New standard profiles include 9 built-in standard items at editable one-second intervals; imported profiles retain their original frequencies.
+New standard profiles include 10 built-in standard items at editable one-second intervals; imported profiles retain their original frequencies.
 Adding standard data preserves custom or disabled items and complete manufacturer requests and fallback fields for BMW, Jeep and other vehicles. See [PID_GUIDE.md](PID_GUIDE.en.md) for fields and formulas.
 
 ## Vehicle profile catalog
 
-The catalog repo currently holds **17 profiles**
+The catalog repo currently holds **18 profiles**
 ([vehicles/catalog/](../vehicles/catalog/)); the firmware only has
-`obd2.generic` built in, the other 16 are JSON files waiting to be installed:
+`obd2.generic` built in, the other 17 are JSON files waiting to be installed:
 
 | id | Name | Protocol | Addressing | Gear source | Boost | Oil pressure (OBD) | Notes |
 |---|---|---|---|---|---|---|---|
-| `obd2.generic` | `OBD2 Generic` | Auto | Physical 7E0 | Ratio estimate | — | — | **Firmware-builtin**, generic SAE J1979 |
+| `obd2.generic` | `OBD2 Generic` | Auto | Functional 7DF (`18DB33F1` on protocols 7/9) | Ratio estimate | ✓ | — | **Firmware-builtin**, generic SAE J1979 |
 | `subaru.zc6.can` | `ZN/C6 CAN` | 6 locked | Physical 7E0 | Ratio estimate | — | — | The only profile using CAN broadcast monitoring (`ATMA`, `monitor` block); RPM still comes from OBD |
 | `subaru.zc6.pid` | `ZN/C6 PID` | 6 locked | Physical 7E0 | Ratio estimate | — | — | Pure-OBD fallback for adapters that don't support ATMA |
 | `subaru.zd8.obd` | `ZD8 OBD` | 6 locked | Physical 7E0 | Ratio estimate | — | — | Same polling as `subaru.zd8.pid`; both profiles are kept so the legacy NVS index maps 1:1 |
@@ -40,6 +40,7 @@ The catalog repo currently holds **17 profiles**
 | `mini.r55` | `MINI R55` | 6 locked | Functional 7DF | Ratio estimate | ✓ | — | N14/N18/N16; UDS `22 58 22` always goes over physical 7E0 (see behavior changes below) |
 | `porsche.997_2` | `POS 997.2` | 6 locked | Physical 7E0 | Ratio estimate (7-speed) | — | — | 987.2/997.2 DFI |
 | `porsche.997_1` | `POS 997.1` | 6 locked | Physical 7E0 | Ratio estimate | — | — | 987.1/997.1 M96/M97 |
+| `porsche.987_1` | `POS 987.1` | 3 locked | ISO 9141-2 native addressing | Ratio estimate | — | — | ELM protocol 3 verified on a 987.1; initial ratios copied from 997.1 need gearbox calibration |
 | `alfa.giulia_20t` | `GIULIA 2.0T` | 7 locked | 29-bit functional `18DB33F1` | Ratio estimate | ✓ | — | Giorgio platform; 50 ms poll gap (slow UDS responses) |
 | `jeep.generic` | `jeep` | 7 locked | 29-bit functional `18DB33F1` | Ratio estimate | — | — | Generic placeholder; ratios/tire still need to be refined for the real car |
 | `honda.integra` | `Honda Integra` | 7 locked | 29-bit functional `18DB33F1` | Disabled (CVT) | ✓ | — | 11th-gen Civic platform L15C7; non-Type-R trims may lack a physical oil-temp sensor |
@@ -51,9 +52,9 @@ whitelist, static validation rules).
 
 ## Editable import pack
 
-[vehicles/import/](../vehicles/import/README.en.md) provides **18 complete importable
-templates**: independent `custom.*` copies of all 17 catalog profiles, plus
-`custom.bmw.g.gear`. The original catalog still has 17 profiles. Templates expose
+[vehicles/import/](../vehicles/import/README.en.md) provides **19 complete importable
+templates**: independent `custom.*` copies of all 18 catalog profiles, plus
+`custom.bmw.g.gear`. The original catalog has 18 profiles. Templates expose
 request headers, response prefixes and polling intervals for customization. Copy
 a selected JSON to the SD card's `OBD/IMPORT/`, then select the profile and reboot.
 
@@ -86,7 +87,7 @@ units, filters and polling policies. The smallest importable profile can omit bo
 }
 ```
 
-These 9 standard signals are added:
+These 10 standard signals are added:
 
 | 信号 / Signal | PID |
 |---|---|
@@ -99,6 +100,7 @@ These 9 standard signals are added:
 | `obd.oil_temp` | `015C` |
 | `obd.battery_voltage` | `0142` |
 | `obd.afr` | `0144` |
+| `obd.boost` | `010B` |
 
 An explicit signal **replaces the entire default definition** for its id. Fields are
 not merged, and a standard PID is not added as an automatic failure fallback. For
@@ -113,13 +115,11 @@ disable a signal, add this entry to `signals`:
 
 Disabled entries allow only `id`, `disabled` and `notes`, and are excluded from polling.
 For fully custom requests or pure CAN monitoring, set root `"defaults": "none"`;
-`signals` must then be a nonempty array. When `bus.proto` is omitted, standard OBD-II
-protocol selection is used: the engine reuses a saved or already-detected protocol,
-and auto-detects when neither is available. To lock a vehicle to a specific protocol,
-such as Jeep/BMW protocol 7 or BMW protocol 6, set `bus.proto` explicitly. Without
+`signals` must then be a nonempty array. When `bus.proto` is 0 or omitted, a manually selected device protocol takes precedence. With `0 - Automatic`, detection results are cached only for the current session and do not overwrite the NVS selection. Sustained decode failures trigger another probe; an explicit `bus.proto` remains locked. Existing nonzero settings saved by older firmware cannot be distinguished from manual choices: select `0 - Automatic` once after upgrading. Without
 `bus`, the other defaults are header `7E0`, `ATST=0x19` and a 30 ms request gap. Inherited standard requests use the
 vehicle's `bus.hdr`; special headers remain configurable through each `src.hdr`.
-For ISO 9141-2 / ISO KWP2000 (protocols 3–5), ordinary OBD requests retain the ELM327's native K-line addressing. Even if an imported profile contains CAN-style `bus.hdr` / `src.hdr` values such as `7E0`, the engine does not send `ATSH`; it uses `ATH0` to hide K-line response headers rather than parsing them as CAN headers.
+On J1850 / ISO 9141-2 / ISO KWP2000 (protocols 1–5), ordinary OBD requests retain the ELM327's native addressing. CAN-style `bus.hdr` / `src.hdr` values such as `7E0` do not cause `ATSH` commands; `ATH0` hides response headers. Protocols 7/9 map standard OBD request headers `7DF` and `7E0`–`7E7` to their 29-bit functional/physical equivalents; existing 29-bit headers are retained. CAN responses support compact `ATH1 + ATS0` output and 29-bit headers printed as separate bytes.
+An imported `ATSP0` does not overwrite an already selected concrete protocol. After adapter auto mode (`ATSP0` / `ATSPAh`), `ATDPN` confirms the actual protocol before polling. A rejected protocol-selection command cannot make a reply on the previous protocol count as a successful candidate. On protocols 7/9, standard receive filters `7E8`–`7EF` are also mapped to 29-bit addresses; native 29-bit physical requests support Mode 01 functional fallback. Ordinary request/setup timeouts also interrupt and wait for `>`; BLE write failures reconnect before another command can extend a partial line.
 Drivetrain ratios and ratio-derived `obd.gear` are not inherited: declare a direct gear
 source or supply the vehicle's own `drivetrain`. Automatic completion does not imply
 ECU support for a PID; unavailable values still follow existing failure rules and
@@ -257,9 +257,7 @@ These differences come from the old-vs-new comparison tests in
   `monitor.stale_ms` (15000 ms), legacy firmware wrote coolant as -40 and
   marked oil invalid; the new engine marks both invalid (no more fake -40°C)
 - **`mazda.mx5nd` / `mini.jcw_f56` / `obd2.generic`'s `ATSP0`**: when
-  `bus.proto` is 0, the engine sends `ATSP` with the previously saved or
-  auto-detected protocol (`nvs_user_cfg_t.protocol` -> `vp_engine_cfg_t.proto`),
-  matching legacy behavior — not a regression
+  `bus.proto` is 0, the engine retains the user's manual/automatic selection. Auto results are session hints and are discarded after sustained decode failures, rather than saved as a forced NVS protocol
 
 ## ADS1115 oil-pressure sensor (V1 hardware) fallback
 
@@ -304,3 +302,21 @@ No firmware code changes needed — just write a JSON file that matches the
 
 When a profile JSON is added to or replaced in the catalog, update the
 catalog table at the top of this file to match.
+
+## Clear installed vehicle profiles
+
+The web USB flasher provides “Clear installed vehicle profiles”. After explicit checkbox confirmation, it deletes config `/vehicles/*.json` and SD `/OBD/CFG/vehicles/*.json`, including the current profile, and schedules builtin `obd2.generic` for reboot. Mounted SD is required and deletion errors stop the operation. The current compiled profile remains alive until reboot so polling cannot access freed memory. CATALOG / IMPORT / EXPORT templates, themes and boot animations are retained. Firmware supporting `vehicle.clear` is required.
+
+## Boost and high temperature readings
+
+Builtin Generic and profiles omitting `obd.boost` now inherit `010B`, estimating relative pressure as `MAP - 100 kPa` and preserving negative values; 35 kPa corresponds to approximately -0.65 bar, rounded to -0.7 bar on the builtin 0.1 bar display. Needle and chart ranges start at -1.0 bar. The vehicle table lists explicit boost definitions; profiles without one can inherit generic MAP. The vehicle must support the PID; missing or stale data still displays `--`. The fixed 100 kPa reference is affected by altitude, weather and sensor location. Pressure after the turbo but before the throttle is not manifold vacuum, and diesel idle does not guarantee negative pressure. Accurate gauge pressure requires the vehicle's atmospheric reference or a validated proprietary PID.
+
+Coolant and oil signal limits and builtin gauge scales now extend to 255°C; oil hysteresis and ESP-NOW v5 receive limits are extended too. Large temperature jumps still require consecutive confirmation. Standard single-byte `0105` / `015C` with `A-40` can only represent up to 215°C; 255°C requires a capable source formula and cannot be created by raising limits. Catalog profiles are updated to rev 3 with matching import templates. Firmware does not overwrite explicit old `valid` bounds or negative-pressure clamps in installed profiles; reimport the updated profile and check custom formula limits.
+
+## RPM and speed acquisition scheduling
+
+Firmware enables independent RPM/speed priority scheduling with minimum request intervals of 50 / 100 ms when unspecified. Explicit `period_ms` remains authoritative; new import templates use 50 / 100 ms. Deadlines use actual send times, inserting due samples between complete requests while retaining background service in each slot. Before/after commands, multiframe transactions and prompt waits remain uninterrupted. Consecutive failures back off for 1 / 2 / 4 / 8 / 16 seconds; success and reconnect reset the backoff. The speed cache retains actual samples and leaves display smoothing to the UI, avoiding extra delay in gear calculation and linked gauges. Only demanded page/gear signals are requested; RPM remains enabled. These are minimum intervals, not guaranteed 20 / 10 Hz rates: adapter, protocol, timeouts and request count determine throughput.
+
+## Scirocco 2.0T profile library check
+
+The user-provided Car Scanner `vehicle-profiles.json` (1304 profiles) contains no dedicated profile named `Scirocco`, `Sirocco` or `尚酷`. Related profiles `872` (`PQ25, PQ35, PQ46`) and `873` (`PQ25, PQ35, PQ46 + UDS AT/DSG DQ500`) contain VW parameters, but their ECM pressure request is `VWTP:01:2173`, a transport the current engine does not support. Dashboard `222211` is a percentage and cannot be imported directly as bar. Profile `742` for EA888 Gen.3 / MQB cannot be considered compatible based only on 2.0T displacement. Year, engine and ECU information require verification. No unverified dedicated Scirocco profile is added; the generic standard PID path remains independently usable.

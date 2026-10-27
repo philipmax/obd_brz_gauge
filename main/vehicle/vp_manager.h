@@ -72,6 +72,10 @@ esp_err_t vp_manager_reset_to_generic(void);
 esp_err_t vp_manager_rollback(void);
 /* Delete an installed profile (not the active one, not builtin). */
 esp_err_t vp_manager_remove(const char *id);
+/* Explicit bulk clear, including the current source and SD mirror. Requires
+ * mounted SD; schedules builtin generic for reboot, retaining this boot's
+ * compiled pointer. Catalog/import/export templates and media are untouched. */
+esp_err_t vp_manager_clear_installed(void);
 /* Fill up to max entries (builtin first); returns the count. */
 int       vp_manager_list(vpm_entry_t *out, int max);
 /* Copy the source JSON of id to SD /OBD/EXPORT/<id>.vehicle.json. */

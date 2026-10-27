@@ -45,7 +45,7 @@ schema 故意比设备严：未知字段在 schema 里是错误（设备只给 `
 ### 1.0 默认信号补齐
 
 根字段 `defaults` 缺省为 `"obd2"`。未声明的标准信号继承内置 Generic OBD2
-中的完整定义（请求、公式、单位、过滤及频率），只继承有 `src` 的 9 个信号：
+中的完整定义（请求、公式、单位、过滤及频率），只继承有 `src` 的 10 个信号：
 
 | 信号 / Signal | PID |
 |---|---|
@@ -58,6 +58,7 @@ schema 故意比设备严：未知字段在 schema 里是错误（设备只给 `
 | `obd.oil_temp` | `015C` |
 | `obd.battery_voltage` | `0142` |
 | `obd.afr` | `0144` |
+| `obd.boost` | `010B` |
 
 显式声明整体替换同 id 默认信号，不能只写 id / 调度字段；仍需完整 `src` 或
 `derive`。自定义源失败不会自动追加标准 PID 回退，需自行写入 `src`。
@@ -313,7 +314,7 @@ profile 不能任意写 AT 命令；`bus.init` 和请求源的 `before`/`after` 
     "rpn":[["A",0],["k",256],"*",["A",1],"+",["k",4],"/"]}]},
   {"id":"obd.speed","post":{"zero_le":2,"zero_if_rpm_lt":800},"src":[{"req":"010D","len":1,"expr":"A","rpn":[["A",0]]}]},
   {"id":"obd.coolant_temp","src":[{"can":"360","bit":24,"bits":8,"expr":"X-40","rpn":[["X"],["k",40],"-"]}]},
-  {"id":"obd.oil_temp","valid":[-20,150],"src":[{"can":"360","bit":16,"bits":8,"expr":"X-40","rpn":[["X"],["k",40],"-"]}]},
+  {"id":"obd.oil_temp","valid":[-20,255],"src":[{"can":"360","bit":16,"bits":8,"expr":"X-40","rpn":[["X"],["k",40],"-"]}]},
   {"id":"obd.battery_voltage","unit":"mV","src":[{"req":"0142","len":2,"expr":"A*256+B","rpn":[["R",0,16,"be"]]}]},
   {"id":"obd.gear","derive":"ratio"}]}
 ```
@@ -321,8 +322,8 @@ profile 不能任意写 AT 命令；`bus.init` 和请求源的 `before`/`after` 
 ZN/C6 PID 的机油温度（Mode 21 多帧，倒数第 5 字节，跳变保持）：
 
 ```json
-{"id":"obd.oil_temp","valid":[-20,150],"filter":"temp_hyst","src":[{"req":"2101","multiframe":true,"byte_from_end":5,
-  "valid":[-10,150],"hold":{"delta":8,"max_hold":30,"gap_ms":3000},"expr":"X-40","rpn":[["X"],["k",40],"-"]}]}
+{"id":"obd.oil_temp","valid":[-20,255],"filter":"temp_hyst","src":[{"req":"2101","multiframe":true,"byte_from_end":5,
+  "valid":[-10,255],"hold":{"delta":8,"max_hold":30,"gap_ms":3000},"expr":"X-40","rpn":[["X"],["k",40],"-"]}]}
 ```
 
 BMW F/G 挡位（EGS 扩展寻址裸帧；一个越界或失败的样本就回落到速比推算，与旧固件一致）：

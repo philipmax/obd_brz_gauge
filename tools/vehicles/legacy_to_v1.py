@@ -66,8 +66,8 @@ KNOWN_IDS = {
 
 DEFAULT_HDR = "7E0"
 DEFAULT_ATST = 0x19
-OIL_SIG_VALID = [-20, 150]     # on_parsed_oil_temp drops anything outside
-OIL_SRC_VALID = [-40, 215]     # 5C / formula / 22xx parsers count these as failures
+OIL_SIG_VALID = [-20, 255]     # engine hysteresis / cache acceptance range
+OIL_SRC_VALID = [-40, 255]     # 5C / formula / 22xx parsers count these as failures
 
 # legacy OIL_TEMP_MODE_* -> (request, data len, expr, rpn, source valid, physical header)
 _A2 = [["A", 0], ["k", 256], "*", ["A", 1], "+"]
@@ -164,7 +164,7 @@ def _req_source(req, n, expr, rpn, hdr=None, bus_hdr=DEFAULT_HDR, valid=None, **
 
 def _mode21_source():
     """ZN/C6 Mode 21 01: oil temp = 5th byte from the end - 40, jump hold."""
-    return {"req": "2101", "multiframe": True, "byte_from_end": 5, "valid": [-10, 150],
+    return {"req": "2101", "multiframe": True, "byte_from_end": 5, "valid": [-10, 255],
             "hold": {"delta": 8, "max_hold": 30, "gap_ms": 3000},
             "expr": "X-40", "rpn": [["X"], ["k", 40], "-"]}
 
@@ -250,7 +250,7 @@ def convert(p, idx, rev=dump_legacy.LEGACY_REV):
     if name not in KNOWN_IDS:
         raise ConvertError("no catalog id for legacy profile %r" % name)
     vid = KNOWN_IDS[name]
-    functional = bool(p.get("obd_functional_addr"))
+    functional = idx == 0 or bool(p.get("obd_functional_addr"))
     bus_hdr = ("18DB33F1" if p.get("obd_29bit_functional") else "7DF") if functional else DEFAULT_HDR
 
     bus = {}
@@ -299,9 +299,9 @@ def convert(p, idx, rev=dump_legacy.LEGACY_REV):
     signals.append(oil)
 
     signals.append(std("obd.battery_voltage", "0142", 2, "A*256+B", [["R", 0, 16, "be"]], unit="mV"))
-    if p.get("has_boost"):
+    if idx == 0 or p.get("has_boost"):
         signals.append(std("obd.boost", "010B", 1, "A-100", [["A", 0], ["k", 100], "-"],
-                           unit="kPa_rel", post={"clamp": [0, 155]}))
+                           unit="kPa_rel", post={"clamp": [-100, 155]}))
     afr = std("obd.afr", "0144", 2, "(A*256+B)*14.7/32768",
               [["R", 0, 16, "be"], ["k", 14.7], "*", ["k", 32768], "/"])
     afr["src"][0]["valid"] = [8, 22]
@@ -348,7 +348,7 @@ def convert(p, idx, rev=dump_legacy.LEGACY_REV):
     prof = {
         "schema": SCHEMA,
         "id": vid,
-        "rev": 1,
+        "rev": 3,
         "name": name,
         "origin": {"from": "legacy %s" % rev if rev else "legacy (working tree)",
                    "legacy_idx": idx, "legacy_name": name},

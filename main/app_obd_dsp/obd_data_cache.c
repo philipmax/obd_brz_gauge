@@ -3,14 +3,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#define SPEED_SMOOTH_TIME_MS 300   // speed ramp-up/down time constant (ms); the UI side already has anim_step, keep this small
-#define FALL_TO_ZERO_MS      500   // fall-to-zero ramp-down time constant (ms)
-
 static portMUX_TYPE s_mux = portMUX_INITIALIZER_UNLOCKED;
-
-// Speed smoothing state (advanced on the setter side; single writer)
-static TickType_t s_speed_last_tick = 0;
-static float s_speed_smooth_f = 0.f;
 
 // RPM override layer: during multi-gauge linkage tests, the master gauge injects simulated RPM here.
 static bool     s_rpm_override_en = false;
@@ -59,17 +52,9 @@ uint16_t obd_data_get_rpm(void)
 
 void obd_data_set_speed(uint8_t kmh)
 {
-    TickType_t now_tick = xTaskGetTickCount();
-    uint32_t dt_ms = (now_tick - s_speed_last_tick) * portTICK_PERIOD_MS;
-    if (dt_ms > 1000) dt_ms = 1000;
-    s_speed_last_tick = now_tick;
-
-    uint32_t tc = (kmh == 0) ? FALL_TO_ZERO_MS : SPEED_SMOOTH_TIME_MS;
-    float alpha = (float)dt_ms / (float)tc;
-    if (alpha > 1.0f) alpha = 1.0f;
-    s_speed_smooth_f += alpha * ((float)kmh - s_speed_smooth_f);
-
-    signal_store_set(SIG_OBD_SPEED, (int32_t)(s_speed_smooth_f + 0.5f));
+    /* Store the received sample unchanged. Presentation smoothing belongs
+     * in the UI; smoothing here also delays gear estimation and ESP-NOW. */
+    signal_store_set(SIG_OBD_SPEED, kmh);
 }
 
 void obd_data_set_coolant_temp(int16_t temp)
@@ -80,7 +65,7 @@ void obd_data_set_coolant_temp(int16_t temp)
 
 void obd_data_set_oil_temp(int16_t temp)
 {
-    if (temp < -20 || temp > 150) return;
+    if (temp < -20 || temp > 255) return;
     signal_store_set(SIG_OBD_OIL_TEMP, temp);
 }
 

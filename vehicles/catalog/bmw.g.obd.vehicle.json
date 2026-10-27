@@ -1,7 +1,7 @@
 {
   "schema": "skygauge.vehicle/1",
   "id": "bmw.g.obd",
-  "rev": 1,
+  "rev": 3,
   "name": "BMW G OBD",
   "origin": {
     "from": "legacy 4b056c0",
@@ -93,13 +93,13 @@
     },
     {
       "id": "obd.oil_temp",
-      "valid": [-20, 150],
+      "valid": [-20, 255],
       "filter": "temp_hyst",
       "src": [
         {
           "req": "015C",
           "len": 1,
-          "valid": [-40, 215],
+          "valid": [-40, 255],
           "expr": "A-40",
           "rpn": [["A", 0], ["k", 40], "-"]
         }
@@ -121,7 +121,7 @@
       "id": "obd.boost",
       "unit": "kPa_rel",
       "post": {
-        "clamp": [0, 155]
+        "clamp": [-100, 155]
       },
       "src": [
         {

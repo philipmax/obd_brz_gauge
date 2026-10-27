@@ -38,9 +38,9 @@ reads vehicle data, and renders a touch UI with LVGL.
 | Triple gauge | One master reads OBD; slaves mirror it over ESP-NOW with zero extra load |
 | Sensors | ADS1115 oil-pressure ADC (V1 board; cars with an OBD oil-pressure DID read it over OBD instead)|
 
-## Vehicle profiles (17 profiles, 1 built in)
+## Vehicle profiles (18 profiles, 1 built in)
 
-The firmware only has `OBD2 Generic` (standard OBD2) built in. The other 16
+The firmware only has `OBD2 Generic` (standard OBD2) built in. The other 17
 vehicles are JSON profiles: install one from an SD card (`/OBD/IMPORT`), the
 companion app (via the `/api/v1/vehicles` API), or the on-device **Vehicle
 page**, then activate it and reboot. Full catalog table, install steps and behavior changes are in
@@ -48,13 +48,13 @@ page**, then activate it and reboot. Full catalog table, install steps and behav
 
 `OBD2 Generic` · `ZN/C6 CAN` · `ZN/C6 PID` · `ZD8 OBD` · `ZD8` · `MX-5 ND` ·
 `BMW F/G` · `Supra A90` · `BMW G OBD` · `BMW E` · `JCW F56` · `MINI R55` ·
-`POS 997.2` · `POS 997.1` · `GIULIA 2.0T` · `jeep` · `Honda Integra`
+`POS 997.2` · `POS 997.1` · `POS 987.1` · `GIULIA 2.0T` · `jeep` · `Honda Integra`
 
 Only the Subaru BRZ ZN/C6 has been fully verified on a real car; the other
 profiles are configured but some still need road testing.
 
 For editable configurations, see [vehicles/import/](vehicles/import/README.en.md):
-**18 independent import templates** (`custom.*` copies of the 17 catalog profiles
+**19 independent import templates** (`custom.*` copies of the 18 catalog profiles
 plus BMW G direct gear), with explicit request headers, bit decoding and polling
 intervals. Copy a selected JSON to the SD card's `OBD/IMPORT/`, install, activate
 and reboot.
@@ -66,7 +66,7 @@ signals default to OBD2. Use `disabled: true` for one signal or root
 
 ## Highlights
 
-- **JSON vehicle profile system** — 17 profiles; only `OBD2 Generic` is
+- **JSON vehicle profile system** — 18 profiles; only `OBD2 Generic` is
   built in, the rest install + activate + reboot via SD/app/Vehicle
   page; per-vehicle gear ratios (up to 8 speeds), oil-temp strategies,
   protocol locks and addressing; gear display prefers direct CAN/DID reads,
@@ -91,7 +91,8 @@ signals default to OBD2. Use `disabled: true` for one signal or root
   animation uploaded from the phone app (360×360 circular safe area)
 - **RaceChrono BLE output** — can act as a RaceChrono DIY device
 - **Self-healing link** — re-initializes and reconnects automatically when
-  data stalls; just power on and drive
+  data stalls; Auto retains its selection and re-probes on decode failures,
+  supporting 11/29-bit CAN, J1850 and K-line responses
 
 ## Quick start
 
@@ -201,3 +202,5 @@ but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 GNU General Public License for more details.
 ```
+
+Generic supports MAP vacuum estimation and coolant/oil display limits up to 255°C. RPM and speed use independent priority deadlines. Reimport older installed profiles to apply explicit range fixes; see [vehicle documentation](docs/VEHICLES.en.md).

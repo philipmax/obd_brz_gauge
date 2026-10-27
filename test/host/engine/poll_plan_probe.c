@@ -31,6 +31,11 @@ pp_case_t *pp_create(unsigned signals, unsigned pattern, uint32_t seed, bool mix
     c->e.sig = c->sig;
     c->e.src = c->src;
     c->e.round_no = rng(&seed);
+    c->e.obd_demand_mask = UINT16_MAX;
+    c->e.sig_gear = -1;
+    memset(c->e.req_head, ENG_INDEX_NONE, sizeof(c->e.req_head));
+    memset(c->e.req_tail, ENG_INDEX_NONE, sizeof(c->e.req_tail));
+    memset(c->e.req_next, ENG_INDEX_NONE, sizeof(c->e.req_next));
     for (i = 0; i < signals; i++) {
         vp_signal_t *s = &c->sig[i];
         eng_sig_t *g = &c->e.sigs[i];
@@ -61,6 +66,8 @@ pp_case_t *pp_create(unsigned signals, unsigned pattern, uint32_t seed, bool mix
             g->cur = (uint8_t)((r >> 8) & 1);
             g->last_poll_ms = rng(&seed);
         }
+        for (unsigned si = 2 * i; si < 2 * i + 2; si++)
+            req_index_append(&c->e, c->src[si].ref, (uint16_t)si);
         if (sig_driven(&c->e, (int)i)) {
             c->e.poll_sig[c->e.n_poll++] = (uint8_t)i;
             if (s->rate == VP_RATE_EVERY) c->e.every_sig[c->e.n_every++] = (uint8_t)i;
@@ -86,7 +93,7 @@ static void reference_round(vp_engine_t *e, uint32_t now)
         if (j == e->round_n && e->round_n < VP_MAX_REQUESTS) e->round_req[e->round_n++] = r;
         e->sigs[i].last_poll_ms = now;
     }
-    e->in_round = e->round_n > 0 || every_reqs(e, ev) > 0;
+    e->in_round = e->round_n > 0 || every_reqs(e, ev, now) > 0;
 }
 
 static uint32_t checksum(const vp_engine_t *e)
@@ -119,7 +126,7 @@ bool pp_verify(pp_case_t *c, uint32_t now)
      * tails, empty/every-only rounds, and reset flags, not just a checksum. */
     if (memcmp(&reference, &c->e, sizeof(reference))) return false;
     for (;;) {
-        bool a = build_slot(&reference), b = build_slot(&c->e);
+        bool a = build_slot(&reference, now), b = build_slot(&c->e, now);
         if (a != b || memcmp(&reference, &c->e, sizeof(reference))) return false;
         if (!a) break;
         if (++slots > VP_MAX_REQUESTS + 1) return false;
@@ -131,6 +138,11 @@ void pp_transition(pp_case_t *c, uint32_t seed)
 {
     unsigned i;
     c->e.round_no = rng(&seed);
+    c->e.obd_demand_mask = UINT16_MAX;
+    c->e.sig_gear = -1;
+    memset(c->e.req_head, ENG_INDEX_NONE, sizeof(c->e.req_head));
+    memset(c->e.req_tail, ENG_INDEX_NONE, sizeof(c->e.req_tail));
+    memset(c->e.req_next, ENG_INDEX_NONE, sizeof(c->e.req_next));
     for (i = 0; i < c->p.n_sig; i++) {
         if (c->sig[i].src_count) c->e.sigs[i].cur = (uint8_t)((rng(&seed) >> 16) & 1);
     }

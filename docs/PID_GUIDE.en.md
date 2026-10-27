@@ -10,7 +10,7 @@ field rules live in [contracts/vehicle-rpn.md](../contracts/vehicle-rpn.md)
 adapt. For the install/activate flow, see [VEHICLES.md](VEHICLES.en.md).
 
 The web editor at `/vehicles/editor` opens in basic mode: choose standard OBD2, local JSON or a community profile, then select and edit collection data.
-New profiles list the 9 built-in standard items and PIDs at one-second intervals. Change intervals, PIDs, request headers, reply addresses and formulas, or add other PIDs.
+New profiles list the 10 built-in standard items and PIDs at one-second intervals. Change intervals, PIDs, request headers, reply addresses and formulas, or add other PIDs.
 Editing formulas or response byte counts also generates and validates the firmware’s executable `rpn`. Imports retain their scheduling policies; editing inherited items writes complete definitions, and “Import standard OBD2 data” only fills gaps without overwriting custom or disabled items.
 Edit raw manufacturer frames, CAN bits, LUTs and fallback sources in advanced mode; basic operations preserve all their fields. This standard list matches the firmware’s built-in data rather than every SAE PID.
 
@@ -48,7 +48,7 @@ units, filters and polling policies. The smallest importable profile can omit bo
 }
 ```
 
-These 9 standard signals are added:
+These 10 standard signals are added:
 
 | 信号 / Signal | PID |
 |---|---|
@@ -61,6 +61,7 @@ These 9 standard signals are added:
 | `obd.oil_temp` | `015C` |
 | `obd.battery_voltage` | `0142` |
 | `obd.afr` | `0144` |
+| `obd.boost` | `010B` |
 
 An explicit signal **replaces the entire default definition** for its id. Fields are
 not merged, and a standard PID is not added as an automatic failure fallback. For
@@ -75,12 +76,11 @@ disable a signal, add this entry to `signals`:
 
 Disabled entries allow only `id`, `disabled` and `notes`, and are excluded from polling.
 For fully custom requests or pure CAN monitoring, set root `"defaults": "none"`;
-`signals` must then be a nonempty array. When `bus.proto` is omitted, the engine reuses
-a saved or already-detected protocol and auto-detects if neither is available. Set
-`bus.proto` explicitly to lock a special vehicle protocol. Without `bus`, the other
+`signals` must then be a nonempty array. When `bus.proto` is 0 or omitted, a manually selected device protocol takes precedence. With `0 - Automatic`, detection results are cached only for the current session and do not overwrite the NVS selection. Sustained decode failures trigger another probe; an explicit `bus.proto` remains locked. Existing nonzero settings saved by older firmware cannot be distinguished from manual choices: select `0 - Automatic` once after upgrading. Without `bus`, the other
 defaults are header `7E0`, `ATST=0x19` and a 30 ms request gap. Inherited standard requests use the
 vehicle's `bus.hdr`; special headers remain configurable through each `src.hdr`.
-ISO 9141-2 / ISO KWP2000 (protocols 3–5) are an exception: these K-line protocols do not use CAN request headers. Even if imported data contains `7E0`, runtime ignores it and uses `ATH0` to receive responses.
+On J1850 / ISO 9141-2 / ISO KWP2000 (protocols 1–5), ordinary OBD requests retain the ELM327's native addressing. CAN-style `bus.hdr` / `src.hdr` values such as `7E0` do not cause `ATSH` commands; `ATH0` hides response headers. Protocols 7/9 map standard OBD request headers `7DF` and `7E0`–`7E7` to their 29-bit functional/physical equivalents; existing 29-bit headers are retained. CAN responses support compact `ATH1 + ATS0` output and 29-bit headers printed as separate bytes.
+An imported `ATSP0` does not overwrite an already selected concrete protocol. After adapter auto mode (`ATSP0` / `ATSPAh`), `ATDPN` confirms the actual protocol before polling. A rejected protocol-selection command cannot make a reply on the previous protocol count as a successful candidate. On protocols 7/9, standard receive filters `7E8`–`7EF` are also mapped to 29-bit addresses; native 29-bit physical requests support Mode 01 functional fallback. Ordinary request/setup timeouts also interrupt and wait for `>`; BLE write failures reconnect before another command can extend a partial line.
 Drivetrain ratios and ratio-derived `obd.gear` are not inherited: declare a direct gear
 source or supply the vehicle's own `drivetrain`. Automatic completion does not imply
 ECU support for a PID; unavailable values still follow existing failure rules and
@@ -171,14 +171,14 @@ of indexing from the front, it's addressed as the **5th byte from the end**:
 ```json
 {
   "id": "obd.oil_temp",
-  "valid": [-20, 150],
+  "valid": [-20, 255],
   "filter": "temp_hyst",
   "src": [
     {
       "req": "2101",
       "multiframe": true,
       "byte_from_end": 5,
-      "valid": [-10, 150],
+      "valid": [-10, 255],
       "hold": { "delta": 8, "max_hold": 30, "gap_ms": 3000 },
       "expr": "X-40",
       "rpn": [["X"], ["k", 40], "-"]
@@ -195,8 +195,8 @@ of indexing from the front, it's addressed as the **5th byte from the end**:
   to 30 consecutive samples or until 3000ms pass without an update, at which
   point the new value is forced through (ported from the legacy firmware's
   `elm327_ble_client.c` oil-temp debounce logic)
-- Two layers of `valid`: source-level `[-10,150]` filters obviously bad
-  samples; signal-level `[-20,150]` is the final display range
+- Two layers of `valid`: source-level `[-10,255]` filters obviously bad
+  samples; signal-level `[-20,255]` is the final display range
 - `filter: "temp_hyst"`: one more hysteresis pass after conversion to the
   internal unit
 
@@ -444,3 +444,13 @@ firmware validator:
 Build commands and import steps are in the pack README. The template generator's
 `--check` checks distributed files against catalog sources; it is not a validator
 for personalized templates.
+
+## Boost and high temperature readings
+
+Builtin Generic and profiles omitting `obd.boost` now inherit `010B`, estimating relative pressure as `MAP - 100 kPa` and preserving negative values; 35 kPa corresponds to approximately -0.65 bar, rounded to -0.7 bar on the builtin 0.1 bar display. Needle and chart ranges start at -1.0 bar. The vehicle table lists explicit boost definitions; profiles without one can inherit generic MAP. The vehicle must support the PID; missing or stale data still displays `--`. The fixed 100 kPa reference is affected by altitude, weather and sensor location. Pressure after the turbo but before the throttle is not manifold vacuum, and diesel idle does not guarantee negative pressure. Accurate gauge pressure requires the vehicle's atmospheric reference or a validated proprietary PID.
+
+Coolant and oil signal limits and builtin gauge scales now extend to 255°C; oil hysteresis and ESP-NOW v5 receive limits are extended too. Large temperature jumps still require consecutive confirmation. Standard single-byte `0105` / `015C` with `A-40` can only represent up to 215°C; 255°C requires a capable source formula and cannot be created by raising limits. Catalog profiles are updated to rev 3 with matching import templates. Firmware does not overwrite explicit old `valid` bounds or negative-pressure clamps in installed profiles; reimport the updated profile and check custom formula limits.
+
+## RPM and speed acquisition scheduling
+
+Firmware enables independent RPM/speed priority scheduling with minimum request intervals of 50 / 100 ms when unspecified. Explicit `period_ms` remains authoritative; new import templates use 50 / 100 ms. Deadlines use actual send times, inserting due samples between complete requests while retaining background service in each slot. Before/after commands, multiframe transactions and prompt waits remain uninterrupted. Consecutive failures back off for 1 / 2 / 4 / 8 / 16 seconds; success and reconnect reset the backoff. The speed cache retains actual samples and leaves display smoothing to the UI, avoiding extra delay in gear calculation and linked gauges. Only demanded page/gear signals are requested; RPM remains enabled. These are minimum intervals, not guaranteed 20 / 10 Hz rates: adapter, protocol, timeouts and request count determine throughput.

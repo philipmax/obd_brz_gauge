@@ -77,6 +77,22 @@ char *device_serial_rpc(const char *json, bool *restart)
         } else {
             cJSON_AddStringToObject(response, "error", cJSON_IsString(id) ? vp_manager_last_error() : "missing vehicle id");
         }
+    } else if (!strcmp(name, "vehicle.clear")) {
+        const cJSON *confirm = cJSON_GetObjectItemCaseSensitive(request, "confirm");
+        if (!cJSON_IsTrue(confirm)) {
+            cJSON_AddStringToObject(response, "error", "explicit confirmation required");
+        } else {
+            esp_err_t err = vp_manager_clear_installed();
+            ok = err == ESP_OK;
+            if (ok) {
+                first_boot_migration_drop_vehicle();
+                cJSON_AddBoolToObject(response, "cleared", true);
+                cJSON_AddStringToObject(response, "pending", VPM_GENERIC_ID);
+            } else {
+                cJSON_AddStringToObject(response, "error", err == ESP_ERR_INVALID_STATE
+                    ? "SD card is not mounted" : vp_manager_last_error());
+            }
+        }
     } else if (!strcmp(name, "theme.erase")) {
         bool deleted = false;
         if (!lvgl_mux || xSemaphoreTake(lvgl_mux, pdMS_TO_TICKS(1000)) != pdTRUE) {

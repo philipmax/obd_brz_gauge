@@ -350,22 +350,28 @@ static void setup_channel(esp_gatt_if_t gattc_if)
             uint16_t combined_handle = 0;
             uint16_t write_handle = 0;
             uint16_t notify_handle = 0;
+            uint8_t combined_props = 0;
+            uint8_t write_props = 0;
             uint8_t notify_props = 0;
             st = esp_ble_gattc_get_all_char(gattc_if, s_conn_id, start, end, chars, &count, 0);
             if (st != ESP_GATT_OK) count = 0;
             for (uint16_t i = 0; i < count; i++) {
                 const esp_gattc_char_elem_t *c = &chars[i];
                 ESP_LOGD(TAG, "char handle 0x%04X prop 0x%02X", c->char_handle, c->properties);
-                /* Car Scanner checks CanWrite and uses the default
-                 * WriteAsync path, so require ATT Write Request support. */
-                bool writable = (c->properties & ESP_GATT_CHAR_PROP_BIT_WRITE) != 0;
+                bool writable = (c->properties & (ESP_GATT_CHAR_PROP_BIT_WRITE |
+                                                  ESP_GATT_CHAR_PROP_BIT_WRITE_NR)) != 0;
                 bool notify = (c->properties & ESP_GATT_CHAR_PROP_BIT_NOTIFY) != 0;
                 bool indicate = (c->properties & ESP_GATT_CHAR_PROP_BIT_INDICATE) != 0;
-                if (!combined_handle && writable && notify) {
+                if (writable && (notify || indicate) &&
+                    (!combined_handle || (!(combined_props & ESP_GATT_CHAR_PROP_BIT_WRITE) &&
+                                           (c->properties & ESP_GATT_CHAR_PROP_BIT_WRITE)))) {
                     combined_handle = c->char_handle;
+                    combined_props = c->properties;
                 }
-                if (!write_handle && writable) {
+                if (writable && (!write_handle || (!(write_props & ESP_GATT_CHAR_PROP_BIT_WRITE) &&
+                                                   (c->properties & ESP_GATT_CHAR_PROP_BIT_WRITE)))) {
                     write_handle = c->char_handle;
+                    write_props = c->properties;
                 }
                 if (!notify_handle && (notify || indicate)) {
                     notify_handle = c->char_handle;
@@ -375,14 +381,16 @@ static void setup_channel(esp_gatt_if_t gattc_if)
             if (combined_handle) {
                 s_write_handle = combined_handle;
                 s_notify_handle = combined_handle;
-                s_notify_indicate = false;
-                s_write_type = ESP_GATT_WRITE_TYPE_RSP;
+                s_notify_indicate = (combined_props & ESP_GATT_CHAR_PROP_BIT_NOTIFY) == 0;
+                s_write_type = (combined_props & ESP_GATT_CHAR_PROP_BIT_WRITE) ?
+                               ESP_GATT_WRITE_TYPE_RSP : ESP_GATT_WRITE_TYPE_NO_RSP;
             } else {
                 s_write_handle = write_handle;
                 s_notify_handle = notify_handle;
                 s_notify_indicate = (notify_props & ESP_GATT_CHAR_PROP_BIT_NOTIFY) == 0 &&
                                     (notify_props & ESP_GATT_CHAR_PROP_BIT_INDICATE) != 0;
-                s_write_type = ESP_GATT_WRITE_TYPE_RSP;
+                s_write_type = (write_props & ESP_GATT_CHAR_PROP_BIT_WRITE) ?
+                               ESP_GATT_WRITE_TYPE_RSP : ESP_GATT_WRITE_TYPE_NO_RSP;
             }
             free(chars);
         }
@@ -526,7 +534,8 @@ static void gattc_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp_ble
         break;
 
     case ESP_GATTC_NOTIFY_EVT:
-        if (!s_connected || param->notify.conn_id != s_conn_id || !s_rx) break;
+        if (!s_connected || param->notify.conn_id != s_conn_id ||
+            param->notify.handle != s_notify_handle || !s_rx) break;
         if (param->notify.value_len) {
             size_t sent = xStreamBufferSend(s_rx, param->notify.value, param->notify.value_len, 0);
             if (sent < param->notify.value_len) s_rx_dropped += param->notify.value_len - sent;
@@ -586,7 +595,10 @@ static bool sink_send(void *ctx, const char *cmd)
     (void)ctx;
     esp_gatt_if_t gif = s_gattc_if;
     uint16_t handle = s_write_handle;
-    if (!ble_hub_is_ready() || s_paused || !s_connected || !handle || gif == ESP_GATT_IF_NONE) {
+    uint16_t conn_id = s_conn_id;
+    esp_gatt_write_type_t write_type = s_write_type;
+    if (!ble_hub_is_ready() || s_paused || !s_connected || !s_notify_ready ||
+        !handle || gif == ESP_GATT_IF_NONE) {
         return false;
     }
     uint8_t buf[TX_LINE_MAX];
@@ -601,27 +613,28 @@ static bool sink_send(void *ctx, const char *cmd)
     if (att_payload == 0) att_payload = TX_CHUNK;
     for (size_t off = 0; off < n; off += att_payload) {
         size_t len = (n - off < att_payload) ? n - off : att_payload;
-        if (s_write_type == ESP_GATT_WRITE_TYPE_RSP) {
+        if (!s_connected || s_conn_id != conn_id || !s_notify_ready) return false;
+        if (write_type == ESP_GATT_WRITE_TYPE_RSP) {
             if (!s_tx_done) return false;
             while (xSemaphoreTake(s_tx_done, 0) == pdTRUE) {}
             s_tx_status = ESP_GATT_ERROR;
             s_tx_waiting = true;
         }
-        esp_err_t err = esp_ble_gattc_write_char(gif, s_conn_id, handle, (uint16_t)len, buf + off,
-                                                 s_write_type, ESP_GATT_AUTH_REQ_NONE);
+        esp_err_t err = esp_ble_gattc_write_char(gif, conn_id, handle, (uint16_t)len, buf + off,
+                                                 write_type, ESP_GATT_AUTH_REQ_NONE);
         if (err != ESP_OK) {
             s_tx_waiting = false;
             ESP_LOGW(TAG, "write: %s", esp_err_to_name(err));
             return false;
         }
-        if (s_write_type == ESP_GATT_WRITE_TYPE_RSP &&
+        if (write_type == ESP_GATT_WRITE_TYPE_RSP &&
             xSemaphoreTake(s_tx_done, pdMS_TO_TICKS(TX_WRITE_TIMEOUT_MS)) != pdTRUE) {
             s_tx_waiting = false;
             ESP_LOGW(TAG, "write response timeout (offset %u length %u mtu %u)",
                      (unsigned)off, (unsigned)len, (unsigned)s_att_mtu);
             return false;
         }
-        if (s_write_type == ESP_GATT_WRITE_TYPE_RSP && s_tx_status != ESP_GATT_OK) {
+        if (write_type == ESP_GATT_WRITE_TYPE_RSP && s_tx_status != ESP_GATT_OK) {
             ESP_LOGW(TAG, "write response failed (offset %u length %u status %d)",
                      (unsigned)off, (unsigned)len, s_tx_status);
             return false;
@@ -691,23 +704,20 @@ static void sink_on_elm_link(void *ctx, bool up)
     vp_manager_on_elm_link(up);
 }
 
-/* Auto-detect result: saved so later boots skip the detection. */
+/* The engine retains a detected protocol for this session.  Keep the user's
+ * selection at 0 (Automatic): saving a detected value here turns it into a
+ * forced protocol on the next boot and prevents recovery after changing cars. */
 static void sink_on_proto(void *ctx, uint8_t proto)
 {
     (void)ctx;
-    nvs_user_cfg_t base;
-    nvs_cfg_snapshot(&base);
-    if (base.protocol == proto) return;
-    nvs_user_cfg_t cfg = base;
-    cfg.protocol = proto;
-    if (nvs_cfg_update(&base, &cfg) == ESP_OK) ESP_LOGI(TAG, "protocol %u detected and saved", proto);
+    ESP_LOGI(TAG, "protocol %u detected for this session (Automatic selection retained)", proto);
 }
 
-/* Third self-heal in a row: drop the link; obd_poll reconnects. */
+/* Engine recovery (failed synchronization, write failure or repeated heals). */
 static void sink_reconnect(void *ctx)
 {
     (void)ctx;
-    ESP_LOGW(TAG, "no data after repeated re-init, reconnecting the adapter");
+    ESP_LOGW(TAG, "engine requested adapter reconnect");
     s_reconnect_us = esp_timer_get_time();
     close_link();
 }
@@ -760,6 +770,7 @@ static bool engine_create(void)
     nvs_user_cfg_t nv = nvs_cfg_read();
     vp_engine_cfg_t cfg = { 0 };
     cfg.proto = (nv.protocol <= 12) ? nv.protocol : 0;
+    cfg.responsive_polling = true;
     s_engine = vp_engine_create(vp_manager_active(), &k_sink, &cfg, &k_alloc);
     if (!s_engine) {
         ESP_LOGE(TAG, "vp_engine_create failed (profile %s)", vp_manager_active_id());

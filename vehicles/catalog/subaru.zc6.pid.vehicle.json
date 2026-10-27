@@ -1,7 +1,7 @@
 {
   "schema": "skygauge.vehicle/1",
   "id": "subaru.zc6.pid",
-  "rev": 1,
+  "rev": 3,
   "name": "ZN/C6 PID",
   "origin": {
     "from": "legacy 4b056c0",
@@ -92,14 +92,14 @@
     },
     {
       "id": "obd.oil_temp",
-      "valid": [-20, 150],
+      "valid": [-20, 255],
       "filter": "temp_hyst",
       "src": [
         {
           "req": "2101",
           "multiframe": true,
           "byte_from_end": 5,
-          "valid": [-10, 150],
+          "valid": [-10, 255],
           "hold": {
             "delta": 8,
             "max_hold": 30,

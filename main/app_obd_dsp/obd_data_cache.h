@@ -48,7 +48,7 @@ uint16_t obd_data_get_rpm(void);
 void obd_data_rpm_override_set(bool en, uint16_t val);
 void obd_data_set_speed(uint8_t kmh);
 void obd_data_set_coolant_temp(int16_t temp);
-void obd_data_set_oil_temp(int16_t temp);          // °C; values outside [-20, 150] are ignored (hold)
+void obd_data_set_oil_temp(int16_t temp);          // °C; values outside [-20, 255] are ignored (hold)
 void obd_data_set_intake_temp(int16_t temp);
 void obd_data_set_load_pct(int16_t pct);           // 0~100 %, -1 = invalid
 void obd_data_set_tps(int16_t pct);                // 0~100 %, -1 = invalid

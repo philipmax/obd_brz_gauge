@@ -130,6 +130,7 @@ App 的主题、开机动画、车型安装/启用和主题删除每次操作都
 | `{"op":"ota.stop"}` | `{"ok":true}` | 停止 HTTP OTA 并清理未完成上传，允许后续 USB 接管；不重启。启动/停止并发时返回 `ok:false`、`retryable:true`，不等待 LVGL 调用方 |
 | `{"op":"vehicle.install","profile":{...}}` | `{"ok":true,"id":"...","warnings":0,"issues":[]}` | 校验并安装，不启用、不重启 |
 | `{"op":"vehicle.activate","id":"..."}` | `{"ok":true,"pending":"..."}` | 下次启动启用；支持 `obd2.generic` |
+| `{"op":"vehicle.clear","confirm":true}` | `{"ok":true,"cleared":true,"pending":"obd2.generic"}` | 需显式确认；清空已安装车型 JSON 与 SD `/OBD/CFG/vehicles` 镜像（含当前车型），需要已挂载 SD；保存下次启动使用内置车型，保留本次运行的编译态指针；不自动重启。删除失败返回 `ok:false`，可能已有部分文件删除；CATALOG / IMPORT / EXPORT 模板及主题/动画保留 |
 | `{"op":"theme.erase"}` | `{"ok":true,"deleted":true}` | 释放主题页面，删除当前 SD 主题目录和选择；`false` 表示未找到主题包 |
 | `{"op":"reboot"}` | `{"ok":true}` | 先回复，再延时重启 |
 

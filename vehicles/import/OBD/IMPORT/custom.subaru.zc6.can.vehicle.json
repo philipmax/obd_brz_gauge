@@ -1,12 +1,12 @@
 {
   "schema": "skygauge.vehicle/1",
   "id": "custom.subaru.zc6.can",
-  "rev": 1,
+  "rev": 3,
   "name": "ZN/C6 CAN cfg",
   "origin": {
     "from": "vehicles/catalog/subaru.zc6.can.vehicle.json",
     "profile_id": "subaru.zc6.can",
-    "profile_rev": 1,
+    "profile_rev": 3,
     "generator": "tools/vehicles/gen_import_pack.py"
   },
   "requires": {
@@ -74,7 +74,7 @@
           "fail_after": 5
         }
       ],
-      "period_ms": 100
+      "period_ms": 50
     },
     {
       "id": "obd.intake_temp",
@@ -125,7 +125,7 @@
         }
       ],
       "rate": "round",
-      "period_ms": 200
+      "period_ms": 100
     },
     {
       "id": "obd.coolant_temp",
@@ -215,7 +215,7 @@
       "id": "obd.oil_temp",
       "valid": [
         -20,
-        150
+        255
       ],
       "src": [
         {

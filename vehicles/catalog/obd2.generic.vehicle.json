@@ -1,7 +1,7 @@
 {
   "schema": "skygauge.vehicle/1",
   "id": "obd2.generic",
-  "rev": 1,
+  "rev": 3,
   "name": "OBD2 Generic",
   "origin": {
     "from": "legacy 4b056c0",
@@ -90,13 +90,13 @@
     },
     {
       "id": "obd.oil_temp",
-      "valid": [-20, 150],
+      "valid": [-20, 255],
       "filter": "temp_hyst",
       "src": [
         {
           "req": "015C",
           "len": 1,
-          "valid": [-40, 215],
+          "valid": [-40, 255],
           "expr": "A-40",
           "rpn": [["A", 0], ["k", 40], "-"]
         }
@@ -111,6 +111,21 @@
           "len": 2,
           "expr": "A*256+B",
           "rpn": [["R", 0, 16, "be"]]
+        }
+      ]
+    },
+    {
+      "id": "obd.boost",
+      "unit": "kPa_rel",
+      "post": {
+        "clamp": [-100, 155]
+      },
+      "src": [
+        {
+          "req": "010B",
+          "len": 1,
+          "expr": "A-100",
+          "rpn": [["A", 0], ["k", 100], "-"]
         }
       ]
     },

@@ -182,6 +182,7 @@ typedef struct {
     uint16_t      x0, y0;       /* video origin on the panel */
     uint16_t      strip_lines;  /* lines per panel draw */
     uint8_t       next;         /* strip that is not in flight */
+    uint32_t      pace_wait_us; /* deadline sleep, excluded from decode diagnostics */
 } vp_out_t;
 
 /* Decoder pacing state (decoder task only). */
@@ -660,7 +661,17 @@ static esp_err_t fs_prepare(vp_session_t *s, vp_out_t *o, const media_jpeg_info_
     return ESP_OK;
 }
 
-static esp_err_t fs_blocks(vp_session_t *s, vp_out_t *o, const media_jpeg_info_t *ji)
+static bool wait_until(vp_session_t *s, int64_t t);
+
+static bool fs_wait_due(vp_session_t *s, vp_out_t *o, int64_t due)
+{
+    int64_t start = esp_timer_get_time();
+    bool ready = wait_until(s, due);
+    o->pace_wait_us += (uint32_t)(esp_timer_get_time() - start);
+    return ready;
+}
+
+static esp_err_t fs_blocks(vp_session_t *s, vp_out_t *o, const media_jpeg_info_t *ji, int64_t due)
 {
     const uint32_t line = (uint32_t)ji->width * 2u;
     uint32_t filled = 0, y = 0;
@@ -671,6 +682,9 @@ static esp_err_t fs_blocks(vp_session_t *s, vp_out_t *o, const media_jpeg_info_t
         filled += n;
         bool last = b + 1u == ji->blocks;
         if (filled && (last || filled + ji->mcu_rows > o->strip_lines)) {
+            /* Decode into the free odd/even strip ahead of its deadline.
+             * Start panel transfer at the deadline, never overwrite DMA data. */
+            if (!y && !fs_wait_due(s, o, due)) return ESP_ERR_INVALID_STATE;
             if (!fs_draw(s, o->x0, o->y0 + (int)y, ji->width, (int)filled, s->strip[o->next])) {
                 return ESP_ERR_TIMEOUT;
             }
@@ -682,11 +696,12 @@ static esp_err_t fs_blocks(vp_session_t *s, vp_out_t *o, const media_jpeg_info_t
     return ESP_OK;
 }
 
-static esp_err_t fs_frame(vp_session_t *s, vp_out_t *o, const media_jpeg_info_t *ji)
+static esp_err_t fs_frame(vp_session_t *s, vp_out_t *o, const media_jpeg_info_t *ji, int64_t due)
 {
     if (ji->block_len > s->fb_cap) return ESP_ERR_INVALID_SIZE;
     esp_err_t err = media_jpeg_decode_frame(o->j, s->fb[0], s->fb_cap);
     if (err != ESP_OK) return err;
+    if (!fs_wait_due(s, o, due)) return ESP_ERR_INVALID_STATE;
     const uint32_t line = (uint32_t)ji->width * 2u;
     for (uint32_t y = 0; y < ji->height; ) {
         uint32_t n = ji->height - y < o->strip_lines ? ji->height - y : o->strip_lines;
@@ -709,9 +724,10 @@ static bool dec_frame_mode(vp_out_t *o)
     return media_jpeg_open(false, &o->j) == ESP_OK;
 }
 
-static esp_err_t fs_present(vp_session_t *s, vp_out_t *o, const uint8_t *jpg, uint32_t len)
+static esp_err_t fs_present(vp_session_t *s, vp_out_t *o, const uint8_t *jpg, uint32_t len, int64_t due)
 {
     media_jpeg_info_t ji;
+    o->pace_wait_us = 0;
     esp_err_t err = ESP_FAIL;
     for (int attempt = 0; attempt < 2; attempt++) {
         err = media_jpeg_begin(o->j, jpg, len, &ji);
@@ -724,7 +740,7 @@ static esp_err_t fs_present(vp_session_t *s, vp_out_t *o, const uint8_t *jpg, ui
         if (!dec_frame_mode(o)) return ESP_ERR_NO_MEM;
     }
     if (err != ESP_OK) return err;
-    err = o->block ? fs_blocks(s, o, &ji) : fs_frame(s, o, &ji);
+    err = o->block ? fs_blocks(s, o, &ji, due) : fs_frame(s, o, &ji, due);
     /* Publish first-frame readiness only after its last DMA strip is on-panel. */
     if (err == ESP_OK && !s->started && !fs_wait_idle(s, VP_FLUSH_WAIT_MS)) {
         err = ESP_ERR_TIMEOUT;
@@ -1053,10 +1069,10 @@ static void dec_run(vp_session_t *s, vp_out_t *o)
         esp_err_t err;
         uint32_t proc_us;
         if (s->mode == VIDEO_MODE_FULLSCREEN) {
-            if (!wait_until(s, due)) continue;      /* record stays for after the pause */
             int64_t t = esp_timer_get_time();
-            err = fs_present(s, o, jpg, size);
-            proc_us = (uint32_t)(esp_timer_get_time() - t);
+            err = fs_present(s, o, jpg, size, due);
+            if (err == ESP_ERR_INVALID_STATE && (s->paused || s->quit)) continue;
+            proc_us = (uint32_t)(esp_timer_get_time() - t) - o->pace_wait_us;
             PERF_RECORD(PERF_VIDEO_FULLSCREEN, proc_us, 1);
         } else {
             int64_t t = esp_timer_get_time();
@@ -1140,7 +1156,7 @@ static void dec_timed(vp_session_t *s, vp_out_t *o)
         }
         uint32_t time = obv_frame_time(s->timed_index, n);
         uint32_t duration = obv_frame_duration(s->timed_index, n);
-        if (!timed_wait(s, &origin, time)) return;
+        if (s->paused && !timed_wait(s, &origin, time)) return;
         /* Keep the first/last image. Skip only frames whose entire display
          * interval has already elapsed; never rewrite a committed ring record. */
         if (n && n + 1 < s->info.frame_count &&
@@ -1150,10 +1166,18 @@ static void dec_timed(vp_session_t *s, vp_out_t *o)
             continue;
         }
         int64_t begin = esp_timer_get_time();
-        esp_err_t err = fs_present(s, o, jpg, size);
+        esp_err_t err;
+        for (;;) {
+            begin = esp_timer_get_time();
+            err = fs_present(s, o, jpg, size, origin + time);
+            if (err != ESP_ERR_INVALID_STATE || (!s->paused && !s->quit)) break;
+            /* Keep the committed record and shift the timeline on pause.
+             * Header/decode can restart; a partial frame was never published. */
+            if (!timed_wait(s, &origin, time)) return;
+        }
         int64_t presented_at = esp_timer_get_time();
         ring_release(s, rec);
-        PERF_RECORD(PERF_VIDEO_FULLSCREEN, presented_at - begin, 1);
+        PERF_RECORD(PERF_VIDEO_FULLSCREEN, presented_at - begin - o->pace_wait_us, 1);
         (void)begin;
         if (err != ESP_OK) { s->state = VIDEO_STATE_ERROR; return; }
         if (!n) {

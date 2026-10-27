@@ -338,7 +338,7 @@ static bool tester_command(const char *s)
 static bool engine_fixed(const char *a)
 {
     static const char *const k_fixed[] = {
-        "Z", "E0", "L0", "S1", "S0", "M0", "AL", "H0", "H1", "AT1", "I", "RV", "MA", "AR", NULL
+        "Z", "E0", "L0", "S1", "S0", "M0", "AL", "H0", "H1", "AT1", "I", "DPN", "RV", "MA", "AR", NULL
     };
     size_t i;
     for (i = 0; k_fixed[i]; i++) {

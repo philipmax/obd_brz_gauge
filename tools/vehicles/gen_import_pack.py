@@ -25,8 +25,8 @@ OUTPUT = REPO_ROOT / "vehicles/import/OBD/IMPORT"
 # run serially through the firmware engine. CAN-only and derived signals retain
 # their original scheduling/monitor configuration.
 PERIOD_MS = {
-    "obd.rpm": 100,
-    "obd.speed": 200,
+    "obd.rpm": 50,
+    "obd.speed": 100,
     "obd.gear": 200,
     "obd.load": 200,
     "obd.throttle": 200,
