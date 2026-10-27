@@ -63,6 +63,14 @@
 
 static const char *TAG = "video_player";
 
+/* Playback diagnostics are off by default: the per-underrun warning and the
+ * 5-second pacing summary flood the console during OBD polling and steal
+ * serial/CPU time from the ELM327 task. Set VP_DIAG_LOG=1 (e.g. via CFLAGS)
+ * only while debugging playback. */
+#ifndef VP_DIAG_LOG
+#define VP_DIAG_LOG 0
+#endif
+
 extern SemaphoreHandle_t lvgl_mux;   /* app_main.c */
 
 #define VP_LCD_W             EXAMPLE_LCD_WIDTH
@@ -339,6 +347,7 @@ static uint32_t theme_ring_budget(const obv1_info_t *info, uint32_t wanted)
 typedef struct {
     int fd;
     uint8_t *buf;
+    size_t cap;          /* allocated read-ahead chunk (may be below VP_SD_BUFFER_BYTES) */
     off_t begin;
     size_t used, pos;
 } vp_sd_stream_t;
@@ -361,7 +370,7 @@ static size_t sd_stream_read(vp_sd_stream_t *f, void *dst, size_t len)
     while (got < len) {
         if (f->pos == f->used) {
             ssize_t n;
-            do { n = read(f->fd, f->buf, VP_SD_BUFFER_BYTES); }
+            do { n = read(f->fd, f->buf, f->cap); }
             while (n < 0 && errno == EINTR);
             if (n <= 0) break;
             f->begin += (off_t)f->used;
@@ -472,10 +481,27 @@ static void reader_task(void *arg)
     vp_sd_stream_t file = { .fd = open(s->path, O_RDONLY) };
     if (file.fd < 0) ESP_LOGW(TAG, "cannot open %s", s->path);
     else {
-        file.buf = heap_caps_aligned_alloc(16, VP_SD_BUFFER_BYTES,
-                                           MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
-        if (!file.buf) ESP_LOGW(TAG, "cannot allocate SD read buffer for %s", s->path);
-        else index = reader_open(s, &file);
+        /* One read-ahead chunk in internal DMA RAM (S3 SDMMC cannot DMA into
+         * PSRAM). Halve it when the internal heap is fragmented so playback
+         * still starts; the cost is more read() calls per frame. */
+        for (size_t cap = VP_SD_BUFFER_BYTES; cap >= 4096u; cap /= 2u) {
+            file.buf = heap_caps_aligned_alloc(16, cap, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+            if (!file.buf) continue;
+            file.cap = cap;
+            if (cap < VP_SD_BUFFER_BYTES) {
+                ESP_LOGW(TAG, "SD read buffer reduced to %u KiB (internal RAM pressure)",
+                         (unsigned)(cap / 1024u));
+            }
+            break;
+        }
+        if (!file.buf) {
+            ESP_LOGW(TAG, "cannot allocate SD read buffer for %s (internal free %u, largest %u)",
+                     s->path,
+                     (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                     (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+        } else {
+            index = reader_open(s, &file);
+        }
     }
 
     bool ok = index != NULL;
@@ -870,6 +896,7 @@ static void pace_sample(vp_session_t *s, vp_pace_t *p, uint32_t proc_us,
     p->fps_n++;
     int64_t span = now - p->fps_t;
     if (span >= VP_STATS_US) {
+#if VP_DIAG_LOG
         vp_io_stats_t io;
         uint64_t ui_gap_us, ui_gap_max_us;
         uint32_t ui_intervals;
@@ -896,6 +923,7 @@ static void pace_sample(vp_session_t *s, vp_pace_t *p, uint32_t proc_us,
             ESP_LOGI(TAG, "UI frame gap avg/max %lu/%lu us (%lu intervals)",
                      (unsigned long)(ui_intervals ? ui_gap_us / ui_intervals : 0),
                      (unsigned long)ui_gap_max_us, (unsigned long)ui_intervals);
+#endif
         p->fps_n = 0;
         p->fps_t = now;
     }
@@ -976,7 +1004,9 @@ static void dec_run(vp_session_t *s, vp_out_t *o)
             }
             if (p.shown) {
                 s->underruns++;
+#if VP_DIAG_LOG
                 ESP_LOGW(TAG, "underrun at frame %llu", (unsigned long long)p.pos);
+#endif
             }
             p.buffering = true;
             continue;
@@ -1242,7 +1272,11 @@ static bool spawn(vp_session_t *s, TaskFunction_t fn, const char *name, uint32_t
     session_ref(s);
     if (xTaskCreatePinnedToCore(fn, name, stack, s, prio, NULL, core) == pdPASS) return true;
     session_unref(s);
-    ESP_LOGE(TAG, "cannot create %s", name);
+    ESP_LOGE(TAG, "cannot create %s (internal free %u, largest %u, PSRAM free %u)",
+             name,
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+             (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL),
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
     return false;
 }
 

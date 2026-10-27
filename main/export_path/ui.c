@@ -18,6 +18,7 @@
 #include "bsp_obd_dsp/nvs_storage.h"
 #include "bsp_obd_dsp/lcd_driver/ST77916.h"
 #include "bsp_obd_dsp/elm327_ble_client.h"
+#include "bsp_obd_dsp/obd_link.h"
 #include "bsp_obd_dsp/espnow_link.h"
 #include "bsp_obd_dsp/gauge_pair_ble_client.h"
 #include "bsp_obd_dsp/racechrono_ble_diy.h"
@@ -94,6 +95,14 @@ lv_obj_t * ui_LabelEasterEggInfo;
 void ui_ScreenPageBLEScan_screen_init(void);
 lv_obj_t * ui_ScreenPageBLEScan;
 // CUSTOM VARIABLES
+
+// SCREEN: ui_ScreenPageConnSelect (swipe up from the version page: choose BLE or WiFi OBD)
+void ui_ScreenPageConnSelect_screen_init(void);
+lv_obj_t * ui_ScreenPageConnSelect;
+
+// SCREEN: ui_ScreenPageWiFiOBD (ELM327 over WiFi/TCP; layout mirrors BLE scan)
+void ui_ScreenPageWiFiOBD_screen_init(void);
+lv_obj_t * ui_ScreenPageWiFiOBD;
 
 // SCREEN: ui_ScreenPageOTAMode
 void ui_ScreenPageOTAMode_screen_init(void);
@@ -433,7 +442,9 @@ static uint32_t ui_refresh_period_ms_for_screen(lv_obj_t *scr,
     }
     if (scr == ui_ScreenPageSettings || scr == ui_ScreenPageMultiGauge ||
         scr == ui_ScreenPageVehicle || scr == ui_ScreenPageStorage ||
-        scr == ui_ScreenPageBLEScan || scr == ui_ScreenPageOTAMode || scr == ui_ScreenPageODBProtocal ||
+        scr == ui_ScreenPageBLEScan || scr == ui_ScreenPageConnSelect ||
+        scr == ui_ScreenPageWiFiOBD ||
+        scr == ui_ScreenPageOTAMode || scr == ui_ScreenPageODBProtocal ||
         scr == ui_ScreenPageTempCustom || scr == ui_ScreenPageInfoCustom ||
         scr == ui_ScreenPageNeedleConfig || scr == ui_ScreenPageChartConfig ||
         scr == ui_ScreenPageChartAlarm ||
@@ -545,7 +556,7 @@ void my_timerMain(lv_timer_t * timer)
        Slave: never self-triggers, driven by the master's broadcast sweep_step (espnow recv → app_event queue). */
     bool is_slave = (user_cfg.device_role == ESPNOW_ROLE_SLAVE);
     // "connected" signal: slave=master data being received, master=ELM327 BLE connected (shared by status display and the master's sweep trigger)
-    bool ble_now = is_slave ? espnow_link_slave_has_data() : elm327_ble_is_connected();
+    bool ble_now = is_slave ? espnow_link_slave_has_data() : obd_link_is_connected();
     ui_ext_sweep_trigger(ble_now, is_slave);
     /* ---- Showroom mode: master drives slots, slaves follow (moved to ui_ext.c) ---- */
     ui_ext_showroom_tick(is_slave);
@@ -572,7 +583,7 @@ void my_timerMain(lv_timer_t * timer)
         obd_demand_mask |= (uint16_t)(1u << SIG_OBD_RPM);
     }
     last_obd_demand_mask = obd_demand_mask;
-    elm327_ble_set_obd_demand_mask(obd_demand_mask);
+    obd_link_set_demand_mask(obd_demand_mask);
 
     if (!IN_SWEEP && live_data_screen) {
         if (scr == ui_ScreenPageGear || scr == ui_ScreenPageRpm ||
@@ -828,9 +839,9 @@ void my_timerMain(lv_timer_t * timer)
             conn_label = "SLAVE";
             conn_name  = (ble_now && mname[0]) ? mname : "--";
         } else {
-            const char *dev_name = elm327_ble_get_connected_name();
+            const char *dev_name = obd_link_get_name();
             if(!dev_name || dev_name[0] == '\0') dev_name = "Not set";
-            conn_label = "BLE";
+            conn_label = obd_link_is_wifi() ? "WIFI" : "BLE";
             conn_name  = dev_name;
         }
 
@@ -1197,9 +1208,9 @@ void ui_event_easter_egg_background(lv_event_t * e)
             }
         }
         else if(dir == LV_DIR_TOP) {
-            // swipe up → BLE scan page
+            // swipe up → connection type chooser (BLE scan / WiFi OBD)
             lv_indev_wait_release(lv_indev_get_act());
-            _ui_screen_change(&ui_ScreenPageBLEScan, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageBLEScan_screen_init);
+            _ui_screen_change(&ui_ScreenPageConnSelect, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageConnSelect_screen_init);
         }
         else if(dir == LV_DIR_BOTTOM) {
             // swipe down → settings page
@@ -1345,7 +1356,7 @@ void ui_event_ble_scan_background(lv_event_t * e)
                 elm327_ble_scan_only_stop();
             }
             lv_indev_wait_release(lv_indev_get_act());
-            _ui_screen_change(&ui_ScreenPageEasterEgg, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageEasterEgg_screen_init);
+            _ui_screen_change(&ui_ScreenPageConnSelect, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageConnSelect_screen_init);
         }
     }
 }

@@ -8,10 +8,22 @@ file(GLOB THEME_MANIFESTS "${THEMES_DIR}/*/*/theme.toml")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
              "${THEMES_DIR}/registry.txt" ${THEME_MANIFESTS})
 
-# idf.py sets `python` to the IDF virtualenv interpreter; fall back for plain
-# cmake / IDE reconfigures. gen_themes.py has no third-party dependencies.
+# idf.py passes the IDF virtualenv interpreter as PYTHON; use it first. The old
+# "python3" fallback only exists on Linux/macOS -- on Windows "python3" hits the
+# Microsoft Store stub and exits 9009 with no output, which made the codegen
+# below fail with an empty error message. gen_themes.py has no third-party
+# dependencies.
 if(NOT DEFINED python)
-    set(python "python3")
+    if(DEFINED PYTHON)
+        set(python "${PYTHON}")
+    else()
+        find_package(Python3 COMPONENTS Interpreter QUIET)
+        if(Python3_Interpreter_FOUND)
+            set(python "${Python3_EXECUTABLE}")
+        else()
+            set(python "python3")
+        endif()
+    endif()
 endif()
 
 execute_process(
@@ -23,7 +35,8 @@ execute_process(
     ERROR_STRIP_TRAILING_WHITESPACE)
 if(NOT THEME_GEN_RESULT EQUAL 0)
     message(FATAL_ERROR
-            "Theme generation failed.\n${THEME_GEN_STDOUT}\n${THEME_GEN_STDERR}\n"
+            "Theme generation failed (python='${python}', result='${THEME_GEN_RESULT}').\n"
+            "${THEME_GEN_STDOUT}\n${THEME_GEN_STDERR}\n"
             "See themes/README.md.")
 endif()
 if(THEME_GEN_STDERR)

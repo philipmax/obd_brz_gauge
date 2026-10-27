@@ -87,6 +87,14 @@ extern lv_obj_t * ui_ScreenPageBLEScan;
 void ui_event_ble_scan_background(lv_event_t * e);
 // CUSTOM VARIABLES
 
+// SCREEN: ui_ScreenPageConnSelect (BLE scan / WiFi OBD chooser)
+void ui_ScreenPageConnSelect_screen_init(void);
+extern lv_obj_t * ui_ScreenPageConnSelect;
+
+// SCREEN: ui_ScreenPageWiFiOBD (ELM327 over WiFi/TCP)
+void ui_ScreenPageWiFiOBD_screen_init(void);
+extern lv_obj_t * ui_ScreenPageWiFiOBD;
+
 // SCREEN: ui_ScreenPageOTAMode
 void ui_ScreenPageOTAMode_screen_init(void);
 extern lv_obj_t * ui_ScreenPageOTAMode;

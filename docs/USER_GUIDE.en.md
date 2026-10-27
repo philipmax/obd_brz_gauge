@@ -17,15 +17,16 @@ The firmware also fixes a missed LCD SPI lock wakeup in ESP-IDF 5.5.3 that could
 2. Install vehicle profiles and themes through the web UI or App; activate a
    profile on the gauge's VEHICLE page and select a theme under Settings → THEME
    - **BOOT PAGE** — pick the screen the gauge lands on after boot
-3. **Swipe up from the version page** into BLE SCAN and select your
-   ELM327 BLE adapter
+3. **Swipe up from the version page** into **CONNECTION**, then pick **BLE SCAN**
+   to select your ELM327 BLE adapter, or **WIFI OBD** to select the ELM327 WiFi
+   adapter's hotspot
 4. Once connected the gauge initializes automatically (protocol auto-detection
    is described in [TROUBLESHOOTING.en.md](TROUBLESHOOTING.en.md#protocol-auto-detection))
    and data starts flowing
 
 On every later power-up the gauge reconnects to the last adapter
-automatically (remembers BLE name + MAC) and self-heals when data stalls —
-normally **you just power on and drive**, no manual steps.
+automatically (BLE remembers name + MAC, WiFi remembers the hotspot SSID) and
+self-heals when data stalls — normally **you just power on and drive**, no manual steps.
 
 The web vehicle community supports downloading, favoriting and editing profiles. Web device operations use ESP32-S3 native USB: install a profile, review warnings, then separately activate it for next boot and request a reboot. Install themes over web USB or App WiFi OTA, then select a registered theme under Settings → THEME. Verify vehicle compatibility and perform these operations while parked. Firmware manages the SD card in the background; users do not need to remove it or organize its files.
 
@@ -62,12 +63,13 @@ the Logo, and a failed theme preparation falls back to the built-in page. Theme 
 | INFO | Multi-cell info panel (remappable cells) | 5-cell data-item mapping |
 | NEEDLE | Needle meter (swipe down to change source) | Needle source picker |
 | CHART | Chart page | Down: chart source config / **up: alarm thresholds** |
-| Version page | Firmware build tag, BLE status and device name | see hidden entries below |
+| Version page | Firmware build tag, OBD link status (BLE / WiFi) and device name | see hidden entries below |
 
 **The version page is the hub**:
 
-- **Swipe up** → BLE SCAN (connect an OBD adapter; on slave gauges this doubles
-  as the FIND MASTER scan)
+- **Swipe up** → **CONNECTION** chooser: **BLE SCAN** (connect a BLE OBD adapter;
+  on slave gauges this doubles as the FIND MASTER scan) or **WIFI OBD** (connect
+  an ELM327 WiFi adapter)
 - **Swipe down** → Settings
 - **OTA button** → OTA update mode (app pairing, see [FLASH.en.md](FLASH.en.md#app-ota-upgrade-dual-slot-rollback))
 - Swipe left/right → back to the gauge ring
@@ -85,6 +87,20 @@ saved device in the list immediately disconnects the current ELM327 link and
 clears the saved name / MAC — **it does not auto-reconnect**; you must scan
 and select again. On a slave (SLAVE), the same action on the **FIND MASTER**
 page unbinds the master and starts a fresh scan.
+
+**Both the BLE SCAN and WIFI OBD pages have a ← back button in the top-left
+corner**; it is equivalent to the left/right swipe and stops the active scan.
+
+**WIFI OBD page**: entered from CONNECTION, it scans nearby WiFi hotspots. Tap
+the ELM327 WiFi adapter's hotspot (AP password is fixed to `12345678`; the TCP
+address defaults to `192.168.0.10:35000` and can be changed in NVS). Switching
+from BLE to WiFi saves and reboots once (the BLE stack must be released); later
+selections rejoin at runtime without a reboot. **The BLE stack is not
+initialized while WiFi OBD is active and the ESP-NOW multi-gauge broadcast is
+paused**, leaving the radio to WiFi. The ✕ next to the saved hotspot drops the
+WiFi link immediately and clears the configuration; you can then pick BLE on
+BLE SCAN or another hotspot here, and the matching transport is reinitialized at
+runtime without a reboot.
 
 ## Settings page
 

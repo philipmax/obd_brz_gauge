@@ -47,6 +47,12 @@ typedef struct {
     uint8_t rc_enabled;          // RaceChrono BLE service: 0=off (minimal mode: Pair on MASTER only), 1=on (RC+Pair)
                                  // NOTE: new fields MUST be appended at the END of this struct;
                                  // see the load_blob grow logic comment in nvs_storage.c.
+    uint8_t conn_type;           // OBD transport: 0=BLE (default), 1=WiFi TCP; applied at boot
+    char    wifi_obd_ssid[33];   // selected ELM327 WiFi adapter AP SSID (empty = not configured)
+    char    wifi_obd_host[16];   // TCP host, empty = default "192.168.0.10"
+    uint16_t wifi_obd_port;      // TCP port, 0 = default 35000
+                                 // NOTE: appended fields must ALSO be listed in the MERGE_CFG_FIELD
+                                 // table in nvs_storage.c, otherwise nvs_cfg_update() drops the change.
 } nvs_user_cfg_t;
 
 esp_err_t nvs_storage_init(void);

@@ -6,6 +6,13 @@
 
 ---
 
+## 新增 WiFi OBD 连接方式
+
+- 版本页上滑改为连接方式选择页，新增 WIFI OBD 页面：扫描并选择 ELM327 WiFi 适配器的热点（密码固定 `12345678`），通过 TCP `192.168.0.10:35000` 发送 ELM327 命令，与 BLE 传输共用同一套车型、协议和信号处理。连接方式保存在 NVS `conn_type`，切换后重启生效；WiFi OBD 期间 ESP-NOW 三连表广播暂停。
+- BLE SCAN / WIFI OBD 页左上角新增 ← 返回按键，与左右滑动返回等价。
+- WiFi OBD 启动时不初始化 BLE 栈（RaceChrono / 配对不可用），射频专用于 STA；删除已保存热点会立即断开 WiFi，之后选择 BLE 或另一个热点会在运行时重新初始化对应传输。只有首次从 BLE 切到 WiFi 需要重启。
+- WiFi OBD 运行诊断（链路、RSSI、接收速率、丢包、TCP 失败、重连、引擎链路、空闲时长、堆余量）与主题视频 underrun / 节奏统计改为编译宏开关 `ELM327_WIFI_DIAG_LOG`、`VP_DIAG_LOG`，默认关闭，日志不打印 OBD 报文，避免刷屏抢占 OBD 通信。
+
 ## 修复 ISO K 线请求错误使用 CAN 请求头
 
 - ISO 9141-2 / ISO KWP2000 普通 OBD 请求不再发送 CAN 格式的 `ATSH`（包括导入档案显式写入的 `7E0`），改用 ELM327 原生寻址并用 `ATH0` 隐藏 K 线响应头；补充主机回归测试。

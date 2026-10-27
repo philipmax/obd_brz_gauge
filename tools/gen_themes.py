@@ -579,7 +579,9 @@ def render(themes):
         w("")
 
     for slot, theme in themes:
-        rel = Path(*theme["path"].parts[-4:])
+        # Always emit POSIX separators: the generated .c is committed, so a
+        # Windows build must not rewrite every comment with backslashes.
+        rel = "/".join(theme["path"].parts[-4:])
         w(f"// slot {slot} — {rel}")
         if theme["description"]:
             w(f"// {theme['description']}")

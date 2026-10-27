@@ -32,3 +32,4 @@ tools/pids_full*.csv
 .zcode
 # per-developer AI preferences (see AGENTS.md self-update protocol)
 AGENTS.local.md
+build_local/

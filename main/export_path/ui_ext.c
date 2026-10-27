@@ -302,6 +302,7 @@ static bool boot_needs_ble_scan(const nvs_user_cfg_t *cfg)
         espnow_link_get_bound_master_mac(mac);
         return (mac[0] | mac[1] | mac[2] | mac[3] | mac[4] | mac[5]) == 0;
     }
+    if (cfg->conn_type == 1 && cfg->wifi_obd_ssid[0] != '\0') return false;  // WiFi OBD configured
     return cfg->ble_device_name[0] == '\0';
 }
 

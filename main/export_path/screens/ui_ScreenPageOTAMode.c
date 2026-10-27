@@ -9,6 +9,7 @@
 #include "app_obd_dsp/device_identity.h"
 #include "app_obd_dsp/ota_wifi_server.h"
 #include "bsp_obd_dsp/elm327_ble_client.h"
+#include "bsp_obd_dsp/obd_link.h"
 #include "bsp_obd_dsp/espnow_link.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -94,7 +95,7 @@ void ui_ScreenPageOTAMode_screen_init(void)
     // Drop the ELM327 BLE link for the duration of the OTA: the GATT client keeps
     // re-scanning/reconnecting in the background and steals the single 2.4GHz
     // radio from the SoftAP, stalling the upload mid-transfer.
-    elm327_ble_pause_for_ota();
+    obd_link_pause_for_ota();
 
     // Give the single 2.4 GHz radio to the OTA SoftAP. Keep the WiFi driver
     // itself alive (the SoftAP reuses it), but stop the ESP-NOW broadcast /

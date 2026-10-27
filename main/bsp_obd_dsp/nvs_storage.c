@@ -264,6 +264,10 @@ esp_err_t nvs_cfg_update(const nvs_user_cfg_t *base, const nvs_user_cfg_t *updat
     MERGE_CFG_FIELD(ble_obd_mac);
     MERGE_CFG_FIELD(rpm_warn_linked_en);
     MERGE_CFG_FIELD(rc_enabled);
+    MERGE_CFG_FIELD(conn_type);
+    MERGE_CFG_FIELD(wifi_obd_ssid);
+    MERGE_CFG_FIELD(wifi_obd_host);
+    MERGE_CFG_FIELD(wifi_obd_port);
 #undef MERGE_CFG_FIELD
     if (changed) {
         s_cfg = next;

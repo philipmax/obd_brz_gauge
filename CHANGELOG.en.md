@@ -7,6 +7,13 @@ cleanups live in the git history.
 
 ---
 
+## Add a WiFi OBD connection mode
+
+- Swiping up from the version page now opens a connection-type chooser. The new WIFI OBD page scans for the ELM327 WiFi adapter's hotspot (password fixed to `12345678`) and sends ELM327 commands over TCP `192.168.0.10:35000`, sharing the same vehicle, protocol and signal pipeline as the BLE transport. The transport is stored in NVS `conn_type` and applied at boot; the ESP-NOW multi-gauge broadcast is paused while WiFi OBD is active.
+- Add a ← back button in the top-left corner of the BLE SCAN and WIFI OBD pages, equivalent to the left/right swipe.
+- WiFi OBD no longer initializes the BLE stack at boot (RaceChrono / pairing unavailable) so the STA link owns the radio. Deleting the saved hotspot drops WiFi immediately; selecting BLE or another hotspot then reinitializes the matching transport at runtime. Only the first BLE-to-WiFi switch still reboots.
+- WiFi OBD runtime diagnostics (link, RSSI, RX rate, drops, TCP failures, reconnects, engine link, idle time, heap headroom) and theme-video underrun / pacing statistics now sit behind the `ELM327_WIFI_DIAG_LOG` / `VP_DIAG_LOG` build macros, off by default. They never print OBD payloads and no longer flood the console or steal time from OBD communication.
+
 ## Fix CAN Request Headers on ISO K-Line Protocols
 
 - Ordinary OBD requests on ISO 9141-2 / ISO KWP2000 no longer send CAN-style `ATSH` commands, including for imported profiles with an explicit `7E0`; they retain ELM327 native addressing and use `ATH0` to hide K-line response headers. Add a host regression test.

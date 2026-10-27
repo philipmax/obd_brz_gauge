@@ -34,6 +34,7 @@
 #include "bsp_obd_dsp/sd_card.h"
 #include "bsp_obd_dsp/ble_hub.h"
 #include "bsp_obd_dsp/elm327_ble_client.h"
+#include "bsp_obd_dsp/obd_link.h"
 #include "bsp_obd_dsp/espnow_link.h"
 #include "bsp_obd_dsp/racechrono_ble_diy.h"
 #if CONFIG_OBD_HW_VERSION_V1_WAVESHARE
@@ -240,18 +241,14 @@ void app_main(void)
     /* 5. LVGL init */
     lv_init();
 
-    /* Allocate double buffers (DMA memory). Larger buffers -> full-screen render strips halved -> higher frame rate.
-       Only affects LVGL render chunking, not the SPI single-transfer size (still chunked by max_transfer_sz), so no screen corruption.
-       Falls back automatically to the original 20 lines when internal DMA RAM is insufficient, avoiding boot-time OOM. */
-    size_t buf_px = LCD_H_RES * 40;
+    /* Allocate double buffers (DMA memory), one 20-line band each: 40-line bands
+       take 57.6 KB of internal DMA RAM and leave too little contiguous internal
+       RAM for the video worker stacks (boot animation failed to start with only
+       3.5 KB blocks free). Only affects LVGL render chunking, not the SPI
+       single-transfer size (still chunked by max_transfer_sz), so no screen corruption. */
+    size_t buf_px = LVGL_BUFF_SIZE;
     lv_color_t *buf1 = heap_caps_malloc(buf_px * sizeof(lv_color_t), MALLOC_CAP_DMA);
     lv_color_t *buf2 = heap_caps_malloc(buf_px * sizeof(lv_color_t), MALLOC_CAP_DMA);
-    if (!buf1 || !buf2) {
-        heap_caps_free(buf1); heap_caps_free(buf2);
-        buf_px = LVGL_BUFF_SIZE;   // fall back to 20 lines
-        buf1 = heap_caps_malloc(buf_px * sizeof(lv_color_t), MALLOC_CAP_DMA);
-        buf2 = heap_caps_malloc(buf_px * sizeof(lv_color_t), MALLOC_CAP_DMA);
-    }
     assert(buf1 && buf2);
     lv_disp_draw_buf_init(&disp_buf, buf1, buf2, buf_px);
 
@@ -354,27 +351,14 @@ void app_main(void)
                  espnow_on ? "MASTER" : "STANDALONE",
                  espnow_on ? " + ESP-NOW broadcast" : ", no WiFi/ESP-NOW");
 
-        /* 8.1 Start BLE OBD - auto-connect only when a MAC is already bound in NVS (exact MAC match only, no fuzzy name matching);
-               legacy configs with a name but no MAC no longer auto-connect; the user must re-select on the scan page to bind the MAC.
-               MASTER starts the Bluetooth stack even without a configured OBD device, so it can broadcast the SkyGauge pairing signal. */
-        bool has_obd_mac = (user_cfg.ble_obd_mac[0] | user_cfg.ble_obd_mac[1] |
-                            user_cfg.ble_obd_mac[2] | user_cfg.ble_obd_mac[3] |
-                            user_cfg.ble_obd_mac[4] | user_cfg.ble_obd_mac[5]) != 0;
-        if (has_obd_mac) {
-            ESP_LOGD(TAG, "BLE target device: %s (mac=%02x:%02x:%02x:%02x:%02x:%02x, MAC-only match)",
-                     user_cfg.ble_device_name,
-                     user_cfg.ble_obd_mac[0], user_cfg.ble_obd_mac[1], user_cfg.ble_obd_mac[2],
-                     user_cfg.ble_obd_mac[3], user_cfg.ble_obd_mac[4], user_cfg.ble_obd_mac[5]);
-            elm327_ble_start_default(user_cfg.ble_device_name, user_cfg.ble_obd_mac);
-        } else if (user_cfg.ble_device_name[0] != '\0') {
-            ESP_LOGD(TAG, "Saved device '%s' has no bound MAC, auto-connect disabled; re-select it on BLE SCAN page to bind MAC",
-                     user_cfg.ble_device_name);
-            elm327_ble_ensure_stack_init();   // the stack must still be started for RaceChrono/the scan page
-        } else if (espnow_on) {
-            ESP_LOGD(TAG, "No saved BLE device, but MASTER needs BLE stack for SkyGauge pairing broadcast");
-            elm327_ble_ensure_stack_init();
-        } else {
-            ESP_LOGD(TAG, "No saved BLE device, waiting for user selection");
+        /* 8.1 Start the configured OBD transport: BLE adapter (MAC-bound) or
+               ELM327 over WiFi/TCP. obd_link returns true when WiFi OBD owns the
+               radio, which pauses the ESP-NOW broadcast below. */
+        bool wifi_obd = obd_link_start(&user_cfg, espnow_on);
+        if (!wifi_obd && !(user_cfg.ble_obd_mac[0] | user_cfg.ble_obd_mac[1] |
+                           user_cfg.ble_obd_mac[2] | user_cfg.ble_obd_mac[3] |
+                           user_cfg.ble_obd_mac[4] | user_cfg.ble_obd_mac[5])) {
+            ESP_LOGD(TAG, "No saved BLE OBD MAC; select an adapter on the scan page");
         }
 
         /* 8.2 External ADS1115 oil pressure (V1 board only). Skipped when the active
@@ -388,13 +372,21 @@ void app_main(void)
 #endif
 
         /* 8.3 Start ESP-NOW broadcast (sends this unit's OBD data cache to the slave) -- MASTER only;
-               STANDALONE skips it; WiFi is never initialized (saves RF/power and does not interfere with BLE). */
-        if (espnow_on) {
+               STANDALONE skips it; WiFi is never initialized (saves RF/power and does not interfere with BLE).
+               WiFi OBD needs the STA link for its adapter AP, so ESP-NOW is paused for this boot. */
+        if (espnow_on && !wifi_obd) {
             espnow_link_start_master();
+        } else if (espnow_on && wifi_obd) {
+            ESP_LOGW(TAG, "WiFi OBD active: ESP-NOW broadcast paused (switch to BLE OBD to restore)");
         }
 
-        /* 8.4 Start RaceChrono BLE GATTS immediately after ESP-NOW (Master/Standalone) to claim memory before theme loads */
-        racechrono_ble_diy_start(user_cfg.rc_enabled);
+        /* 8.4 Start RaceChrono BLE GATTS immediately after ESP-NOW (Master/Standalone) to claim memory before theme loads.
+               Skipped in WiFi OBD mode: the BLE stack is not initialized so the STA link owns the radio. */
+        if (!wifi_obd) {
+            racechrono_ble_diy_start(user_cfg.rc_enabled);
+        } else {
+            ESP_LOGI(TAG, "WiFi OBD active: BLE/RaceChrono not initialized this boot");
+        }
     }
 
     /* SD insert/remove polling + background card jobs (inbox, config mirror, IMPORT scan) */

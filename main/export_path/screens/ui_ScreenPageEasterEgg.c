@@ -7,6 +7,7 @@
 #include "../ui.h"
 #include "bsp_obd_dsp/nvs_storage.h"
 #include "bsp_obd_dsp/elm327_ble_client.h"
+#include "bsp_obd_dsp/obd_link.h"
 #include "bsp_obd_dsp/espnow_link.h"
 
 #ifndef OBD_GAUGE_BUILD_TAG
@@ -50,11 +51,11 @@ void ui_ScreenPageEasterEgg_screen_init(void)
         conn_name   = (linked && mname[0]) ? mname : "--";
         conn_status = linked ? "Linked" : "Waiting";
     } else {
-        const char *ble_name = elm327_ble_get_connected_name();
-        if (!ble_name || ble_name[0] == '\0') ble_name = "Not set";
-        conn_label  = "BLE";
-        conn_name   = ble_name;
-        conn_status = elm327_ble_is_connected() ? "Connected" : "Disconnected";
+        const char *dev_name = obd_link_get_name();
+        if (!dev_name || dev_name[0] == '\0') dev_name = "Not set";
+        conn_label  = obd_link_is_wifi() ? "WIFI" : "BLE";
+        conn_name   = dev_name;
+        conn_status = obd_link_is_connected() ? "Connected" : "Disconnected";
     }
 
     ui_LabelEasterEggInfo = lv_label_create(ui_ScreenPageEasterEgg);

@@ -12,7 +12,8 @@ extern "C" {
 #endif
 
 /* --------------------------------------------------------------------------
- * sd_card - SDMMC slot 1, 1-bit (CLK GPIO14 / CMD GPIO17 / D0 GPIO16), V1 only.
+ * sd_card - SDMMC slot 1. V1: 1-bit (CLK GPIO14 / CMD GPIO17 / D0 GPIO16).
+ * V2/V3: 4-bit (CLK GPIO3 / CMD GPIO4 / D0..D3 GPIO2/GPIO1/GPIO6/GPIO5).
  *
  * - Mount tries 40 MHz, then 20 MHz. The card is NEVER formatted.
  * - No card-detect pin: sd_card_poll() probes for insertion while absent and

@@ -10,7 +10,9 @@
 #include "bsp_obd_dsp/gauge_pair_ble_client.h"
 #include "bsp_obd_dsp/espnow_link.h"
 #include "bsp_obd_dsp/nvs_storage.h"
+#include "bsp_obd_dsp/obd_link.h"
 #include "esp_log.h"
+#include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 
@@ -25,6 +27,17 @@ static lv_obj_t *s_label_saved_hdr = NULL;  // "SAVED" sub-header
 static lv_obj_t *s_saved_name_lbl = NULL;   // saved device name label
 static bool s_scanning = false;
 static bool s_slave_mode = false;           // true=slave pairing with a master, false=OBD device scan (original logic)
+
+// Back button: same action as the left/right swipe (stop the active scan first).
+static void on_back_clicked(lv_event_t *e)
+{
+    (void)e;
+    if (s_slave_mode) gauge_pair_ble_scan_stop();
+    else              elm327_ble_scan_only_stop();
+    s_scanning = false;
+    _ui_screen_change(&ui_ScreenPageConnSelect, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0,
+                      &ui_ScreenPageConnSelect_screen_init);
+}
 
 // Slave mode: parallel table mapping scan list button index -> corresponding device MAC (one-to-one with the s_list child order)
 static uint8_t s_gauge_macs[GAUGE_PAIR_SCAN_MAX_DEVICES][6];
@@ -156,6 +169,7 @@ static void on_device_selected(lv_event_t *e) {
     nvs_user_cfg_t base;
     nvs_cfg_snapshot(&base);
     nvs_user_cfg_t cfg = base;
+    cfg.conn_type = 0;   // selecting a BLE adapter switches the transport back to BLE
     strncpy(cfg.ble_device_name, name, sizeof(cfg.ble_device_name) - 1);
     cfg.ble_device_name[sizeof(cfg.ble_device_name) - 1] = '\0';
     memcpy(cfg.ble_obd_mac, mac, 6);
@@ -169,7 +183,9 @@ static void on_device_selected(lv_event_t *e) {
     lv_label_set_text_fmt(s_label_status, "Connecting: %s", name);
     if (s_spinner) lv_obj_clear_flag(s_spinner, LV_OBJ_FLAG_HIDDEN);
 
-    elm327_ble_connect_by_addr(mac, name);
+    /* Runtime transport switch: stops WiFi OBD (if active), brings the BLE
+     * stack up on demand and starts the ELM327 GATTC client — no reboot. */
+    obd_link_switch_to_ble(mac, name);
     _ui_screen_change(&ui_ScreenPageTemp, LV_SCR_LOAD_ANIM_FADE_ON, 300, 500, &ui_ScreenPageTemp_screen_init);
 }
 
@@ -282,6 +298,21 @@ void ui_ScreenPageBLEScan_screen_init(void)
     lv_obj_set_style_text_font(label_title, &ui_font_FontTypoderSize20, LV_PART_MAIN);
     lv_obj_set_style_text_color(label_title, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
     lv_obj_align(label_title, LV_ALIGN_TOP_MID, 0, 30);
+
+    // Back button (same action as the swipe; keeps the round display usable)
+    lv_obj_t *btn_back = lv_btn_create(ui_ScreenPageBLEScan);
+    lv_obj_set_size(btn_back, 36, 36);
+    lv_obj_align(btn_back, LV_ALIGN_TOP_LEFT, 56, 50);
+    lv_obj_set_style_radius(btn_back, LV_RADIUS_CIRCLE, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(btn_back, lv_color_hex(0x222222), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(btn_back, 220, LV_PART_MAIN);
+    lv_obj_set_style_border_width(btn_back, 0, LV_PART_MAIN);
+    lv_obj_set_style_shadow_width(btn_back, 0, LV_PART_MAIN);
+    lv_obj_t *back_lbl = lv_label_create(btn_back);
+    lv_label_set_text(back_lbl, LV_SYMBOL_LEFT);
+    lv_obj_set_style_text_color(back_lbl, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+    lv_obj_center(back_lbl);
+    lv_obj_add_event_cb(btn_back, on_back_clicked, LV_EVENT_CLICKED, NULL);
 
     // Scanning spinner (animated)
     s_spinner = lv_spinner_create(ui_ScreenPageBLEScan, 1000, 60);
