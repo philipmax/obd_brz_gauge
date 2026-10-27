@@ -141,6 +141,7 @@ Management RPC uses command `6` BEGIN_RPC: its 40-byte payload is JSON length `u
 | `{"op":"ota.stop"}` | `{"ok":true}` | Stop HTTP OTA and clean up the incomplete upload for subsequent USB takeover; no reboot. Concurrent start/stop returns `ok:false`, `retryable:true` without waiting on the LVGL caller |
 | `{"op":"vehicle.install","profile":{...}}` | `{"ok":true,"id":"...","warnings":0,"issues":[]}` | Validate and install; no activation or reboot |
 | `{"op":"vehicle.activate","id":"..."}` | `{"ok":true,"pending":"..."}` | Activate on next boot; supports `obd2.generic` |
+| `{"op":"vehicle.clear","confirm":true}` | `{"ok":true,"cleared":true,"pending":"obd2.generic"}` | Explicit confirmation required. Clear installed vehicle JSON and SD `/OBD/CFG/vehicles` mirrors, including the current profile; mounted SD is required. Schedule builtin generic for the next boot and retain this boot's compiled pointer; no automatic reboot. Failure returns `ok:false` and may leave a partial deletion. CATALOG / IMPORT / EXPORT templates, themes and animations are retained |
 | `{"op":"theme.erase"}` | `{"ok":true,"deleted":true}` | Release theme pages, delete current SD theme directory and selection; `false` means no package was found |
 | `{"op":"reboot"}` | `{"ok":true}` | Acknowledge before delayed restart |
 

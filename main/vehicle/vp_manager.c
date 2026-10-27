@@ -25,6 +25,7 @@
 #include "vehicle/vp_manager.h"
 
 #include <dirent.h>
+#include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1024,6 +1025,58 @@ static veh_state_t entry_state(const char *id, bool active, bool pending)
     if (pending) return VEH_STATE_PENDING;
     if (s_state == VEH_STATE_FAILED && s_failed_id[0] && !strcmp(id, s_failed_id)) return VEH_STATE_FAILED;
     return VEH_STATE_INSTALLED;
+}
+
+/* Reopen after each removal: FAT/LittleFS directory cursors need not remain
+ * stable when entries are deleted. Only installed JSON files are in scope. */
+static esp_err_t clear_vehicle_dir(const char *dir, bool on_cfg)
+{
+    for (;;) {
+        char path[VPM_PATH_LEN] = {0};
+        DIR *d = opendir(dir);
+        if (!d) return errno == ENOENT ? ESP_OK : ESP_FAIL;
+        esp_err_t err = ESP_OK;
+        for (;;) {
+            errno = 0;
+            struct dirent *de = readdir(d);
+            if (!de) {
+                if (errno) err = ESP_FAIL;
+                break;
+            }
+            size_t n = strlen(de->d_name);
+            if (n <= 5 || strcmp(de->d_name + n - 5, ".json")) continue;
+            int written = snprintf(path, sizeof(path), "%s/%s", dir, de->d_name);
+            if (written < 0 || (size_t)written >= sizeof(path)) err = ESP_ERR_INVALID_SIZE;
+            break;
+        }
+        closedir(d);
+        if (err != ESP_OK) return err;
+        if (!path[0]) return ESP_OK;
+        err = on_cfg ? config_part_remove(path) : sd_card_remove(path);
+        if (err != ESP_OK) return err;
+    }
+}
+
+esp_err_t vp_manager_clear_installed(void)
+{
+    /* Do not report a cleared mirror when the card could not be accessed. */
+    if (!sd_card_is_mounted()) return ESP_ERR_INVALID_STATE;
+    lock();
+    /* Persist a safe next boot before removing even the current profile's
+     * source. Its compiled pointer remains valid until reboot. */
+    esp_err_t err = nvs_app_veh_pending_id_set(VPM_GENERIC_ID);
+    if (err == ESP_OK && config_part_is_mounted()) err = clear_vehicle_dir(VPM_CFG_DIR, true);
+    /* config_part_remove mirrors best-effort: explicitly clear orphaned SD
+     * copies too, and propagate SD failures instead of claiming success. */
+    if (err == ESP_OK) err = clear_vehicle_dir(VPM_SD_DIR, false);
+    if (err == ESP_OK) {
+        mirror_idx(VPM_GENERIC_ID);
+        s_err[0] = '\0';
+    } else {
+        set_err("clear installed profiles: %s", esp_err_to_name(err));
+    }
+    unlock();
+    return err;
 }
 
 int vp_manager_list(vpm_entry_t *out, int max)

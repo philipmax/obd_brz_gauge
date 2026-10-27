@@ -261,3 +261,7 @@ V1 硬件板（`CONFIG_OBD_HW_VERSION_V1_WAVESHARE`）上接了 ADS1115 模拟�
 5. 找未知车型的私有 PID 可以用 [tools 里的伪 ELM327 挖掘流程](DEVELOPMENT.md#工具脚本)，不需要上车
 
 目录里新增/替换档案 JSON 时，同步更新本文件最上面的目录表格。
+
+## 清空已安装车型配置
+
+网页 USB 刷写页支持批量“清空已安装车型配置”：显式勾选确认后，删除 config 区 `/vehicles/*.json` 及 SD `/OBD/CFG/vehicles/*.json`（含当前车型），安排重启使用内置 `obd2.generic`。需挂载 SD，任何删除错误都会停止并报错；当前编译态车型一直保留到重启，避免轮询访问已释放内存。CATALOG / IMPORT / EXPORT 模板、主题与开机动画保留。此操作需要支持 `vehicle.clear` 的新版固件。

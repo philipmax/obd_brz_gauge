@@ -220,3 +220,7 @@ next startup — an automatic rollback with no manual steps. Leaving OTA mode
 | Sensor | Wiring | Notes |
 |--------|--------|-------|
 | ADS1115 oil pressure | I2C, V1 Waveshare board only | Not started when the active vehicle profile reads oil pressure over OBD — the OBD value wins; oil-pressure alarms throttled to one per 30 s |
+
+## Clear installed vehicle profiles
+
+On the web USB flasher, choose “Clear installed vehicle profiles” in the vehicle section, review the scope and check the confirmation box. This clears all installed profiles and SD mirrors, then restarts with builtin `OBD2 Generic`. Insert the SD card and upgrade to firmware supporting `vehicle.clear`. A failed clear is not reported as successful; a failed restart can be retried separately. Themes, animations and vehicle templates in CATALOG / IMPORT / EXPORT are retained.

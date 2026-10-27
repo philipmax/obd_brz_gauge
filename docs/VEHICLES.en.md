@@ -301,3 +301,7 @@ No firmware code changes needed — just write a JSON file that matches the
 
 When a profile JSON is added to or replaced in the catalog, update the
 catalog table at the top of this file to match.
+
+## Clear installed vehicle profiles
+
+The web USB flasher provides “Clear installed vehicle profiles”. After explicit checkbox confirmation, it deletes config `/vehicles/*.json` and SD `/OBD/CFG/vehicles/*.json`, including the current profile, and schedules builtin `obd2.generic` for reboot. Mounted SD is required and deletion errors stop the operation. The current compiled profile remains alive until reboot so polling cannot access freed memory. CATALOG / IMPORT / EXPORT templates, themes and boot animations are retained. Firmware supporting `vehicle.clear` is required.
