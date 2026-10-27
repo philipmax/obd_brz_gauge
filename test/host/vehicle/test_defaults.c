@@ -41,8 +41,8 @@ static void test_minimal(void)
         VT_CHECK_INT(compile(variants[i], &p, NULL), VP_COMPILE_OK);
         if (!p) continue;
         VT_CHECK(vp_profile_check(p, p->total_size));
-        VT_CHECK_INT(p->n_sig, 9);
-        VT_CHECK_INT(p->n_req, 9);
+        VT_CHECK_INT(p->n_sig, 10);
+        VT_CHECK_INT(p->n_req, 10);
         VT_CHECK_INT(p->gear_count, 0);
         VT_CHECK_INT(p->proto, i == 4 ? 6 : 0);
         VT_CHECK_INT(p->hdr, 0x7E0);
@@ -50,9 +50,15 @@ static void test_minimal(void)
         VT_CHECK_INT(p->gap_ms, VP_DEFAULT_GAP_MS);
         VT_CHECK(vp_profile_find_signal(p, "obd.gear") < 0);
         VT_CHECK(!memcmp(vp_profile_signals(p), vp_profile_signals(base),
-                         9 * sizeof(vp_signal_t)));
-        VT_CHECK(!memcmp(vp_profile_requests(p), vp_profile_requests(base),
-                         9 * sizeof(vp_request_t)));
+                         10 * sizeof(vp_signal_t)));
+        for (unsigned r = 0; r < p->n_req; r++) {
+            vp_request_t expected = vp_profile_requests(base)[r];
+            /* Sparse profiles inherit signals, not the generic bus header. */
+            expected.hdr = p->hdr;
+            expected.flags &= (uint8_t)~VP_REQ_F_FUNC;
+            expected.rsv &= (uint8_t)~VP_REQ_RSV_HDR_EXPLICIT;
+            VT_CHECK(!memcmp(&vp_profile_requests(p)[r], &expected, sizeof(expected)));
+        }
         vp_profile_free(p, &vt_malloc_allocator);
     }
 }
@@ -71,8 +77,8 @@ static void test_override_and_disable(void)
     VT_CHECK_INT(compile(json, &p, NULL), VP_COMPILE_OK);
     if (!p) return;
     VT_CHECK(vp_profile_check(p, p->total_size));
-    VT_CHECK_INT(p->n_sig, 8);
-    VT_CHECK_INT(p->n_req, 8);
+    VT_CHECK_INT(p->n_sig, 9);
+    VT_CHECK_INT(p->n_req, 9);
     VT_CHECK(vp_profile_find_signal(p, "obd.coolant_temp") < 0);
     VT_CHECK_INT(vp_profile_find_signal(p, "obd.oil_temp"), 0);
     s = vp_profile_signals(p);
@@ -132,7 +138,7 @@ static void test_policy_and_validation(void)
     VT_CHECK_INT(compile("{" HEAD ",\"drivetrain\":{\"fd\":3.5,\"tire_m\":0.315,\"gears\":[3.5]},"
         "\"signals\":[{\"id\":\"obd.gear\",\"derive\":\"ratio\"}]}", &p, NULL), VP_COMPILE_OK);
     if (p) {
-        VT_CHECK_INT(p->n_sig, 10);
+        VT_CHECK_INT(p->n_sig, 11);
         VT_CHECK_INT(p->gear_count, 1);
         VT_CHECK(vp_profile_find_signal(p, "obd.rpm") >= 0);
         VT_CHECK(vp_profile_find_signal(p, "obd.speed") >= 0);
@@ -159,7 +165,7 @@ static void test_effective_limits(void)
     unsigned i, j;
     char *text;
     vp_profile_t *p = NULL;
-    /* 24 explicit requests are legal; inheriting 9 more exceeds the cap of 32. */
+    /* 24 explicit requests are legal; inheriting 10 more exceeds the cap of 32. */
     for (i = 0; i < 6; i++) {
         char id[32];
         cJSON *s = cJSON_CreateObject(), *sources;

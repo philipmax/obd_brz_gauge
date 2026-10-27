@@ -1,7 +1,7 @@
 {
   "schema": "skygauge.vehicle/1",
   "id": "mini.jcw_f56",
-  "rev": 1,
+  "rev": 3,
   "name": "JCW F56",
   "origin": {
     "from": "legacy 4b056c0",
@@ -88,20 +88,20 @@
     },
     {
       "id": "obd.oil_temp",
-      "valid": [-20, 150],
+      "valid": [-20, 255],
       "filter": "temp_hyst",
       "src": [
         {
           "req": "225822",
           "len": 1,
-          "valid": [-40, 215],
+          "valid": [-40, 255],
           "expr": "A-60",
           "rpn": [["A", 0], ["k", 60], "-"]
         },
         {
           "req": "015C",
           "len": 1,
-          "valid": [-40, 215],
+          "valid": [-40, 255],
           "expr": "A-40",
           "rpn": [["A", 0], ["k", 40], "-"]
         }
@@ -123,7 +123,7 @@
       "id": "obd.boost",
       "unit": "kPa_rel",
       "post": {
-        "clamp": [0, 155]
+        "clamp": [-100, 155]
       },
       "src": [
         {

@@ -1128,10 +1128,12 @@ static void test_temp_hyst(void)
         { "41 5C 91", 91, 2 },
         { "41 5C 91", 91, 2 },
         { "41 5C 91", 98, 3 },  /* 4th confirmation: half way */
-        { "41 5C F0", 98, 3 },  /* 200 C: out of the plausible range */
-        { "41 5C 28", 98, 3 },  /* 0 C: large step, pending */
-        { "41 5C 28", 98, 3 },
-        { "41 5C 28", 0, 4 },   /* 3rd confirmation: jump */
+        { "41 5C F0", 98, 3 },  /* 200 C: large step needs confirmation */
+        { "41 5C F0", 98, 3 },
+        { "41 5C F0", 200, 4 },
+        { "41 5C 28", 200, 4 },  /* 0 C: large step, pending */
+        { "41 5C 28", 200, 4 },
+        { "41 5C 28", 0, 5 },   /* 3rd confirmation: jump */
     };
     fake_t *f = fake_reset();
     vp_profile_t *p = compile_q(
@@ -2294,6 +2296,18 @@ static void golden_one(const char *cat_path, const char *golden_dir, int *n_done
         if (!strcmp(jstr(it, "class"), "fast")) n_fast = gq_add(fast, n_fast, &q);
         else n_round = gq_add(round, n_round, &q);
     }
+    /* Legacy fixtures predate the additive generic MAP/vacuum request.
+     * Check its exact wire request too; do not discard it from the trace. */
+    bool has_boost = false;
+    for (i = 0; i < n_round; i++) if (!strcmp(round[i].tx, "010B")) has_boost = true;
+    if (!has_boost) {
+        int at = !strcmp(p->id, "obd2.generic") ? n_round - 1 : n_round;
+        memmove(&round[at + 1], &round[at], (size_t)(n_round - at) * sizeof(round[0]));
+        memset(&round[at], 0, sizeof(round[at]));
+        snprintf(round[at].tx, sizeof(round[at].tx), "010B");
+        wire_hdr(round[at].hdr, sizeof(round[at].hdr), p->hdr, p->proto);
+        n_round++;
+    }
     for (i = 0; i < n_round; i++) {
         for (k = 0; k < n_fast; k++) {
             if (strcmp(fast[k].hdr, round[i].hdr) || strcmp(fast[k].tx, round[i].tx)) expect[n_exp++] = fast[k];
@@ -2363,6 +2377,116 @@ static void test_golden(void)
         if (!only_ || !strcmp(only_, #fn)) VT_RUN(fn);                        \
     } while (0)
 
+static void test_responsive_motion(void)
+{
+    fake_t *f = fake_reset();
+    vp_profile_t *p = compile_q(
+        P_HEAD("t.motion", "{'proto':6}") "'signals':["
+        "{'id':'obd.rpm','rate':'every','src':[{'req':'010C','len':2,'rpn':[['R',0,16,'be'],['k',4],'/']}]},"
+        "{'id':'obd.speed','src':[{'req':'010D','len':1,'rpn':[['A',0]]}]},"
+        "{'id':'obd.intake_temp','src':[{'req':'010F','len':1,'rpn':[['A',0],['k',40],'-']}]},"
+        "{'id':'obd.oil_temp','src':[{'req':'015C','len':1,'rpn':[['A',0],['k',40],'-']}]}]}");
+    VT_CHECK(p != NULL); if (!p) return;
+    set_resp(f, "", "010C", "41 0C 1F 40");
+    set_resp(f, "", "010D", "41 0D 3C");
+    set_resp(f, "", "010F", "41 0F 50");
+    set_resp(f, "", "015C", "NO DATA");
+    vp_engine_cfg_t cfg = {.responsive_polling = true};
+    fake_start_with_cfg(f, p, &cfg);
+    VT_CHECK(pump_answer(f, "010D"));
+    int first = f->n_req;
+    sim(f, 5000);
+    int rpm = 0, speed = 0, background = 0, failed = 0;
+    uint32_t last_rpm = 0, last_speed = 0, last_fail = 0;
+    for (int i = first; i < f->n_req; i++) {
+        const req_rec_t *r = &f->reqs[i];
+        if (!strcmp(r->tx, "010C")) {
+            if (last_rpm) VT_CHECK(r->at_ms - last_rpm >= 50 && r->at_ms - last_rpm <= 200);
+            last_rpm = r->at_ms; rpm++;
+        } else if (!strcmp(r->tx, "010D")) {
+            if (last_speed) VT_CHECK(r->at_ms - last_speed >= 100 && r->at_ms - last_speed <= 250);
+            last_speed = r->at_ms; speed++;
+        } else if (!strcmp(r->tx, "010F")) background++;
+        else if (!strcmp(r->tx, "015C")) {
+            if (last_fail) VT_CHECK(r->at_ms - last_fail >= 1000);
+            last_fail = r->at_ms; failed++;
+        }
+    }
+    VT_CHECK(rpm >= 30 && speed >= 20 && background > 10 && failed <= 3);
+    VT_CHECK_INT(f->val[SIG_OBD_SPEED], 60);
+    printf("  simulated 5s: RPM %d, speed %d, background %d, unsupported %d\n", rpm, speed, background, failed);
+    /* Demand remains authoritative, even for priority motion. */
+    vp_engine_set_obd_demand_mask(f->eng, 0);
+    sim(f, 500); first = count_cmd(f, "010D"); sim(f, 500);
+    VT_CHECK_INT(count_cmd(f, "010D"), first);
+    fake_stop(f, p);
+}
+
+static void test_builtin_vacuum(void)
+{
+    size_t len;
+    char *text = vt_read_file(ET_CATALOG_DIR "/obd2.generic.vehicle.json", &len);
+    VT_CHECK(text != NULL); if (!text) return;
+    vp_profile_t *p = compile_text(text, len); free(text);
+    VT_CHECK(p != NULL); if (!p) return;
+    fake_t *f = fake_reset();
+    set_resp(f, "", "010C", "41 0C 0C 80");
+    set_resp(f, "", "010B", "41 0B 23");
+    vp_engine_cfg_t cfg = {.proto = 6, .responsive_polling = true};
+    fake_start_with_cfg(f, p, &cfg);
+    vp_engine_set_obd_demand_mask(f->eng, UINT16_C(1) << SIG_OBD_BOOST);
+    VT_CHECK(pump_answer(f, "010B"));
+    VT_CHECK(f->valid[SIG_OBD_BOOST]);
+    VT_CHECK_INT(f->val[SIG_OBD_BOOST], -65);
+    set_resp(f, "", "010B", "41 0B B4");
+    VT_CHECK(pump_answer(f, "010B"));
+    VT_CHECK_INT(f->val[SIG_OBD_BOOST], 80);
+    fake_stop(f, p);
+}
+
+static void test_responsive_chain(void)
+{
+    fake_t *f = fake_reset();
+    vp_profile_t *p = compile_q(
+        P_HEAD("t.motionchain", "{'proto':6}") "'signals':[" S_RPM ","
+        "{'id':'obd.speed','src':[{'req':'010D','len':1,'rpn':[['A',0]]}]},"
+        "{'id':'obd.oil_temp','src':[{'req':'221234','hdr':'7E1','before':['ATCEA10'],"
+        "'after':['ATCEA'],'len':1,'rpn':[['A',0]]}]}]}");
+    VT_CHECK(p != NULL); if (!p) return;
+    set_resp(f, "", "010C", "41 0C 1F 40");
+    set_resp(f, "", "010D", "41 0D 3C");
+    set_resp(f, "", "221234", "62 12 34 64");
+    vp_engine_cfg_t cfg = {.responsive_polling = true};
+    fake_start_with_cfg(f, p, &cfg); sim(f, 3000);
+    int chains = 0;
+    for (int i = 0; i < f->n_log; i++) if (!strcmp(f->log[i], "ATCEA10")) {
+        VT_CHECK(i + 1 < f->n_log && !strcmp(f->log[i + 1], "221234"));
+        int after = find_cmd(f, "ATCEA", i + 2);
+        int header = find_cmd(f, "ATSH7E0", i + 2);
+        VT_CHECK(after > i + 1 && header > after);
+        chains++;
+    }
+    VT_CHECK(chains > 5 && count_cmd(f, "010D") > 10 && count_cmd(f, "010C") > 10);
+    fake_stop(f, p);
+}
+
+static void test_temperature_255(void)
+{
+    fake_t *f = fake_reset();
+    vp_profile_t *p = compile_q(
+        P_HEAD("t.hot", "{'proto':6}") "'signals':["
+        "{'id':'obd.oil_temp','filter':'temp_hyst','src':[{'req':'221234','len':2,'rpn':[['R',0,16,'be']]}]},"
+        "{'id':'obd.coolant_temp','src':[{'req':'221235','len':2,'rpn':[['R',0,16,'be']]}]}]}");
+    VT_CHECK(p != NULL); if (!p) return;
+    set_resp(f, "", "221234", "62 12 34 00 FF");
+    set_resp(f, "", "221235", "62 12 35 00 FF");
+    fake_start(f, p, 0); VT_CHECK(pump_rounds(f, 2));
+    VT_CHECK_INT(f->val[SIG_OBD_OIL_TEMP], 255);
+    VT_CHECK_INT(f->val[SIG_OBD_COOLANT_TEMP], 255);
+    VT_CHECK(f->valid[SIG_OBD_OIL_TEMP] && f->valid[SIG_OBD_COOLANT_TEMP]);
+    fake_stop(f, p);
+}
+
 int main(void)
 {
     RUN(test_sparse_defaults);
@@ -2380,6 +2504,10 @@ int main(void)
     RUN(test_units_and_post);
     RUN(test_hold);
     RUN(test_temp_hyst);
+    RUN(test_temperature_255);
+    RUN(test_responsive_motion);
+    RUN(test_responsive_chain);
+    RUN(test_builtin_vacuum);
     RUN(test_fallback_chain);
     RUN(test_gear);
     RUN(test_link_states);

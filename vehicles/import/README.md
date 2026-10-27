@@ -2,16 +2,16 @@
 
 [English](README.en.md) | 简体中文
 
-这里提供 **18 份可直接导入固件的完整 JSON 档案**（`skygauge.vehicle/1`）：
-[OBD/IMPORT/](OBD/IMPORT/) 中包含现有目录 17 份档案的 `custom.*` 副本，以及
+这里提供 **19 份可直接导入固件的完整 JSON 档案**（`skygauge.vehicle/1`）：
+[OBD/IMPORT/](OBD/IMPORT/) 中包含现有目录 18 份档案的 `custom.*` 副本，以及
 单独的 `custom.bmw.g.gear`。这些是已有请求路径的可编辑模板，适用性需要按实车确认。
-原始目录仍为 17 份；模板不会占用原始 ID，通用模板也可以独立安装。
+原始目录仍为 18 份；模板不会占用原始 ID，通用模板也可以独立安装。
 仪表中的模板名称带 `cfg` 后缀，便于与原档案区分。
 
 ## 精简配置
 
-这 18 份完整模板仍可直接使用，也可以删去希望沿用标准 OBD2 的信号定义。
-未声明的 9 个标准信号会自动补齐；显式声明整体替换默认信号。关闭某项使用
+这 19 份完整模板仍可直接使用，也可以删去希望沿用标准 OBD2 的信号定义。
+未声明的 10 个标准信号会自动补齐；显式声明整体替换默认信号。关闭某项使用
 `{"id":"obd.oil_temp","disabled":true}`，关闭全部继承使用根字段
 `"defaults":"none"`。默认补齐不含挡位与传动比。此行为需要包含默认继承功能的固件；
 旧固件请继续使用完整模板。最小与 BMW G 直读挡位示例见
@@ -52,6 +52,7 @@ HTTP 安装/激活方法见 [车型文档](../../docs/VEHICLES.md)。
 | `custom.mini.jcw_f56` | `JCW F56 cfg` | 0 | `mini.jcw_f56` |
 | `custom.mini.r55` | `MINI R55 cfg` | 6 | `mini.r55` |
 | `custom.obd2.generic` | `OBD2 Generic cfg` | 0 | `obd2.generic` |
+| `custom.porsche.987_1` | `POS 987.1 cfg` | 3 | `porsche.987_1` |
 | `custom.porsche.997_1` | `POS 997.1 cfg` | 6 | `porsche.997_1` |
 | `custom.porsche.997_2` | `POS 997.2 cfg` | 6 | `porsche.997_2` |
 | `custom.subaru.zc6.can` | `ZN/C6 CAN cfg` | 6 | `subaru.zc6.can` |
@@ -74,8 +75,9 @@ HTTP 安装/激活方法见 [车型文档](../../docs/VEHICLES.md)。
 
 | signal | period_ms | nominal Hz |
 |---|---|---|
-| `obd.rpm` | 100 | 10 |
-| `obd.speed`, `obd.gear`, `obd.load`, `obd.throttle`, `obd.boost` | 200 | 5 |
+| `obd.rpm` | 50 | 20 |
+| `obd.speed` | 100 | 10 |
+| `obd.gear`, `obd.load`, `obd.throttle`, `obd.boost` | 200 | 5 |
 | `obd.afr`, `obd.oil_pressure` | 500 | 2 |
 | `obd.intake_temp`, `obd.coolant_temp`, `obd.oil_temp`, `obd.battery_voltage` | 1000 | 1 |
 

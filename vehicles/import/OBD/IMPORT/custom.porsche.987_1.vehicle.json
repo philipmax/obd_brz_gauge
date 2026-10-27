@@ -1,7 +1,7 @@
 {
   "schema": "skygauge.vehicle/1",
   "id": "custom.porsche.987_1",
-  "rev": 1,
+  "rev": 3,
   "name": "POS 987.1 cfg",
   "notes": [
     "Porsche 987.1 profile based on ISO 9141-2 / ELM protocol 3 vehicle testing.",
@@ -64,7 +64,7 @@
           "fail_after": 5
         }
       ],
-      "period_ms": 100
+      "period_ms": 50
     },
     {
       "id": "obd.intake_temp",
@@ -114,7 +114,7 @@
         }
       ],
       "rate": "round",
-      "period_ms": 200
+      "period_ms": 100
     },
     {
       "id": "obd.coolant_temp",
@@ -208,7 +208,7 @@
       "id": "obd.oil_temp",
       "valid": [
         -20,
-        150
+        255
       ],
       "filter": "temp_hyst",
       "src": [
@@ -217,7 +217,7 @@
           "len": 1,
           "valid": [
             -40,
-            215
+            255
           ],
           "expr": "A-40",
           "rpn": [
@@ -308,7 +308,7 @@
   "origin": {
     "from": "vehicles/catalog/porsche.987_1.vehicle.json",
     "profile_id": "porsche.987_1",
-    "profile_rev": 1,
+    "profile_rev": 3,
     "generator": "tools/vehicles/gen_import_pack.py"
   }
 }

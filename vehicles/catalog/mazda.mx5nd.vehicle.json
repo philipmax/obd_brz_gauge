@@ -1,7 +1,7 @@
 {
   "schema": "skygauge.vehicle/1",
   "id": "mazda.mx5nd",
-  "rev": 1,
+  "rev": 3,
   "name": "MX-5 ND",
   "origin": {
     "from": "legacy 4b056c0",
@@ -91,20 +91,20 @@
     },
     {
       "id": "obd.oil_temp",
-      "valid": [-20, 150],
+      "valid": [-20, 255],
       "filter": "temp_hyst",
       "src": [
         {
           "req": "221310",
           "len": 2,
-          "valid": [-40, 215],
+          "valid": [-40, 255],
           "expr": "(A*256+B)*0.01-40",
           "rpn": [["A", 0], ["k", 256], "*", ["A", 1], "+", ["k", 0.01], "*", ["k", 40], "-"]
         },
         {
           "req": "22111F",
           "len": 1,
-          "valid": [-40, 215],
+          "valid": [-40, 255],
           "expr": "A-50",
           "rpn": [["A", 0], ["k", 50], "-"]
         }

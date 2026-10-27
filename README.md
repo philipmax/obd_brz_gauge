@@ -20,7 +20,7 @@
 | [docs/USER_GUIDE.md](docs/USER_GUIDE.md) | **使用指南** —— 页面导航、设置、三连表配对、开机动画、App 升级 |
 | [docs/FLASH.md](docs/FLASH.md) | **烧录与升级** —— 分区表、USB 烧录、App OTA 与回滚 |
 | [docs/APP_PROTOCOL.md](docs/APP_PROTOCOL.md) | **App 对接协议** —— OTA 模式的 WiFi HTTP API |
-| [docs/VEHICLES.md](docs/VEHICLES.md) | **车型适配** —— JSON 车型档案（17 个，固件仅内置 1 个）、安装/激活、新增车型教程 |
+| [docs/VEHICLES.md](docs/VEHICLES.md) | **车型适配** —— JSON 车型档案（18 个，固件仅内置 1 个）、安装/激活、新增车型教程 |
 | [docs/PID_GUIDE.md](docs/PID_GUIDE.md) | **PID / 信号定义指南** —— 怎么把挖到的 PID/CAN 位写成 RPN 公式，含真实例子 |
 | [docs/THEMES.md](docs/THEMES.md) | **主题制作** —— 两套主题系统、素材规格、主题商店 |
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | **故障排查** —— 连不上 / 没数据、协议自动检测 |
@@ -55,7 +55,7 @@
 （现有 18 份的 `custom.*` 副本 + BMW G 直接挡位），明确请求头、位解码和轮询间隔。
 将选中的 JSON 放进 SD 卡 `OBD/IMPORT/`，安装后激活并重启。
 
-新增车型可以只写特有信号，未声明的 9 个标准信号默认走 OBD2；支持单项
+新增车型可以只写特有信号，未声明的 10 个标准信号默认走 OBD2；支持单项
 `disabled: true` 和根字段 `defaults: "none"`。最小配置与 BMW G 精简挡位示例见
 [vehicles/examples/](vehicles/examples/README.md)。
 
@@ -169,3 +169,5 @@ but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 GNU General Public License for more details.
 ```
+
+通用配置支持 MAP 负压估算，水温／油温显示上限为 255°C；转速、车速按独立截止时间优先采集。旧的已安装配置需重新导入才能应用显式范围修复，详见 [车型文档](docs/VEHICLES.md)。

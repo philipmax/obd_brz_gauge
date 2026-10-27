@@ -1,7 +1,7 @@
 {
   "schema": "skygauge.vehicle/1",
   "id": "alfa.giulia_20t",
-  "rev": 1,
+  "rev": 3,
   "name": "GIULIA 2.0T",
   "origin": {
     "from": "legacy 4b056c0",
@@ -93,14 +93,14 @@
     },
     {
       "id": "obd.oil_temp",
-      "valid": [-20, 150],
+      "valid": [-20, 255],
       "filter": "temp_hyst",
       "src": [
         {
           "req": "221302",
           "hdr": "18DA10F1",
           "len": 2,
-          "valid": [-40, 215],
+          "valid": [-40, 255],
           "expr": "B",
           "rpn": [["A", 1]]
         }
@@ -122,7 +122,7 @@
       "id": "obd.boost",
       "unit": "kPa_rel",
       "post": {
-        "clamp": [0, 155]
+        "clamp": [-100, 155]
       },
       "src": [
         {

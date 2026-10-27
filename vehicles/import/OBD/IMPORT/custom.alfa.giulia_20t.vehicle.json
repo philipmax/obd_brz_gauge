@@ -1,12 +1,12 @@
 {
   "schema": "skygauge.vehicle/1",
   "id": "custom.alfa.giulia_20t",
-  "rev": 1,
+  "rev": 3,
   "name": "GIULIA 2.0T cfg",
   "origin": {
     "from": "vehicles/catalog/alfa.giulia_20t.vehicle.json",
     "profile_id": "alfa.giulia_20t",
-    "profile_rev": 1,
+    "profile_rev": 3,
     "generator": "tools/vehicles/gen_import_pack.py"
   },
   "bus": {
@@ -65,7 +65,7 @@
           "fail_after": 5
         }
       ],
-      "period_ms": 100
+      "period_ms": 50
     },
     {
       "id": "obd.intake_temp",
@@ -115,7 +115,7 @@
         }
       ],
       "rate": "round",
-      "period_ms": 200
+      "period_ms": 100
     },
     {
       "id": "obd.coolant_temp",
@@ -209,7 +209,7 @@
       "id": "obd.oil_temp",
       "valid": [
         -20,
-        150
+        255
       ],
       "filter": "temp_hyst",
       "src": [
@@ -219,7 +219,7 @@
           "len": 2,
           "valid": [
             -40,
-            215
+            255
           ],
           "expr": "B",
           "rpn": [
@@ -264,7 +264,7 @@
       "unit": "kPa_rel",
       "post": {
         "clamp": [
-          0,
+          -100,
           155
         ]
       },

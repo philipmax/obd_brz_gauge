@@ -143,6 +143,8 @@ if(Python3_Interpreter_FOUND)
     file(GLOB VH_EXAMPLE_FILES "${REPO_ROOT}/vehicles/examples/*.vehicle.json")
     add_test(NAME vehicle_import_fresh COMMAND Python3::Interpreter
              "${REPO_ROOT}/tools/vehicles/gen_import_pack.py" --check)
+    add_test(NAME vehicle_boost_profiles COMMAND Python3::Interpreter
+             "${REPO_ROOT}/tools/vehicles/test_boost_profiles.py")
     add_test(NAME vehicle_expr COMMAND Python3::Interpreter
              "${REPO_ROOT}/tools/vehicles/expr2rpn.py" --check ${VH_CATALOG_FILES} ${VH_IMPORT_FILES} ${VH_EXAMPLE_FILES})
     add_test(NAME vehicle_builtin_fresh COMMAND Python3::Interpreter

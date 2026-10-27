@@ -24,6 +24,9 @@ static void *allocations[64];
 static unsigned live_allocations;
 static unsigned waits, signal_waits, timed_waits, sets_reader, sets_decoder;
 static unsigned decoded, presented, panel_draws, invalidations, timer_deletes, ui_steps;
+static uint8_t *block_outputs[4];
+static int64_t block_times[4];
+static unsigned block_count;
 static uint16_t decoded_marker[256], shown_marker[256];
 static int64_t decoded_at[256], now_us;
 static unsigned fullscreen_frames;
@@ -315,7 +318,13 @@ esp_err_t media_jpeg_decode_frame(media_jpeg_t *j, uint8_t *out, size_t cap)
     return ESP_OK;
 }
 esp_err_t media_jpeg_next_block(media_jpeg_t *j, uint8_t *out, uint16_t *lines)
-{ (void)j; (void)out; (void)lines; CHECK(false); return ESP_FAIL; }
+{
+    CHECK(j && out && lines && block_count < COUNT_OF(block_outputs));
+    block_outputs[block_count] = out; block_times[block_count++] = now_us;
+    memset(out, j->marker, 16 * 8 * 2); *lines = 8;
+    now_us += 4000;
+    return ESP_OK;
+}
 
 static void run_task(unsigned i)
 {
@@ -863,6 +872,52 @@ static void test_fullscreen_finish(void)
     CHECK(refresh.paused && !draw_buf.flushing && (s->ev->bits & EV_DECODER_DONE));
     finish(); CHECK(invalidations == 1 && !timer_deletes);
 }
+static void test_fullscreen_decode_ahead(void)
+{
+    vp_session_t *s = prepared(VIDEO_MODE_FULLSCREEN, 64);
+    vp_out_t out = {0};
+    CHECK(media_jpeg_open(false, &out.j) == ESP_OK);
+    uint8_t jpg[] = {9, 9, 9, 9};
+    allow_timed = true; during_decode = costed_decode; decode_cost_us = 10000;
+    CHECK(fs_present(s, &out, jpg, sizeof(jpg), 50000) == ESP_OK);
+    CHECK(decoded == 1 && decoded_at[0] == 0);
+    CHECK(fullscreen_at[0] == 50000 && out.pace_wait_us == 40000);
+    /* Frame two decodes while frame one is already displayed. */
+    s->started = true; jpg[0] = 10;
+    CHECK(fs_present(s, &out, jpg, sizeof(jpg), 100000) == ESP_OK);
+    CHECK(decoded_at[1] == 50000 && fullscreen_at[1] == 100000);
+    media_jpeg_close(out.j); finish();
+}
+static void test_fullscreen_strip_pingpong(void)
+{
+    vp_session_t *s = prepared(VIDEO_MODE_FULLSCREEN, 64);
+    vp_out_t out = {.block = true};
+    CHECK(media_jpeg_open(false, &out.j) == ESP_OK); out.j->marker = 7;
+    media_jpeg_info_t ji = {16, 16, 8, 256, 2};
+    CHECK(fs_prepare(s, &out, &ji) == ESP_OK);
+    out.strip_lines = 8; allow_timed = true;
+    unsigned before = panel_draws;
+    CHECK(fs_blocks(s, &out, &ji, 50000) == ESP_OK);
+    CHECK(block_count == 2 && block_times[0] == 0 && block_times[1] == 50000);
+    CHECK(block_outputs[0] != block_outputs[1] && panel_draws == before + 2);
+    CHECK(fs_blocks(s, &out, &ji, 100000) == ESP_OK);
+    CHECK(block_outputs[2] == block_outputs[0] && block_outputs[3] == block_outputs[1]);
+    CHECK(block_times[2] == 54000 && block_times[3] == 100000);
+    media_jpeg_close(out.j); finish();
+}
+static void test_fullscreen_decode_pause(void)
+{
+    vp_session_t *s = prepared(VIDEO_MODE_FULLSCREEN, 64);
+    vp_out_t out = {0}; CHECK(media_jpeg_open(false, &out.j) == ESP_OK);
+    uint8_t jpg[] = {9, 9, 9, 9};
+    allow_timed = true; before_wait = pause_deadline;
+    CHECK(fs_present(s, &out, jpg, sizeof(jpg), 50000) == ESP_ERR_INVALID_STATE);
+    CHECK(s->paused && decoded == 1 && !fullscreen_frames);
+    before_wait = NULL; CHECK(video_player_resume() == ESP_OK);
+    CHECK(fs_present(s, &out, jpg, sizeof(jpg), 50000) == ESP_OK);
+    CHECK(decoded == 2 && fullscreen_frames == 1 && fullscreen_at[0] == 50000);
+    media_jpeg_close(out.j); finish();
+}
 static void test_first_frame_waits_for_dma(void)
 {
     vp_session_t *s = prepared(VIDEO_MODE_FULLSCREEN, 64);
@@ -930,12 +985,12 @@ static vp_session_t *prepared_timed_cfr(void)
 static void test_timed_slow_decode_completes(void)
 {
     vp_session_t *s = prepared_timed_cfr();
-    decode_cost_us = 40000; during_decode = costed_decode;
+    decode_cost_us = 60000; during_decode = costed_decode;
     run_task(0);
     CHECK(s->state == VIDEO_STATE_STOPPED && s->frames_dropped > 0);
     CHECK(decoded + s->frames_dropped == 10 && fullscreen_frames == decoded);
     CHECK(fullscreen_marker[0] == 1 && fullscreen_marker[fullscreen_frames - 1] == 10);
-    CHECK(now_us >= 333330 && now_us < 420000);
+    CHECK(now_us >= 333330 && now_us < 500000);
     CHECK(!s->used && !s->frames_buffered);
     finish();
 }
@@ -948,7 +1003,7 @@ static void test_timed_stall_catches_up(void)
 {
     vp_session_t *s = prepared_timed_cfr(); during_decode = timed_stall;
     run_task(0);
-    CHECK(s->state == VIDEO_STATE_STOPPED && s->frames_dropped >= 6);
+    CHECK(s->state == VIDEO_STATE_STOPPED && s->frames_dropped == 5);
     CHECK(decoded + s->frames_dropped == 10);
     CHECK(fullscreen_marker[0] == 1 && fullscreen_marker[fullscreen_frames - 1] == 10);
     /* FreeRTOS waits round down to whole milliseconds. */
@@ -1438,7 +1493,7 @@ int main(void)
         TEST(test_near_budget_pacing), TEST(test_native_pacing), TEST(test_target_fps_pacing),
         TEST(test_theme_ring_size_and_budget), TEST(test_slow_theme_keeps_playing), TEST(test_slow_pacing_recovers),
         TEST(test_deadline_pause), TEST(test_deadline_stop),
-        TEST(test_fullscreen_finish), TEST(test_first_frame_waits_for_dma), TEST(test_fullscreen_stop), TEST(test_task_create_failure),
+        TEST(test_fullscreen_finish), TEST(test_fullscreen_decode_ahead), TEST(test_fullscreen_strip_pingpong), TEST(test_fullscreen_decode_pause), TEST(test_first_frame_waits_for_dma), TEST(test_fullscreen_stop), TEST(test_task_create_failure),
         TEST(test_timed_fullscreen_finish), TEST(test_timed_truncated_prebuffer),
         TEST(test_timed_slow_decode_completes), TEST(test_timed_stall_catches_up),
         TEST(test_timed_decode_error_remains_fatal),

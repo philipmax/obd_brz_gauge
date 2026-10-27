@@ -29,9 +29,9 @@ const disp_item_meta_t s_disp_meta[DISP_ITEM_COUNT] = {
 // Needle range per data item: nmin/nmax in natural units (used for both scale labels and needle position);
 // div converts the cached raw value to natural units (BAT: mV→V, OILP: 0.1 units → integer); div must be >= 1.
 const needle_scale_meta_t s_needle_scale_meta[DISP_ITEM_COUNT] = {
-    [DISP_ITEM_CLT]   = {-20, 130, 1},
+    [DISP_ITEM_CLT]   = {-20, 255, 1},
     [DISP_ITEM_IAT]   = {-20, 100, 1},
-    [DISP_ITEM_OIL]   = {-20, 160, 1},
+    [DISP_ITEM_OIL]   = {-20, 255, 1},
     [DISP_ITEM_LOAD]  = {0, 100, 1},
     [DISP_ITEM_TPS]   = {0, 100, 1},
     [DISP_ITEM_RPM]   = {0, 8000, 1},
@@ -39,7 +39,7 @@ const needle_scale_meta_t s_needle_scale_meta[DISP_ITEM_COUNT] = {
     [DISP_ITEM_BAT]   = {8, 16, 1000},
     [DISP_ITEM_OILP]  = {0, 10, 10},
     [DISP_ITEM_RESERVED_9] = {0, 100, 1},   // placeholder; div >= 1 (ui.c divides by it)
-    [DISP_ITEM_BOOST] = {0, 20, 1},   // range in 0.1bar: 0 ~ +2.0 bar gauge pressure (negative pressure not displayed)
+    [DISP_ITEM_BOOST] = {-10, 20, 1}, // 0.1 bar units: -1.0 ~ +2.0 bar, including intake vacuum
     [DISP_ITEM_AFR]   = {8, 22, 100}, // range 8.0~22.0:1, raw value ×100
 };
 

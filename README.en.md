@@ -202,3 +202,5 @@ but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 GNU General Public License for more details.
 ```
+
+Generic supports MAP vacuum estimation and coolant/oil display limits up to 255°C. RPM and speed use independent priority deadlines. Reimport older installed profiles to apply explicit range fixes; see [vehicle documentation](docs/VEHICLES.en.md).

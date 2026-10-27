@@ -193,7 +193,7 @@ struct vp_engine {
     uint8_t  round_pos;
     bool     in_round;
     bool     every_done;
-    uint8_t  slot_req[1 + VP_MAX_EVERY_SIGNALS];
+    uint8_t  slot_req[3 + VP_MAX_EVERY_SIGNALS];
     uint8_t  slot_n;
     uint8_t  slot_pos;
     int16_t  pending_after_req;
@@ -206,6 +206,9 @@ struct vp_engine {
     bool     req_sent;
     uint32_t round_no;
     uint32_t last_req_ms;
+    uint32_t req_last_ms[VP_MAX_REQUESTS];
+    uint8_t req_fail_run[VP_MAX_REQUESTS];
+    uint32_t req_seen_mask;
 
     /* Static request -> source index. A response only walks sources that can
      * reference that request, while preserving profile signal/source order. */
@@ -1133,7 +1136,7 @@ static bool filter_temp_hyst(eng_sig_t *g, int32_t in, bool from_can, int32_t *o
     float fd;
     int diff;
 
-    if (in < -20 || in > 150) return false;
+    if (in < -20 || in > 255) return false;
     if (from_can) {
         g->filt = (float)in;
         g->filt_init = true;
@@ -1403,6 +1406,10 @@ static void req_complete(vp_engine_t *e, int r, bool match, const uint8_t *d,
 {
     uint8_t source;
 
+    if (e->cfg.responsive_polling) {
+        if (match) e->req_fail_run[r] = 0;
+        else if (e->req_fail_run[r] < 5) e->req_fail_run[r]++;
+    }
     if (match) e->st.rx_ok++;
     else e->st.rx_fail++;
     for (source = e->req_head[r]; source != ENG_INDEX_NONE; source = e->req_next[source]) {
@@ -2098,6 +2105,8 @@ static void enter_run(vp_engine_t *e, uint32_t now)
         e->sigs[i].last_poll_ms = now - 60000u;
         e->sigs[i].last_can_ms = now;
     }
+    e->req_seen_mask = 0;
+    memset(e->req_fail_run, 0, sizeof(e->req_fail_run));
     elog(e, "running");
 }
 
@@ -2105,10 +2114,36 @@ static void enter_run(vp_engine_t *e, uint32_t now)
 /* polling plan                                                        */
 /* ------------------------------------------------------------------ */
 
+/* Motion is serviced at each completed request slot, using real send times.
+ * Never preempt a state/before/request/after or ISO-TP transaction. */
+static bool motion_signal(const vp_engine_t *e, int i)
+{
+    return e->cfg.responsive_polling &&
+           (e->sigs[i].slot == SIG_OBD_RPM || e->sigs[i].slot == SIG_OBD_SPEED);
+}
+
+static bool request_ready(const vp_engine_t *e, uint8_t r, uint32_t now)
+{
+    uint8_t failures = e->req_fail_run[r];
+    if (!e->cfg.responsive_polling || !failures) return true;
+    return elapsed(now, e->req_last_ms[r], 1000u << (failures - 1u));
+}
+
+static bool motion_due(const vp_engine_t *e, int i, uint32_t now)
+{
+    const vp_source_t *src = cur_src(e, i);
+    if (!motion_signal(e, i) || !sig_driven(e, i) || !signal_demanded(e, i) ||
+        src->kind != VP_SRC_REQ || !request_ready(e, (uint8_t)src->ref, now)) return false;
+    uint32_t period = e->sig[i].period_ms;
+    if (!period) period = e->sigs[i].slot == SIG_OBD_RPM ? 50u : 100u;
+    return !(e->req_seen_mask & (UINT32_C(1) << src->ref)) ||
+           elapsed(now, e->req_last_ms[src->ref], period);
+}
+
 static bool poll_candidate(const vp_engine_t *e, int i)
 {
     if (!sig_driven(e, i) || e->sig[i].rate == VP_RATE_EVERY ||
-        !signal_demanded(e, i)) return false;
+        !signal_demanded(e, i) || motion_signal(e, i)) return false;
     return cur_src(e, i)->kind == VP_SRC_REQ;
 }
 
@@ -2130,15 +2165,15 @@ static bool sig_due(const vp_engine_t *e, int i, uint32_t now)
     return true;
 }
 
-static size_t every_reqs(const vp_engine_t *e, uint8_t *out)
+static size_t every_reqs(const vp_engine_t *e, uint8_t *out, uint32_t now)
 {
     size_t n = 0, k, j;
     for (k = 0; k < e->n_every; k++) {
         int i = e->every_sig[k];
         const vp_source_t *s;
-        if (!sig_driven(e, i) || !signal_demanded(e, i)) continue;
+        if (!sig_driven(e, i) || !signal_demanded(e, i) || motion_signal(e, i)) continue;
         s = cur_src(e, i);
-        if (s->kind != VP_SRC_REQ) continue;
+        if (s->kind != VP_SRC_REQ || !request_ready(e, (uint8_t)s->ref, now)) continue;
         for (j = 0; j < n && out[j] != s->ref; j++) {}
         if (j == n) out[n++] = (uint8_t)s->ref;
     }
@@ -2173,6 +2208,7 @@ static void start_round(vp_engine_t *e, uint32_t now)
         uint32_t bit;
         if (!poll_candidate(e, i) || !sig_due(e, i, now)) continue;
         r = (uint8_t)cur_src(e, i)->ref;
+        if (!request_ready(e, r, now)) continue;
         bit = UINT32_C(1) << r;
         if (!(seen & bit)) {
             seen |= bit;
@@ -2181,19 +2217,31 @@ static void start_round(vp_engine_t *e, uint32_t now)
         /* A shared request still advances each due signal's deadline. */
         e->sigs[i].last_poll_ms = now;
     }
-    e->in_round = e->round_n > 0 || every_reqs(e, ev) > 0;
+    e->in_round = e->round_n > 0 || every_reqs(e, ev, now) > 0;
+    for (int i = 0; i < e->p->n_sig; i++) {
+        if (motion_due(e, i, now)) e->in_round = true;
+    }
 }
 
-static bool build_slot(vp_engine_t *e)
+static bool build_slot(vp_engine_t *e, uint32_t now)
 {
     uint8_t ev[VP_MAX_EVERY_SIGNALS];
-    size_t nev = every_reqs(e, ev), k;
+    size_t nev = every_reqs(e, ev, now), k;
 
     e->slot_n = 0;
     e->slot_pos = 0;
+    if (e->round_pos >= e->round_n && e->every_done) return false;
+    e->every_done = true;
+    /* Two motion samples at most, then one background request for fairness. */
+    for (int i = 0; i < e->p->n_sig; i++) {
+        if (!motion_due(e, i, now)) continue;
+        uint8_t r = (uint8_t)cur_src(e, i)->ref;
+        for (k = 0; k < e->slot_n && e->slot_req[k] != r; k++) {}
+        if (k == e->slot_n) e->slot_req[e->slot_n++] = r;
+    }
     while (e->round_pos < e->round_n) {
         uint8_t main_req = e->round_req[e->round_pos++];
-        if (!request_demanded(e, main_req)) continue;
+        if (!request_demanded(e, main_req) || !request_ready(e, main_req, now)) continue;
         for (k = 0; k < nev; k++) e->slot_req[e->slot_n++] = ev[k];
         for (k = 0; k < nev; k++) {
             if (ev[k] == main_req) break;
@@ -2201,8 +2249,7 @@ static bool build_slot(vp_engine_t *e)
         if (k == nev) e->slot_req[e->slot_n++] = main_req;
         break;
     }
-    if (e->round_n == 0 && e->slot_n == 0 && !e->every_done) {
-        e->every_done = true;
+    if (e->round_n == 0) {
         for (k = 0; k < nev; k++) e->slot_req[e->slot_n++] = ev[k];
     }
     return e->slot_n > 0;
@@ -2395,7 +2442,7 @@ static void plan_run(vp_engine_t *e, uint32_t now)
             return;
         }
         if (e->in_round) {
-            if (build_slot(e)) continue;
+            if (build_slot(e, now)) continue;
             e->in_round = false;
             e->round_no++;
             e->st.rounds++;
@@ -2418,7 +2465,18 @@ static void plan_run(vp_engine_t *e, uint32_t now)
         start_round(e, now);
         if (!e->in_round) {
             e->round_no++;
-            e->next_ms = now + ENG_IDLE_MS;
+            uint32_t idle = ENG_IDLE_MS;
+            for (int i = 0; i < e->p->n_sig; i++) {
+                if (!motion_signal(e, i) || !sig_driven(e, i) || !signal_demanded(e, i)) continue;
+                const vp_source_t *src = cur_src(e, i);
+                if (src->kind != VP_SRC_REQ || !request_ready(e, (uint8_t)src->ref, now)) continue;
+                uint32_t period = e->sig[i].period_ms;
+                if (!period) period = e->sigs[i].slot == SIG_OBD_RPM ? 50u : 100u;
+                uint32_t age = now - e->req_last_ms[src->ref];
+                uint32_t wait = age < period ? period - age : 1u;
+                if (wait < idle) idle = wait;
+            }
+            e->next_ms = now + idle;
             return;
         }
     }
@@ -2791,6 +2849,8 @@ static void step_send(vp_engine_t *e, const eng_step_t *s, uint32_t now)
     if (s->kind == K_REQ) {
         e->req_sent = true;
         e->last_req_ms = now;
+        e->req_last_ms[s->req] = now;
+        e->req_seen_mask |= UINT32_C(1) << s->req;
         e->st.tx_req++;
     }
     if (s->kind == K_MA) {

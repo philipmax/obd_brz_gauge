@@ -53,7 +53,7 @@
 #define V5_TEMP_INVALID   (-40)    /* coolant / intake */
 #define V5_OIL_T_INVALID  (-100)
 #define V5_OIL_T_MIN      (-20)    /* obd_data_set_oil_temp(): outside -> hold */
-#define V5_OIL_T_MAX      150
+#define V5_OIL_T_MAX      255
 #define V5_BOOST_INVALID  (-32768)
 
 #define MASK_BITS         32

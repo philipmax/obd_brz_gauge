@@ -1,12 +1,12 @@
 {
   "schema": "skygauge.vehicle/1",
   "id": "custom.toyota.supra_a90",
-  "rev": 1,
+  "rev": 3,
   "name": "Supra A90 cfg",
   "origin": {
     "from": "vehicles/catalog/toyota.supra_a90.vehicle.json",
     "profile_id": "toyota.supra_a90",
-    "profile_rev": 1,
+    "profile_rev": 3,
     "generator": "tools/vehicles/gen_import_pack.py"
   },
   "bus": {
@@ -65,7 +65,7 @@
           "fail_after": 5
         }
       ],
-      "period_ms": 100
+      "period_ms": 50
     },
     {
       "id": "obd.intake_temp",
@@ -115,7 +115,7 @@
         }
       ],
       "rate": "round",
-      "period_ms": 200
+      "period_ms": 100
     },
     {
       "id": "obd.coolant_temp",
@@ -209,7 +209,7 @@
       "id": "obd.oil_temp",
       "valid": [
         -20,
-        150
+        255
       ],
       "filter": "temp_hyst",
       "src": [
@@ -256,7 +256,7 @@
           "len": 1,
           "valid": [
             -40,
-            215
+            255
           ],
           "expr": "A-40",
           "rpn": [
@@ -307,7 +307,7 @@
       "unit": "kPa_rel",
       "post": {
         "clamp": [
-          0,
+          -100,
           155
         ]
       },

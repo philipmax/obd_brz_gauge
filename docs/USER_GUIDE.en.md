@@ -224,3 +224,7 @@ next startup — an automatic rollback with no manual steps. Leaving OTA mode
 ## Clear installed vehicle profiles
 
 On the web USB flasher, choose “Clear installed vehicle profiles” in the vehicle section, review the scope and check the confirmation box. This clears all installed profiles and SD mirrors, then restarts with builtin `OBD2 Generic`. Insert the SD card and upgrade to firmware supporting `vehicle.clear`. A failed clear is not reported as successful; a failed restart can be retried separately. Themes, animations and vehicle templates in CATALOG / IMPORT / EXPORT are retained.
+
+## Video decode ahead and double buffering
+
+Playback retains sequential SD read-ahead, a PSRAM compressed-frame ring and a persistent JPEG decoder. Fullscreen mode decodes the next frame's first MCU strip or whole image ahead of time and starts panel transfer at its source deadline. Two internal DMA strips alternate by parity; submission waits for the previous transfer and never overwrites an in-flight buffer. Composite themes retain front/back frame buffers and LVGL handoff. OBV2 also decodes ahead, retaining compressed frames and shifting the timeline on pause; expired frames follow existing skip rules. Decode timing excludes deadline sleep. Actual FPS still requires device measurement; host tests do not establish a fixed hardware frame rate.

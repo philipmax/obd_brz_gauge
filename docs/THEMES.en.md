@@ -598,3 +598,7 @@ are legacy migration sources / reserved space totaling 8.75 MiB. New themes and 
 not use them; this change does not reassign the space to firmware or config.
 See [partitions.csv](../partitions.csv). Devices already on layout v2 can update by OTA;
 older partition tables need one full reflash because OTA cannot change the table.
+
+## Video decode ahead and double buffering
+
+Playback retains sequential SD read-ahead, a PSRAM compressed-frame ring and a persistent JPEG decoder. Fullscreen mode decodes the next frame's first MCU strip or whole image ahead of time and starts panel transfer at its source deadline. Two internal DMA strips alternate by parity; submission waits for the previous transfer and never overwrites an in-flight buffer. Composite themes retain front/back frame buffers and LVGL handoff. OBV2 also decodes ahead, retaining compressed frames and shifting the timeline on pause; expired frames follow existing skip rules. Decode timing excludes deadline sleep. Actual FPS still requires device measurement; host tests do not establish a fixed hardware frame rate.

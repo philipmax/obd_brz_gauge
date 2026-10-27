@@ -1,7 +1,7 @@
 {
   "schema": "skygauge.vehicle/1",
   "id": "subaru.zc6.can",
-  "rev": 1,
+  "rev": 3,
   "name": "ZN/C6 CAN",
   "origin": {
     "from": "legacy 4b056c0",
@@ -104,7 +104,7 @@
     },
     {
       "id": "obd.oil_temp",
-      "valid": [-20, 150],
+      "valid": [-20, 255],
       "src": [
         {
           "can": "360",

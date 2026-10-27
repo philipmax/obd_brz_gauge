@@ -770,6 +770,7 @@ static bool engine_create(void)
     nvs_user_cfg_t nv = nvs_cfg_read();
     vp_engine_cfg_t cfg = { 0 };
     cfg.proto = (nv.protocol <= 12) ? nv.protocol : 0;
+    cfg.responsive_polling = true;
     s_engine = vp_engine_create(vp_manager_active(), &k_sink, &cfg, &k_alloc);
     if (!s_engine) {
         ESP_LOGE(TAG, "vp_engine_create failed (profile %s)", vp_manager_active_id());

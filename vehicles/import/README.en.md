@@ -2,18 +2,18 @@
 
 English | [简体中文](README.md)
 
-This pack contains **18 complete JSON profiles that the firmware can import directly**
+This pack contains **19 complete JSON profiles that the firmware can import directly**
 (`skygauge.vehicle/1`). [OBD/IMPORT/](OBD/IMPORT/) contains `custom.*` copies of
-all 17 catalog profiles, plus the separate `custom.bmw.g.gear` profile. These are
+all 18 catalog profiles, plus the separate `custom.bmw.g.gear` profile. These are
 editable templates of existing request paths; compatibility requires vehicle testing.
-The original catalog still has 17 profiles. Templates use independent IDs, including
+The original catalog still has 18 profiles. Templates use independent IDs, including
 an installable generic template. Their display names end in `cfg` to distinguish them
 from the original profiles.
 
 ## Sparse profiles
 
-All 18 complete templates remain usable. You may remove signal definitions that
-should use standard OBD2: 9 omitted standard signals are completed automatically,
+All 19 complete templates remain usable. You may remove signal definitions that
+should use standard OBD2: 10 omitted standard signals are completed automatically,
 while each explicit declaration replaces its entire default signal. Disable one
 with `{"id":"obd.oil_temp","disabled":true}` or all inheritance with root
 `"defaults":"none"`. Gear and drivetrain ratios are not inherited. This behavior
@@ -61,6 +61,7 @@ for HTTP installation and activation.
 | `custom.mini.jcw_f56` | `JCW F56 cfg` | 0 | `mini.jcw_f56` |
 | `custom.mini.r55` | `MINI R55 cfg` | 6 | `mini.r55` |
 | `custom.obd2.generic` | `OBD2 Generic cfg` | 0 | `obd2.generic` |
+| `custom.porsche.987_1` | `POS 987.1 cfg` | 3 | `porsche.987_1` |
 | `custom.porsche.997_1` | `POS 997.1 cfg` | 6 | `porsche.997_1` |
 | `custom.porsche.997_2` | `POS 997.2 cfg` | 6 | `porsche.997_2` |
 | `custom.subaru.zc6.can` | `ZN/C6 CAN cfg` | 6 | `subaru.zc6.can` |
@@ -85,8 +86,9 @@ Requested signals use `rate: "round"` with explicit `period_ms`. Template defaul
 
 | signal | period_ms | nominal Hz |
 |---|---|---|
-| `obd.rpm` | 100 | 10 |
-| `obd.speed`, `obd.gear`, `obd.load`, `obd.throttle`, `obd.boost` | 200 | 5 |
+| `obd.rpm` | 50 | 20 |
+| `obd.speed` | 100 | 10 |
+| `obd.gear`, `obd.load`, `obd.throttle`, `obd.boost` | 200 | 5 |
 | `obd.afr`, `obd.oil_pressure` | 500 | 2 |
 | `obd.intake_temp`, `obd.coolant_temp`, `obd.oil_temp`, `obd.battery_voltage` | 1000 | 1 |
 

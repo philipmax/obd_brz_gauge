@@ -72,6 +72,13 @@ int main(void)
     obd_data_rpm_override_set(false, 0);
     CHECK(obd_data_get_rpm() == 3500);
     CHECK(signal_store_set(SIG_OBD_RPM, 3500));
+    /* Rapid updates retain the actual samples, including a real stop. */
+    int32_t sample;
+    obd_data_set_speed(60); CHECK(signal_store_get(SIG_OBD_SPEED, &sample) && sample == 60);
+    obd_data_set_speed(0); CHECK(signal_store_get(SIG_OBD_SPEED, &sample) && sample == 0);
+    obd_data_set_oil_temp(255); CHECK(signal_store_get(SIG_OBD_OIL_TEMP, &sample) && sample == 255);
+    obd_data_set_coolant_temp(255); CHECK(signal_store_get(SIG_OBD_COOLANT_TEMP, &sample) && sample == 255);
+    obd_data_set_boost_x10(-7); CHECK(signal_store_get(SIG_OBD_BOOST, &sample) && sample == -70);
     CHECK(signal_store_set(SIG_OBD_SPEED, 123));
     CHECK(signal_store_set(SIG_OBD_GEAR, 5));
     CHECK(signal_store_set(SIG_OBD_COOLANT_TEMP, -10));
