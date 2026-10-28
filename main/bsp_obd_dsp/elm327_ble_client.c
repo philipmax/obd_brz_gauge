@@ -121,7 +121,9 @@ static ble_scan_result_t s_scan_list[BLE_SCAN_MAX_DEVICES];
 static int               s_scan_count;
 
 /* ---- poll task ---- */
-static volatile TaskHandle_t s_task;
+/* Static wake object outlives the worker and BLE callbacks during shutdown. */
+static StaticSemaphore_t     s_poll_wake_storage;
+static SemaphoreHandle_t     s_poll_wake;
 static bool                  s_task_started;
 static StreamBufferHandle_t  s_rx;
 static vp_engine_t          *s_engine;
@@ -137,8 +139,7 @@ static volatile uint32_t     s_rx_dropped;
 
 static void wake_task(void)
 {
-    TaskHandle_t t = s_task;
-    if (t) xTaskNotifyGive(t);
+    if (s_poll_wake) xSemaphoreGive(s_poll_wake);
 }
 
 static bool mac_nonzero(const uint8_t *m)
@@ -576,7 +577,12 @@ static void gattc_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp_ble
 static bool ensure_registered(void)
 {
     if (s_registered) return true;
-    const ble_hub_client_t client = { .gap_cb = gap_cb, .gattc_cb = gattc_cb, .gatts_cb = NULL };
+    if (!s_poll_wake) s_poll_wake = xSemaphoreCreateBinaryStatic(&s_poll_wake_storage);
+    if (!s_poll_wake) return false;
+    const ble_hub_client_t client = {
+        .gap_cb = gap_cb, .gattc_cb = gattc_cb, .gatts_cb = NULL,
+        .shutdown_cb = wake_task,
+    };
     esp_err_t err = ble_hub_register(BLE_HUB_APP_ELM327, &client);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "BLE register failed: %s", esp_err_to_name(err));
@@ -839,7 +845,7 @@ static void obd_task(void *arg)
 
     for (;;) {
         esp_task_wdt_reset();
-        ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(wait_ms));
+        xSemaphoreTake(s_poll_wake, pdMS_TO_TICKS(wait_ms));
         esp_task_wdt_reset();
         int64_t now = esp_timer_get_time();
 
@@ -904,12 +910,10 @@ static void obd_task(void *arg)
 
     engine_down();
     ESP_LOGI(TAG, "BLE released, obd_poll exits");
-    s_task = NULL;
     portENTER_CRITICAL(&s_lock);
     s_task_started = false;
     portEXIT_CRITICAL(&s_lock);
     esp_task_wdt_delete(NULL);
-    vTaskDelay(pdMS_TO_TICKS(20));   /* let a racing wake_task() finish */
     vTaskDelete(NULL);
 }
 
@@ -926,15 +930,13 @@ static void start_task(void)
     }
     if (!s_tx_done) s_tx_done = xSemaphoreCreateBinaryStatic(&s_tx_done_storage);
     if (!s_rx) s_rx = xStreamBufferCreateWithCaps(RX_BUF_BYTES, 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    TaskHandle_t t = NULL;
-    if (!s_rx || xTaskCreate(obd_task, "obd_poll", TASK_STACK, NULL, TASK_PRIO, &t) != pdPASS) {
+    if (!s_rx || xTaskCreate(obd_task, "obd_poll", TASK_STACK, NULL, TASK_PRIO, NULL) != pdPASS) {
         ESP_LOGE(TAG, "obd_poll start failed (rx %p)", (void *)s_rx);
         portENTER_CRITICAL(&s_lock);
         s_task_started = false;
         portEXIT_CRITICAL(&s_lock);
         return;
     }
-    s_task = t;
 }
 
 /* ------------------------------------------------------------------ */

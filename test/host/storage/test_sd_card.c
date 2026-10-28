@@ -19,6 +19,7 @@
 struct sd_test_mutex { bool held; };
 static struct sd_test_mutex mutexes[2];
 static unsigned mutex_count, lock_count, mount_count, bare_probe_count, directory_count;
+static unsigned static_mutex_attempts, fail_static_mutex_attempt;
 static TickType_t ticks = UINT32_MAX - 100u, probe_cost_ticks;
 static esp_err_t mount_result = ESP_ERR_TIMEOUT, status_result = ESP_OK;
 static bool card_present = true;
@@ -35,6 +36,12 @@ SemaphoreHandle_t xSemaphoreCreateMutex(void)
 {
     CHECK(mutex_count < 2);
     return &mutexes[mutex_count++];
+}
+SemaphoreHandle_t xSemaphoreCreateMutexStatic(StaticSemaphore_t *storage)
+{
+    CHECK(storage);
+    if (++static_mutex_attempts == fail_static_mutex_attempt) return NULL;
+    return xSemaphoreCreateMutex();
 }
 BaseType_t xSemaphoreTake(SemaphoreHandle_t mutex, TickType_t wait)
 {
@@ -122,7 +129,11 @@ int main(void)
     CHECK(sd_card_poll_wait_ms() == 1000);
     sd_card_poll(); /* uninitialized is harmless */
 #if CONFIG_OBD_SD_SLOT_SDMMC_1BIT
+    fail_static_mutex_attempt = 2;
+    CHECK(sd_card_init() == ESP_ERR_NO_MEM && mutex_count == 1 && mount_count == 0);
+    fail_static_mutex_attempt = 0;
     CHECK(sd_card_init() == ESP_ERR_TIMEOUT);
+    CHECK(mutex_count == 2 && static_mutex_attempts == 3);
     CHECK(mount_count == 2); /* boot's 40/20 MHz fallback */
     check_state(SD_STATE_ABSENT, 3000);
     advance(2000); /* crosses the unsigned RTOS tick rollover */
@@ -152,6 +163,7 @@ int main(void)
     advance(10000); sd_card_poll();
     CHECK(mount_count == 6 && directory_count == 8);
     check_state(SD_STATE_MOUNTED, 1000);
+    CHECK(sd_card_init() == ESP_OK && mutex_count == 2 && mount_count == 6);
     unsigned before = lock_count;
     CHECK(sd_card_poll_wait_ms() == 1000 && lock_count == before); /* fast mounted hint */
 

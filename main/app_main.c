@@ -218,7 +218,7 @@ void app_main(void)
     ESP_LOGI(TAG, "cfg: proto=%u theme=%u vehicle=%s",
              user_cfg.protocol, user_cfg.theme_cfg.theme, vp_manager_active_id());
 
-    /* 2. I2C bus init (used by the TCA9554 IO expander + CST816 touch on V1, CST816 touch only on V2/V3) */
+    /* 2. Main I2C bus init (TCA9554 and optional ADS1115); touch uses its own bus. */
     I2C_Init();
 
     /* 3. IO expander init (TCA9554PWR, I2C address 0x20) — V1 board only; V2/V3 have no expander */
@@ -230,7 +230,7 @@ void app_main(void)
      *    LCD_Init() internally calls, in order:
      *      Backlight_Init() → LEDC PWM off (V1: GPIO 5; V2/V3: GPIO 15)
      *      ST77916_Init() → reset (V1: TCA9554 EXIO2; V2/V3: direct GPIO 47) → QSPI SPI bus & ST77916 panel driver
-     *      Touch_Init() → reuses I2C bus CST816 touch driver (V1: SCL=10 SDA=11; V2/V3: SCL=8 SDA=7)
+     *      Touch_Init() → CST816 on a separate I2C bus (SCL=3, SDA=1)
      *    After completion panel_handle / tp are both globally valid variables
      */
     LCD_SetFlushCallback(notify_lvgl_flush_ready, &disp_drv);

@@ -545,6 +545,8 @@ leaving `0x7b560` / `0x7ada0` free (16%), respectively.
 
 ## `signal_store` metadata snapshots for batch reads
 
+Current read and write paths sample the monotonic clock once while holding the signal lock, before updating or checking timestamps. A sample committed by another core while the caller waited for the lock is therefore not incorrectly treated as stale. Unit conversion remains outside the lock. The historical benchmark below predates this clock-placement change; its actual performance impact requires measurement.
+
 For multi-slot reads, `signal_store_get_many()` and `signal_store_get_delivered_mask()` now read `local_mask`,
 the number of registered vehicle signals, and `sys.obd_link` once after entering the critical section. Each slot
 still checks its own validity, timestamp, range, and dynamic-slot bounds under that same critical section. Single-value

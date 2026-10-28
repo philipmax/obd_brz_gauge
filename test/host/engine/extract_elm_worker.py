@@ -1,0 +1,16 @@
+#!/usr/bin/env python3
+"""Extract real ELM wake, registration and worker control paths for host tests."""
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text()
+sections = [
+    ('static void wake_task(void)', 'static bool mac_nonzero('),
+    ('static bool ensure_registered(void)', '/* ------------------------------------------------------------------ */\n/* vp_engine sink'),
+    ('static void obd_task(void *arg)', '/* ------------------------------------------------------------------ */\n/* public API'),
+]
+parts = []
+for start, end in sections:
+    i = source.index(start)
+    parts.append(source[i:source.index(end, i)])
+Path(sys.argv[2]).write_text('\n'.join(parts))

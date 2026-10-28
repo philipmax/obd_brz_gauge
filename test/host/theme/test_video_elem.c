@@ -16,8 +16,9 @@ static unsigned starts;
 static unsigned stops;
 static bool value_driven;
 static double position;
+static bool sd_mounted = true;
 
-bool sd_card_is_mounted(void) { return true; }
+bool sd_card_is_mounted(void) { return sd_mounted; }
 bool sd_card_exists(const char *path) { return path && strstr(path, ".obv") != NULL; }
 
 lv_obj_t *video_view_create(lv_obj_t *parent) { return lv_obj_create(parent); }
@@ -129,6 +130,29 @@ static void test_value_position_handoff(void)
     video_elem_release_all();
 }
 
+static void test_invalid_key_and_missing_sd(void)
+{
+    lv_obj_t *box = lv_obj_create(lv_scr_act());
+    lv_obj_t *video = video_elem_create(box, "test", "original", 0, 0, 100, 100);
+    TH_CHECK(video && playing_view == video);
+
+    TH_CHECK(!video_elem_set_key(video, NULL));
+    TH_CHECK(playing_view == NULL);
+    TH_CHECK(video_elem_set_key(video, "original"));
+    TH_CHECK(!video_elem_set_key(video, "bad/path"));
+    TH_CHECK(playing_view == NULL);
+    TH_CHECK(video_elem_set_key(video, "original"));
+
+    sd_mounted = false;
+    TH_CHECK(!video_elem_set_key(video, "other"));
+    TH_CHECK(playing_view == NULL);
+    sd_mounted = true;
+    TH_CHECK(video_elem_set_key(video, "original"));
+    TH_CHECK(playing_view == video);
+    lv_obj_del(box);
+    video_elem_release_all();
+}
+
 int main(void)
 {
     lv_init();
@@ -141,7 +165,7 @@ int main(void)
     driver.draw_buf = &draw;
     driver.flush_cb = flush;
     lv_disp_t *display = lv_disp_drv_register(&driver);
-    test_layer_handoff(); test_value_position_handoff();
+    test_layer_handoff(); test_value_position_handoff(); test_invalid_key_and_missing_sd();
     lv_disp_remove(display);
     return th_report("theme_video_elem");
 }

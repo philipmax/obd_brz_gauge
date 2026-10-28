@@ -10,17 +10,10 @@ extern "C" {
 #endif
 
 /* --------------------------------------------------------------------------
- * flash_writer - shared PSRAM-safe partition access for config/coredump
- * maintenance and legacy recovery. Runtime media uses SD. Internal staging
- * buffers are allocated only for a call and freed afterwards.
+ * flash_writer - partition erase helper for legacy media recovery.
+ * Runtime media uses SD.
  * -------------------------------------------------------------------------- */
 
-#define FLASH_WRITER_CHUNK  (16 * 1024)
-
-/* Write len bytes from src (internal RAM or PSRAM) to part at off. The
- * target range must already be erased. */
-esp_err_t flash_writer_write(const esp_partition_t *part, uint32_t off,
-                             const void *src, size_t len);
 /* Erase [off, off+len) rounded out to 4 KB sectors (clamped to the partition). */
 esp_err_t flash_writer_erase(const esp_partition_t *part, uint32_t off, size_t len);
 

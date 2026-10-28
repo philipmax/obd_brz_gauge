@@ -428,7 +428,7 @@ P0 基线与清理 ─▶ P1 契约与测试基建 ─▶ P2 存储底座 ─┬
   - `app_event` 当前的 3 种 ESP-NOW 事件都有实际发送方和 UI 消费方，保留事件队列；此前“6 个没有发送方”的判断已过期。
 - **主题引擎：** 旧清单中的 `theme_test.c`、`ui.c:1269` 调用、`THEME_PAGE_TYPE_SYSTEM` 和 `create_fn` 在当前源码中均不存在；全仓检索未发现对应实现或调用点，不再作为待删候选。
 - **开机动画：**
-  - 旧版 `boot_media_mount` 空壳 API（unmount/recover/commit）和 `boot_block_player` 路径配置/getter 已不在当前代码中；当前 `boot_media_*` 原始分区 API 被开机播放、上传和设备信息接口使用，不是删除候选。
+  - 旧版 `boot_media_mount` 空壳 API、无调用方的原始分区读写封装和 `boot_block_player` 路径配置/getter 已删除；超大旧动画迁移仍通过 `storage_bootmedia_probe` 探测并使用 `boot_media_invalidate_manifest` 清除旧头部。
 - **车型相关：**
   - 早期列出的油温公式、`CH_BOOST`/`CH_INTAKE`、`on_parsed_fuel_level`、`can_num`/`can_den`/`can_off` 和 0x140/0x360/0x0D1 硬编码路径均不在当前固件源码中；
   - `forced_protocol`/`has_boost` 仍由 `tools/vehicles/` 的旧车型导出、转换和 golden 序列工具使用，不能按无用字段删除。

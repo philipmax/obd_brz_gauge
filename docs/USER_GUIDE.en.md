@@ -189,6 +189,7 @@ Use a 360×360, 1:1 video canvas and allow for
 circular corner clipping. Old Flash animation is never played directly. Uploads use a verified
 SD temporary file before installation; FAT file replacement has a short window and is not
 power-loss-atomic.
+If replacement fails, the gauge attempts to restore the old file. If restoration also fails, the old file remains in the same directory with an `.obd-bak` suffix; check the SD card and restore it manually. A later replacement will not overwrite an existing backup.
 
 ## Updating from the phone app
 
@@ -202,6 +203,8 @@ enter OTA mode (**version page → OTA button**) and join the gauge hotspot:
   (see [THEMES.en.md](THEMES.en.md))
 
 Theme and boot-animation installation, vehicle installation/activation and theme deletion try Wi-Fi first. Android automatically falls back to native USB on Wi-Fi failure; iOS supports Wi-Fi only. Android checks USB management capability first; new firmware can stop OTA reception and hand over automatically, while older firmware requires exiting OTA mode. If OTA is starting or stopping, the operation asks you to retry later; wait for it to finish before retrying or swiping to exit. Failed theme/animation installation preserves current files; firmware automatically reboots on success. Vehicle installation and activation remain separate actions. If deletion or activation succeeds but reboot is unconfirmed, the App prompts a manual restart without replaying the operation.
+
+Wi-Fi OTA closes automatically after 10 minutes without activity. Device discovery, device-info requests and authenticated requests refresh the timer. Each re-entry uses a new timeout session. OTA reports a startup failure if its timeout-monitor task cannot be created.
 
 The device exposes hardware and build info via `GET /ota/info`; the app
 validates compatibility before flashing firmware and refuses

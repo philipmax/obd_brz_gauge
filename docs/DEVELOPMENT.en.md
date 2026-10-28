@@ -27,7 +27,7 @@ main/
 │   ├── ota_wifi_server   # WiFi SoftAP HTTP service: /ota/* endpoints (App contract unchanged)
 │   ├── api_v1_handlers / device_web_page.html  # new /api/v1/* + the device's own web page (OTA mode only)
 │   ├── device_identity   # Device manifest JSON (GET /ota/info, hardware + build_tag)
-│   └── flash_writer / upload_sink / storage_util  # shared partition/file write helpers
+│   └── flash_writer / upload_sink / storage_util  # legacy partition erase and file write helpers
 │
 ├── bsp_obd_dsp/          # Board support package (porting a new board happens here)
 │   ├── elm327_ble_client # ELM327 BLE client + single-thread poll state machine + protocol auto-detect
@@ -83,6 +83,10 @@ rules-engine golden vectors), `test/host/` (7 pure-C unit-test suites),
 generators), `bootmedia/slot_a/` (legacy animation source, generating
 `build/bootmedia.bin` for SD installation).
 
+The current I2C definitions use two buses: the main bus uses SCL GPIO10 / SDA GPIO11 on V1 and SCL GPIO8 / SDA GPIO7 on V2/V3; CST816 touch creates a separate bus using SCL GPIO3 / SDA GPIO1 on all hardware versions. See `I2C_Driver.h` and `CST816.h` and check the actual wiring before changing hardware.
+
+The main-bus register wrapper caches up to eight devices and serializes registration. Registration failure or a full cache returns an error instead of aborting firmware or repeatedly leaking device handles. Writes send the register and data in one multi-buffer I2C transaction, avoiding a task-stack allocation proportional to input length.
+
 ### Boot order (`main/app_main.c`)
 
 ```
@@ -129,6 +133,7 @@ branches hard-coded on the vehicle's name.
 (optional) protocol auto-detect → poll loop. Never introduce parallel
 requests when touching it — one adapter serves one request stream at a time
 (an AGENTS.md hard rule).
+BLE callbacks wake the polling task with a persistent static semaphore. The BLE shutdown callback also wakes the task to exit; the semaphore survives task deletion so late callbacks do not access a freed task handle.
 
 ## Build configuration
 

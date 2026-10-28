@@ -99,8 +99,10 @@ static esp_err_t file_put(upload_sink_t *s, const void *src, size_t len)
     }
     s->file_pos += len;
     if (s->file_pos - s->synced >= SD_SYNC_STEP) {
-        fflush(s->fp);
-        fsync(fileno(s->fp));
+        if (fflush(s->fp) != 0 || fsync(fileno(s->fp)) != 0) {
+            s->err = "sd sync failed";
+            return ESP_FAIL;
+        }
         s->synced = s->file_pos;
     }
     return ESP_OK;
@@ -145,6 +147,9 @@ static void rollback(upload_sink_t *s, uint32_t off, const mbedtls_sha256_contex
         if (fseek(s->fp, (long)pos, SEEK_SET) == 0) {
             s->file_pos = pos;
             if (s->synced > pos) s->synced = pos;
+        } else {
+            s->failed = true;
+            s->err = "sd rollback failed";
         }
     }
 }
@@ -274,8 +279,12 @@ esp_err_t upload_sink_open(upload_sink_t *s, upload_sink_kind_t kind, uint32_t e
     }
 
     mbedtls_sha256_init(&s->sha);
-    mbedtls_sha256_starts(&s->sha, 0);
     s->sha_running = true;
+    if (mbedtls_sha256_starts(&s->sha, 0) != 0) {
+        upload_sink_abort(s);
+        s->err = "sha init failed";
+        return ESP_FAIL;
+    }
     return ESP_OK;
 }
 
@@ -290,7 +299,12 @@ esp_err_t upload_sink_write(upload_sink_t *s, const void *data, size_t len)
         s->err = "no upload";
         return ESP_ERR_INVALID_STATE;
     }
-    if (len > s->expected - s->received) {
+    if (s->failed || s->verified || !s->sha_running) {
+        s->err = "upload session invalid";
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (len && !data) return ESP_ERR_INVALID_ARG;
+    if (s->received > s->expected || len > s->expected - s->received) {
         ESP_LOGE(TAG, "payload overflow: at=%u len=%u total=%u",
                  (unsigned)s->received, (unsigned)len, (unsigned)s->expected);
         s->err = "payload too large";
@@ -300,12 +314,14 @@ esp_err_t upload_sink_write(upload_sink_t *s, const void *data, size_t len)
 
     if (s->kind == UPLOAD_SINK_SD_FILE) {
         esp_err_t err = file_write(s, data, len);
-        if (err != ESP_OK) return err;
+        if (err != ESP_OK) { s->failed = true; return err; }
     } else {
         memcpy(s->buf + s->received, data, len);
     }
-    if (s->sha_running) {
-        mbedtls_sha256_update(&s->sha, data, len);
+    if (mbedtls_sha256_update(&s->sha, data, len) != 0) {
+        s->failed = true;
+        s->err = "sha update failed";
+        return ESP_FAIL;
     }
     s->received += len;
     return ESP_OK;
@@ -315,6 +331,10 @@ esp_err_t upload_sink_recv(upload_sink_t *s, httpd_req_t *req, bool base64)
 {
     if (!upload_sink_is_open(s)) {
         s->err = "no upload";
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (s->failed || s->verified || !s->sha_running) {
+        s->err = "upload session invalid";
         return ESP_ERR_INVALID_STATE;
     }
     if (req->content_len == 0) return ESP_OK;
@@ -375,8 +395,11 @@ esp_err_t upload_sink_recv(upload_sink_t *s, httpd_req_t *req, bool base64)
         remaining -= (size_t)got;
 
         if (direct) {
-            if (s->sha_running) {
-                mbedtls_sha256_update(&s->sha, (const unsigned char *)dst, (size_t)got);
+            if (mbedtls_sha256_update(&s->sha, (const unsigned char *)dst, (size_t)got) != 0) {
+                s->failed = true;
+                s->err = "sha update failed";
+                err = ESP_FAIL;
+                break;
             }
             s->received += (uint32_t)got;
             continue;
@@ -418,6 +441,15 @@ esp_err_t upload_sink_verify(upload_sink_t *s)
         s->err = "no upload";
         return ESP_ERR_INVALID_STATE;
     }
+    if (s->failed) {
+        s->err = "upload session invalid";
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (s->verified) return ESP_OK;
+    if (!s->sha_running) {
+        s->err = "upload session invalid";
+        return ESP_ERR_INVALID_STATE;
+    }
     if (s->received != s->expected) {
         s->err = "size mismatch";
         return ESP_ERR_INVALID_SIZE;
@@ -428,6 +460,7 @@ esp_err_t upload_sink_verify(upload_sink_t *s)
         mbedtls_sha256_free(&s->sha);
         s->sha_running = false;
         if (ret != 0 || (s->has_sha && memcmp(digest, s->sha_expected, sizeof(digest)) != 0)) {
+            s->failed = true;
             s->err = "sha mismatch";
             return ESP_ERR_INVALID_CRC;
         }
@@ -435,6 +468,7 @@ esp_err_t upload_sink_verify(upload_sink_t *s)
     if (s->buf && (s->kind == UPLOAD_SINK_MEMORY || s->kind == UPLOAD_SINK_CONFIG_FILE)) {
         s->buf[s->received] = '\0';
     }
+    s->verified = true;
     return ESP_OK;
 }
 
@@ -495,7 +529,7 @@ static esp_err_t commit_sd_file(upload_sink_t *s)
 
 esp_err_t upload_sink_commit(upload_sink_t *s)
 {
-    if (!upload_sink_is_open(s) || s->sha_running || s->received != s->expected) {
+    if (!upload_sink_is_open(s) || !s->verified || s->failed || s->received != s->expected) {
         s->err = "not verified";
         return ESP_ERR_INVALID_STATE;
     }

@@ -7,6 +7,40 @@ cleanups live in the git history.
 
 ---
 
+## Temperature hysteresis fix
+
+- Confirm temperature jumps of 16–19°C and correct rounding of negative temperatures.
+
+
+## Theme video switching reliability
+
+- Hand off reader tasks without allocating a new DMA buffer while the old reader still owns one; clear video paths when the SD card is unavailable or an asset name is invalid to avoid reading uninitialized data. Add reader handoff and invalid-asset regressions and keep the relevant host-test assertions enabled in Release builds.
+
+## I2C main-bus error handling
+
+- Serialize device-cache registration and return errors when registration fails or the cache is full. Register writes now use a single multi-buffer transaction instead of task-stack space proportional to payload length. Pin definitions remain unchanged.
+
+## OTA timeout and session protection
+
+- Synchronize OTA state and 64-bit activity time so an old timeout task cannot stop a newly opened session; recheck activity before timeout shutdown. Discovery, device-info and authenticated requests refresh the timer. Report startup failure if the monitor task cannot be created, preserving nonblocking lifecycle and USB handoff protection.
+
+## Protect data after upload errors
+
+- Abort damaged upload sessions after SD write, sync or rollback-seek failures to prevent further writes at the wrong position; a failed digest cannot be verified again or committed. A network receive failure can still retry from the current chunk's start.
+
+## Protect SD single-file replacement
+
+- Preserve an `.obd-bak` backup while replacing an existing file. Restore the old file if the new rename fails, and retain the backup for manual recovery if restoration also fails. Existing backups are never overwritten; FAT power-loss atomicity is still not guaranteed.
+- SD initialization uses static mutexes, and retries can complete a partially initialized pair.
+
+## Signal timestamp consistency
+
+- Sample time under the signal-store lock for reads and writes, preventing a new value committed while waiting for the lock from appearing stale. Regression cases cover single, batch and theme snapshots as well as millisecond-counter wraparound.
+
+## BLE polling task shutdown protection
+
+- ELM327 callbacks wake the polling task through a persistent static semaphore, including during BLE shutdown, so late callbacks cannot use a deleted task handle. The serial polling flow remains unchanged.
+
 ## Transparent custom gauge tracks
 
 - Runtime theme arc/bar elements accept optional `bg_opacity`, affecting only the track while retaining an opaque foreground. Older themes default to 100%. Editor preview/export are synchronized and parser plus real LVGL style host tests are added. Hardware checks confirm full-screen image coverage, video alignment, stable page-entry sizing and background transparency.

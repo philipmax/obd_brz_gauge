@@ -477,6 +477,8 @@ Apple M1 / arm64、Apple clang 21.0.0 Release，无 LTO，禁止浮点收缩；�
 
 ## signal_store 批量读取的元数据快照
 
+当前读写路径在信号锁内读取一次单调时钟，再更新或检查信号时间戳。这样等待锁时另一核心提交的新样本不会因读取时间较早而被误判过期；单位换算仍在锁外。下面的历史基准不包含这次时钟位置调整，实际性能影响需重新测量。
+
 `signal_store_get_many()` 和 `signal_store_get_delivered_mask()` 在多 slot 读取时，进入临界区后只读取一次
 `local_mask`、已注册车型信号数量和 `sys.obd_link` 状态；每个 slot 仍在同一临界区内检查自己的
 `valid`、时间戳、范围和动态信号槽位。单值读取和单 bit 请求保留直读快速路径，避免为一次读取建立

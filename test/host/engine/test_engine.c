@@ -1155,6 +1155,47 @@ static void test_temp_hyst(void)
     fake_stop(f, p);
 }
 
+static void test_temp_hyst_boundaries(void)
+{
+    for (int delta = 16; delta <= 19; delta++) {
+        fake_t *f = fake_reset();
+        vp_profile_t *p = compile_q(
+            P_HEAD("t.hyst-gap", "{'proto':6}") "'signals':["
+            "{'id':'obd.oil_temp','filter':'temp_hyst','src':[{'req':'015C','len':1,'rpn':[['A',0],['k',40],'-']}]}]}");
+        VT_CHECK(p != NULL);
+        if (!p) return;
+        fake_start(f, p, 0);
+        set_resp(f, "", "015C", "41 5C 3C"); /* 20 C */
+        VT_CHECK(pump_answer(f, "015C"));
+        char resp[32];
+        snprintf(resp, sizeof(resp), "41 5C %02X", 60 + delta);
+        set_resp(f, "", "015C", resp);
+        for (int i = 0; i < 3; i++) {
+            VT_CHECK(pump_answer(f, "015C"));
+            VT_CHECK_INT(f->writes[SIG_OBD_OIL_TEMP], 1);
+        }
+        VT_CHECK(pump_answer(f, "015C"));
+        VT_CHECK_INT(f->writes[SIG_OBD_OIL_TEMP], 2);
+        VT_CHECK_INT(f->val[SIG_OBD_OIL_TEMP], 20 + (delta + 1) / 2);
+        fake_stop(f, p);
+    }
+    fake_t *f = fake_reset();
+    vp_profile_t *p = compile_q(
+        P_HEAD("t.hyst-negative", "{'proto':6}") "'signals':["
+        "{'id':'obd.oil_temp','filter':'temp_hyst','src':[{'req':'015C','len':1,'rpn':[['A',0],['k',40],'-']}]}]}");
+    VT_CHECK(p != NULL);
+    if (!p) return;
+    fake_start(f, p, 0);
+    set_resp(f, "", "015C", "41 5C 1E"); /* -10 C */
+    VT_CHECK(pump_answer(f, "015C"));
+    set_resp(f, "", "015C", "41 5C 1C"); /* -12 C */
+    VT_CHECK(pump_answer(f, "015C"));
+    VT_CHECK_INT(f->val[SIG_OBD_OIL_TEMP], -11);
+    fake_stop(f, p);
+
+
+}
+
 static void test_fallback_chain(void)
 {
     fake_t *f = fake_reset();
@@ -2503,7 +2544,7 @@ int main(void)
     RUN(test_bus_connection_commands);
     RUN(test_units_and_post);
     RUN(test_hold);
-    RUN(test_temp_hyst);
+    RUN(test_temp_hyst); RUN(test_temp_hyst_boundaries);
     RUN(test_temperature_255);
     RUN(test_responsive_motion);
     RUN(test_responsive_chain);

@@ -5,6 +5,7 @@ typedef int BaseType_t;
 typedef unsigned UBaseType_t;
 typedef uint32_t TickType_t;
 typedef struct { unsigned depth; } portMUX_TYPE;
+#define portMUX_INITIALIZER_UNLOCKED { 0 }
 #define pdPASS 1
 #define pdFAIL 0
 #define pdTRUE 1

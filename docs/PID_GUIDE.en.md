@@ -197,6 +197,8 @@ of indexing from the front, it's addressed as the **5th byte from the end**:
   `elm327_ble_client.c` oil-temp debounce logic)
 - Two layers of `valid`: source-level `[-10,255]` filters obviously bad
   samples; signal-level `[-20,255]` is the final display range
+Temperature hysteresis accepts -20 to 255 and passes CAN readings directly. Other readings are smoothed below a difference of 6; differences from 6 to under 20 require four identical readings, and differences of 20 or more require three. Negative results are rounded to the nearest integer.
+
 - `filter: "temp_hyst"`: one more hysteresis pass after conversion to the
   internal unit
 

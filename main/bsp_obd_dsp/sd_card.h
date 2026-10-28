@@ -21,8 +21,8 @@ extern "C" {
  *   DMA bounce buffer (S3 SDMMC cannot DMA into PSRAM). Use sd_card_read() /
  *   sd_card_write() instead of fread()/fwrite() whenever the buffer may be in
  *   PSRAM.
- * - Writes that must survive power loss use sd_card_write_file_atomic()
- *   (write "<path>.part", fsync, rename).
+ * - sd_card_write_file_atomic() stages and syncs a .part file before replace.
+ *   FAT metadata updates are not guaranteed atomic on power loss.
  * -------------------------------------------------------------------------- */
 
 #define SD_MOUNT_POINT   "/sdcard"
@@ -80,6 +80,9 @@ esp_err_t sd_card_read_file(const char *path, void *buf, size_t buf_len, size_t 
 /* Read into a fresh PSRAM buffer (caller frees). Fails if larger than max_len. */
 esp_err_t sd_card_read_file_alloc(const char *path, size_t max_len, void **out, size_t *out_len);
 esp_err_t sd_card_remove(const char *path);
+/* When replacing an existing file, preserve it as <dst>.obd-bak until the
+ * new rename succeeds. Never overwrite a pre-existing backup; if rollback
+ * fails, the old file remains there for manual recovery. */
 esp_err_t sd_card_rename(const char *src, const char *dst);
 esp_err_t sd_card_mkdir(const char *path);
 bool      sd_card_exists(const char *path);

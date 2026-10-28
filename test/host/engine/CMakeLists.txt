@@ -96,6 +96,18 @@ target_link_libraries(test_engine PRIVATE engine_vt)
 enable_testing()
 add_test(NAME engine COMMAND test_engine)
 
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+set(ELM_WORKER_EXCERPT "${CMAKE_CURRENT_BINARY_DIR}/elm_worker.inc")
+add_custom_command(OUTPUT "${ELM_WORKER_EXCERPT}"
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/extract_elm_worker.py"
+            "${REPO_ROOT}/main/bsp_obd_dsp/elm327_ble_client.c" "${ELM_WORKER_EXCERPT}"
+    DEPENDS "${REPO_ROOT}/main/bsp_obd_dsp/elm327_ble_client.c" extract_elm_worker.py
+    VERBATIM)
+add_executable(test_elm_wakeup test_elm_wakeup.c "${ELM_WORKER_EXCERPT}")
+target_include_directories(test_elm_wakeup PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+target_compile_options(test_elm_wakeup PRIVATE ${EH_WARN} -UNDEBUG)
+add_test(NAME elm_wakeup COMMAND test_elm_wakeup)
+
 # Selection-only timing: opt in with a separate Release build, sanitizers off.
 option(EH_CAN_BENCHMARK "Build CAN rule-selection microbenchmark" OFF)
 if(EH_CAN_BENCHMARK)

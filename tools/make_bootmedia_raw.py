@@ -3,7 +3,7 @@
 
     python3 tools/make_bootmedia_raw.py --src bootmedia/slot_a --out build/bootmedia.bin
 
-Layout (what boot_media_mount.c reads):
+Legacy bootmedia layout (also used by SD bootmedia.raw):
     0x0000  boot_block.txt, padded with 0xFF to 4 KB
     0x1000  boot_block.bin
 

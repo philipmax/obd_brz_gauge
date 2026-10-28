@@ -101,13 +101,12 @@ For themes, boot animations, vehicle installation/activation and theme deletion,
 
 - `X-Offset: 0` starts a new upload; intermediate chunks get `{"ok":true,"nextOffset":N}`
 - Offset, total size or SHA that don't match the upload in progress: `unexpected chunk offset`
-- A chunk that fails to receive (`receive failed` / `no memory`): the device rolls back to that chunk's start, so the same chunk can be resent as-is
+- A network receive failure (`receive failed` / `no memory`) rolls back to the chunk's starting offset; resend the same chunk. An SD write, sync, rollback-seek or digest-processing failure ends the session; investigate the error and restart at offset 0
 - Once everything is received it is verified; failure returns `size mismatch` / `sha mismatch`, requiring a retransmit from offset 0
 - Firmware is verified before writing the inactive OTA slot. Themes/animation stream into
   SD temporary files during reception and install after verification. The final reply follows
   installation: `{"ok":true,"message":"<类型> received, installing"}`, rebooting after about 1 s.
-- Installation failure returns `install failed`; retry from offset 0. SD transfer does not replace
-  old files, but FAT installation has a short replacement window and is not power-loss-atomic.
+- Installation failure returns `install failed`; retry from offset 0. SD transfer does not replace old files. Single-file replacement first renames the old file to `<destination>.obd-bak` and attempts to restore it if the new rename fails. If restoration also fails, the backup is retained and never overwritten; check the SD card and restore it manually. FAT metadata operations are not guaranteed power-loss-atomic.
 
 Upload bodies:
 
@@ -183,7 +182,8 @@ Older firmware returns status `1` for unsupported command `7`, prompting an upgr
 ESP32 performs no transcoding. See [THEMES.en.md](THEMES.en.md) for format and playback budgets.
 
 The USB receiver holds the storage job lock from BEGIN through verification and commit, so background
-import scans cannot delete its open `.part` file. Abort, receive timeout and failure close the temporary
+import scans cannot delete its open `.part` file. An unrecoverable DATA storage or digest error returns status `5`,
+aborts the session and releases the lock; investigate the error and send a new BEGIN. Abort, receive timeout and failure close the temporary
 file and release the lock. After committing a theme stream, the receiver releases storage before entering
 the installer, preserving the LVGL → storage lock order. Media BEGIN commands (`1`, `5`, `7`) wait up to one second
 for the storage lock. If BEGIN returns status `9`, the web uploader retries every 500 ms with a 30-second waiting budget

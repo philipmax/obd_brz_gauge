@@ -1125,16 +1125,23 @@ static void store(vp_engine_t *e, int i, int32_t v, uint32_t now)
     }
 }
 
-static int16_t f2i(float f)
+/* Filters use float state but the signal pipeline stores int32. Avoid
+ * truncation toward zero for negative temperatures and saturate the rare
+ * int32 endpoint that rounds to 2^31 in float representation. */
+static bool round_identity(float v, int32_t *out);
+
+static int32_t filter_round(float f)
 {
-    return (int16_t)(f + 0.5f);
+    int32_t rounded;
+    if (round_identity(f, &rounded)) return rounded;
+    return f < 0.0f ? INT32_MIN : INT32_MAX;
 }
 
 /* Legacy oil temperature hysteresis (elm327_ble_client.c default_on_parsed_oil_temp). */
 static bool filter_temp_hyst(eng_sig_t *g, int32_t in, bool from_can, int32_t *out)
 {
     float fd;
-    int diff;
+    float diff;
 
     if (in < -20 || in > 255) return false;
     if (from_can) {
@@ -1154,16 +1161,17 @@ static bool filter_temp_hyst(eng_sig_t *g, int32_t in, bool from_can, int32_t *o
         return true;
     }
     fd = g->filt - (float)in;
-    diff = (int)(fd >= 0.0f ? fd : -fd);
-    if (diff <= 5) {
+    diff = fd >= 0.0f ? fd : -fd;
+    if (diff < 6.0f) {
         g->hyst_pending = ENG_HYST_NONE;
         g->hyst_cnt = 0;
         g->filt = 0.65f * g->filt + 0.35f * (float)in;
-        *out = f2i(g->filt);
+        *out = filter_round(g->filt);
         return true;
     }
-    if (diff <= 15 || diff >= 20) {
-        uint8_t need = diff <= 15 ? 4 : 3;
+    {
+        bool medium = diff < 20.0f;
+        uint8_t need = medium ? 4 : 3;
         if (g->hyst_pending == in) {
             g->hyst_cnt++;
         } else {
@@ -1172,13 +1180,12 @@ static bool filter_temp_hyst(eng_sig_t *g, int32_t in, bool from_can, int32_t *o
             return false;
         }
         if (g->hyst_cnt < need) return false;
-        g->filt = diff <= 15 ? 0.5f * g->filt + 0.5f * (float)in : (float)in;
+        g->filt = medium ? 0.5f * g->filt + 0.5f * (float)in : (float)in;
         g->hyst_pending = ENG_HYST_NONE;
         g->hyst_cnt = 0;
-        *out = diff <= 15 ? f2i(g->filt) : in;
+        *out = medium ? filter_round(g->filt) : in;
         return true;
     }
-    return false;
 }
 
 static int32_t filter_ema(eng_sig_t *g, int32_t in)

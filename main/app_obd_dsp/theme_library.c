@@ -77,12 +77,6 @@ void theme_library_current_key(char *out, size_t out_len)
     if (nvs_app_get_str(NS_IMP, KEY_CURRENT, out, out_len) != ESP_OK) out[0] = '\0';
 }
 
-void theme_library_set_current(const char *key)
-{
-    if (key && key[0]) nvs_app_set_str(NS_IMP, KEY_CURRENT, key);
-    else nvs_app_erase_key(NS_IMP, KEY_CURRENT);
-}
-
 bool theme_library_resume_pending(void)
 {
     char key[STORAGE_THEME_KEY_LEN];

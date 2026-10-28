@@ -214,9 +214,10 @@ static uint8_t process_frame(uint8_t command, const uint8_t *payload, uint32_t l
         if (!upload_sink_is_open(&s_sink) || length < 5 || length > FRAME_DATA_MAX) return 1;
         uint32_t offset = get_u32le(payload);
         if (offset != s_sink.received || length - 4 > s_sink.expected - s_sink.received) return 4;
-        if (s_rpc_session) return upload_sink_write(&s_sink, payload + 4, length - 4) == ESP_OK ? 0 : 5;
-        if (!s_storage_locked) return 9;
-        return upload_sink_write(&s_sink, payload + 4, length - 4) == ESP_OK ? 0 : 5;
+        if (!s_rpc_session && !s_storage_locked) return 9;
+        if (upload_sink_write(&s_sink, payload + 4, length - 4) == ESP_OK) return 0;
+        if (s_sink.failed) abort_session();
+        return 5;
     }
     case CMD_END: {
         if (length != 0 || !upload_sink_is_open(&s_sink)) return 1;

@@ -59,9 +59,6 @@ bool      theme_library_resume_pending(void);
  * an older copy. Does not activate. key_out optional. */
 esp_err_t theme_library_import_file(const char *path, char *key_out, size_t key_len);
 
-/* Remember an already imported SD selection (legacy migration). */
-void theme_library_set_current(const char *key);
-
 /* Delete the selected theme directory and clear its persisted selection.
  * `deleted` is true when a directory was removed; an already-clear or stale
  * selection is still cleared successfully and reports false. */

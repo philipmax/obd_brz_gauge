@@ -52,5 +52,47 @@ add_test(NAME vehicle_web_cors COMMAND test_vehicle_web_cors)
 # Exercise the actual USB receiver session against deterministic SDK/sink boundaries.
 add_executable(test_serial_storage test_serial_storage.c)
 target_include_directories(test_serial_storage PRIVATE serial_stubs sd_stubs stubs "${REPO_ROOT}/main")
-target_compile_options(test_serial_storage PRIVATE -Wall -Wextra -Werror)
+target_compile_options(test_serial_storage PRIVATE -Wall -Wextra -Werror -UNDEBUG)
 add_test(NAME serial_storage COMMAND test_serial_storage)
+
+# Exercise the real I2C wrapper against a synchronous fake IDF bus.
+find_package(Threads REQUIRED)
+add_executable(test_i2c_driver test_i2c_driver.c "${REPO_ROOT}/main/bsp_obd_dsp/i2c_driver/I2C_Driver.c")
+target_include_directories(test_i2c_driver PRIVATE i2c_stubs "${REPO_ROOT}/main")
+target_compile_options(test_i2c_driver PRIVATE -Wall -Wextra -Werror -UNDEBUG)
+target_link_libraries(test_i2c_driver PRIVATE Threads::Threads)
+add_test(NAME i2c_driver COMMAND test_i2c_driver)
+
+add_executable(test_ota_idle test_ota_idle.c)
+target_include_directories(test_ota_idle PRIVATE "${REPO_ROOT}/main")
+target_compile_options(test_ota_idle PRIVATE -Wall -Wextra -Werror -UNDEBUG)
+add_test(NAME ota_idle COMMAND test_ota_idle)
+
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+set(OTA_TIMEOUT_EXCERPT "${CMAKE_CURRENT_BINARY_DIR}/ota_timeout_task.inc")
+add_custom_command(OUTPUT "${OTA_TIMEOUT_EXCERPT}"
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/extract_ota_timeout.py"
+            "${REPO_ROOT}/main/app_obd_dsp/ota_wifi_server.c" "${OTA_TIMEOUT_EXCERPT}"
+    DEPENDS "${REPO_ROOT}/main/app_obd_dsp/ota_wifi_server.c" extract_ota_timeout.py
+    VERBATIM)
+add_executable(test_ota_timeout test_ota_timeout.c "${OTA_TIMEOUT_EXCERPT}")
+target_include_directories(test_ota_timeout PRIVATE "${CMAKE_CURRENT_BINARY_DIR}" "${REPO_ROOT}/main")
+target_compile_options(test_ota_timeout PRIVATE -Wall -Wextra -Werror -UNDEBUG)
+add_test(NAME ota_timeout COMMAND test_ota_timeout)
+
+add_executable(test_upload_sink test_upload_sink.c)
+target_include_directories(test_upload_sink PRIVATE upload_stubs "${REPO_ROOT}/main")
+target_compile_definitions(test_upload_sink PRIVATE _POSIX_C_SOURCE=200809L)
+target_compile_options(test_upload_sink PRIVATE -Wall -Wextra -Werror -UNDEBUG)
+add_test(NAME upload_sink COMMAND test_upload_sink)
+
+set(SD_RENAME_EXCERPT "${CMAKE_CURRENT_BINARY_DIR}/sd_rename.inc")
+add_custom_command(OUTPUT "${SD_RENAME_EXCERPT}"
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/extract_sd_rename.py"
+            "${REPO_ROOT}/main/bsp_obd_dsp/sd_card.c" "${SD_RENAME_EXCERPT}"
+    DEPENDS "${REPO_ROOT}/main/bsp_obd_dsp/sd_card.c" extract_sd_rename.py
+    VERBATIM)
+add_executable(test_sd_rename test_sd_rename.c "${SD_RENAME_EXCERPT}")
+target_include_directories(test_sd_rename PRIVATE "${CMAKE_CURRENT_BINARY_DIR}" upload_stubs)
+target_compile_options(test_sd_rename PRIVATE -Wall -Wextra -Werror -UNDEBUG)
+add_test(NAME sd_rename COMMAND test_sd_rename)

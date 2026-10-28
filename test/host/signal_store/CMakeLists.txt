@@ -38,6 +38,17 @@ endif()
 enable_testing()
 add_test(NAME signal_store COMMAND test_signal_store)
 
+# Interleave a writer immediately before the reader actually acquires its lock.
+add_executable(test_signal_clock_race test_signal_clock_race.c
+    "${REPO_ROOT}/main/app_obd_dsp/signal_store.c"
+    "${REPO_ROOT}/main/app_obd_dsp/signal_registry.c")
+target_include_directories(test_signal_clock_race PRIVATE race_stubs stubs "${REPO_ROOT}/main")
+target_compile_options(test_signal_clock_race PRIVATE -Wall -Wextra -Werror -UNDEBUG)
+if(NOT MSVC)
+    target_link_libraries(test_signal_clock_race PRIVATE m)
+endif()
+add_test(NAME signal_clock_race COMMAND test_signal_clock_race)
+
 # On-device performance aggregation is pure C; keep it in the application-data job.
 add_executable(test_perf_hist
     test_perf_hist.c

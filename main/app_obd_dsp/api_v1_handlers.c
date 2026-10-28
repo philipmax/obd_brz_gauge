@@ -590,8 +590,9 @@ static bool chunk_receive(httpd_req_t *req, const chunk_hdr_t *h, esp_err_t *ret
 {
     esp_err_t err = upload_sink_recv(&s_up, req, false);
     if (err != ESP_OK) {
-        // Rolled back to h->offset: the client may retry this chunk.
+        // Network errors can retry at h->offset; a damaged file cannot.
         *ret = send_sink_err(req, err);
+        if (s_up.failed) up_release();
         return false;
     }
     if (!h->last && s_up.received < s_up.expected) {

@@ -83,6 +83,7 @@ extern SemaphoreHandle_t lvgl_mux;   /* app_main.c */
 
 #define VP_FLUSH_WAIT_MS     200u
 #define VP_STOP_WAIT_MS      1000u
+#define VP_READER_RETRY_MS   20u
 
 #define VP_READER_STACK      4096
 #define VP_DECODER_STACK     6144
@@ -195,6 +196,10 @@ typedef struct {
 
 static vp_session_t *s_cur;
 static uint32_t s_next_session_id;
+/* A stopped session can still be inside SD I/O. Do not let its successor
+ * allocate another internal DMA buffer until that reader has released it. */
+static portMUX_TYPE s_reader_gate_lock = portMUX_INITIALIZER_UNLOCKED;
+static bool s_reader_gate_owned;
 
 /* ------------------------------------------------------------- session */
 
@@ -236,6 +241,27 @@ static void wait_ev(vp_session_t *s, EventBits_t bit, TickType_t ticks)
     xEventGroupWaitBits(s->ev, bit, pdTRUE, pdFALSE, ticks);
 }
 
+static bool reader_gate_acquire(vp_session_t *s)
+{
+    while (!s->quit) {
+        taskENTER_CRITICAL(&s_reader_gate_lock);
+        bool acquired = !s_reader_gate_owned;
+        if (acquired) s_reader_gate_owned = true;
+        taskEXIT_CRITICAL(&s_reader_gate_lock);
+        if (acquired) return true;
+        /* A finite wait avoids blocking the LVGL task on SD I/O and lets a
+         * superseded reader respond promptly to the normal stop notification. */
+        wait_ev(s, EV_WAKE_READER, pdMS_TO_TICKS(VP_READER_RETRY_MS));
+    }
+    return false;
+}
+
+static void reader_gate_release(void)
+{
+    taskENTER_CRITICAL(&s_reader_gate_lock);
+    s_reader_gate_owned = false;
+    taskEXIT_CRITICAL(&s_reader_gate_lock);
+}
 
 
 static uint8_t *align16(void *p)
@@ -470,7 +496,10 @@ static void reader_task(void *arg)
 {
     vp_session_t *s = arg;
     uint8_t *index = NULL;
-    vp_sd_stream_t file = { .fd = open(s->path, O_RDONLY) };
+    bool ok = false;
+    bool gate_owned = reader_gate_acquire(s);
+    vp_sd_stream_t file = { .fd = gate_owned && !s->quit ? open(s->path, O_RDONLY) : -1 };
+    if (!gate_owned || s->quit) goto done;
     if (file.fd < 0) ESP_LOGW(TAG, "cannot open %s", s->path);
     else {
         file.buf = heap_caps_aligned_alloc(16, VP_SD_BUFFER_BYTES,
@@ -479,7 +508,7 @@ static void reader_task(void *arg)
         else index = reader_open(s, &file);
     }
 
-    bool ok = index != NULL;
+    ok = index != NULL;
     uint32_t i = 0;
     uint32_t sent_revision = UINT32_MAX, revision = 0;
     while (ok && !s->quit) {
@@ -525,9 +554,11 @@ static void reader_task(void *arg)
         i++;
     }
 
+done:
     if (file.fd >= 0) close(file.fd);
     heap_caps_free(file.buf);
     if (index != s->timed_index) heap_caps_free(index);
+    if (gate_owned) reader_gate_release();
     if (!s->quit) {
         if (ok) s->eof = true;
         else s->reader_err = true;

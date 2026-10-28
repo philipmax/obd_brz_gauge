@@ -17,6 +17,7 @@
 //   and on stop merely restores the previous mode — leaving the ESP-NOW driver,
 //   peers and channel untouched.
 #include "ota_wifi_server.h"
+#include "ota_idle_tracker.h"
 #include "vehicle_web_cors.h"
 
 #include <stdio.h>
@@ -78,7 +79,8 @@ extern SemaphoreHandle_t lvgl_mux;
 extern const uint8_t device_web_page_gz_start[] asm("_binary_device_web_page_html_gz_start");
 extern const uint8_t device_web_page_gz_end[]   asm("_binary_device_web_page_html_gz_end");
 
-static ota_wifi_state_t s_state = OTA_WIFI_STATE_IDLE;
+static ota_idle_tracker_t s_idle;
+static portMUX_TYPE s_idle_mux = portMUX_INITIALIZER_UNLOCKED;
 static volatile bool s_active = false;
 static portMUX_TYPE s_lifecycle_mux = portMUX_INITIALIZER_UNLOCKED;
 static bool s_lifecycle_busy = false;
@@ -108,7 +110,6 @@ static char s_password[17] = {0};   // SoftAP WPA2 passphrase (OTA_WIFI_PASSWORD
 static char s_ap_ssid[33] = {0};
 static bool s_wifi_owned = false;
 static wifi_mode_t s_prev_wifi_mode = WIFI_MODE_NULL;
-static volatile int64_t s_last_activity_us = 0;
 
 // /ota/firmware, /ota/theme, /ota/bootmedia share one upload slot.
 typedef enum {
@@ -284,8 +285,26 @@ static void wifi_runtime_cleanup(bool restore_mode)
 
 static void set_state(ota_wifi_state_t state)
 {
-    s_last_activity_us = esp_timer_get_time();   // any state change counts as activity
-    s_state = state;
+    int64_t now = esp_timer_get_time();
+    portENTER_CRITICAL(&s_idle_mux);
+    ota_idle_state(&s_idle, state, now);
+    portEXIT_CRITICAL(&s_idle_mux);
+}
+
+static ota_wifi_state_t get_state(void)
+{
+    portENTER_CRITICAL(&s_idle_mux);
+    ota_wifi_state_t state = s_idle.state;
+    portEXIT_CRITICAL(&s_idle_mux);
+    return state;
+}
+
+static void record_activity(void)
+{
+    int64_t now = esp_timer_get_time();
+    portENTER_CRITICAL(&s_idle_mux);
+    if (now > s_idle.last_activity_us) s_idle.last_activity_us = now;
+    portEXIT_CRITICAL(&s_idle_mux);
 }
 
 static void upload_release(void)
@@ -312,6 +331,7 @@ static bool validate_token(httpd_req_t *req)
     for (size_t i = 0; i < strlen(s_token); i++) {
         diff |= (uint8_t)(buf[i] ^ s_token[i]);
     }
+    if (diff == 0) record_activity();
     return diff == 0;
 }
 
@@ -321,10 +341,9 @@ static bool theme_lib_busy(void)
     return theme_library_get_state(NULL) == THEME_LIB_WRITING;
 }
 
-/* /api/v1 auth callback: token check, and every API call counts as activity. */
+/* /api/v1 auth callback: authenticated requests count as activity. */
 static bool api_auth(httpd_req_t *req)
 {
-    s_last_activity_us = esp_timer_get_time();
     return s_active && validate_token(req);
 }
 
@@ -436,7 +455,7 @@ static esp_err_t root_handler(httpd_req_t *req)
     if (!html) {
         return send_204(req);
     }
-    s_last_activity_us = esp_timer_get_time();
+    record_activity();
     httpd_resp_set_type(req, "text/html; charset=utf-8");
     httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
@@ -460,9 +479,10 @@ static esp_err_t generate_204_handler(httpd_req_t *req)
 // fixed bootstrap passphrase) is the bootstrap path.
 static esp_err_t discover_handler(httpd_req_t *req)
 {
-    if (s_state == OTA_WIFI_STATE_IDLE) {
+    if (get_state() == OTA_WIFI_STATE_IDLE) {
         return send_err(req, "ota not active");
     }
+    record_activity();
     char json[192];
     int written = snprintf(json, sizeof(json),
                            "{\"ssid\":\"%s\",\"password\":\"%s\",\"ip\":\"192.168.4.1\","
@@ -478,9 +498,10 @@ static esp_err_t discover_handler(httpd_req_t *req)
 // GET /ota/info — device identity manifest, no auth (bootstrap endpoint). FROZEN.
 static esp_err_t info_handler(httpd_req_t *req)
 {
-    if (s_state == OTA_WIFI_STATE_IDLE) {
+    if (get_state() == OTA_WIFI_STATE_IDLE) {
         return send_err(req, "ota not active");
     }
+    record_activity();
     const char *manifest = device_identity_manifest_json();
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, manifest, strlen(manifest));
@@ -496,7 +517,7 @@ static esp_err_t status_handler(httpd_req_t *req)
 
     char json[128];
     const char *state_str = "idle";
-    switch (s_state) {
+    switch (get_state()) {
         case OTA_WIFI_STATE_READY: state_str = "ready"; break;
         case OTA_WIFI_STATE_RECEIVING: state_str = "receiving"; break;
         case OTA_WIFI_STATE_DONE: state_str = "done"; break;
@@ -539,11 +560,14 @@ static esp_err_t upload_run(httpd_req_t *req, const char *label, const char *don
     s_stat_received = s_sink.received;
     s_stat_expected = s_sink.expected;
     if (err != ESP_OK) {
-        // The sink is back at `offset`; a retry of this chunk is accepted.
+        // Network errors can retry at `offset`; an unrecoverable SD error ends the session.
+        const char *reason = s_sink.err ? s_sink.err : "receive failed";
+        bool fatal = s_sink.failed;
         ESP_LOGE(TAG, "%s chunk at %u failed: %s", label, (unsigned)offset,
-                 s_sink.err ? s_sink.err : esp_err_to_name(err));
+                 reason);
+        if (fatal) upload_release();
         set_state(OTA_WIFI_STATE_ERROR);
-        return send_err(req, err == ESP_ERR_NO_MEM ? "no memory" : "receive failed");
+        return send_err(req, fatal ? reason : err == ESP_ERR_NO_MEM ? "no memory" : "receive failed");
     }
     ESP_LOGI(TAG, "%s chunk: offset=%u len=%u next=%u/%u last=%d (%lld ms)",
              label, (unsigned)offset, (unsigned)(s_sink.received - offset),
@@ -1043,17 +1067,34 @@ static esp_err_t bootmedia_legacy_handler(httpd_req_t *req)
 /* Idle watchdog: auto-stop after OTA_IDLE_TIMEOUT_US without activity */
 /* ------------------------------------------------------------------ */
 
+static bool ota_wifi_server_stop_impl(void);
+
 static void ota_timeout_task(void *arg)
 {
-    (void)arg;
+    uint32_t generation = (uint32_t)(uintptr_t)arg;
     for (;;) {
-        if (s_state == OTA_WIFI_STATE_IDLE) {
-            break;   // stopped externally
-        }
-        if (esp_timer_get_time() - s_last_activity_us > OTA_IDLE_TIMEOUT_US) {
-            ESP_LOGW(TAG, "WiFi OTA idle timeout (no HTTP activity for %lld s), stopping",
-                     (long long)(OTA_IDLE_TIMEOUT_US / 1000000));
-            if (ota_wifi_server_stop()) break;
+        int64_t now = esp_timer_get_time();
+        portENTER_CRITICAL(&s_idle_mux);
+        bool current = ota_idle_current(&s_idle, generation);
+        bool expired = ota_idle_expired(&s_idle, generation, now, OTA_IDLE_TIMEOUT_US);
+        portEXIT_CRITICAL(&s_idle_mux);
+        if (!current) break;
+        if (expired && lifecycle_try_take()) {
+            /* A stop/start or request may have occurred after the first check.
+             * Recheck under lifecycle protection before touching the server. */
+            now = esp_timer_get_time();
+            portENTER_CRITICAL(&s_idle_mux);
+            current = ota_idle_current(&s_idle, generation);
+            expired = ota_idle_expired(&s_idle, generation, now, OTA_IDLE_TIMEOUT_US);
+            portEXIT_CRITICAL(&s_idle_mux);
+            bool stopped = false;
+            if (expired) {
+                ESP_LOGW(TAG, "WiFi OTA idle timeout (no HTTP activity for %lld s), stopping",
+                         (long long)(OTA_IDLE_TIMEOUT_US / 1000000));
+                stopped = ota_wifi_server_stop_impl();
+            }
+            lifecycle_give();
+            if (!current || stopped) break;
         }
         vTaskDelay(pdMS_TO_TICKS(2000));
     }
@@ -1107,13 +1148,26 @@ static void register_handlers(void)
 
 static bool ota_wifi_server_start_impl(ota_wifi_info_t *info)
 {
-    if (s_state != OTA_WIFI_STATE_IDLE) {
+    if (!info) return false;
+    if (get_state() != OTA_WIFI_STATE_IDLE) {
         ESP_LOGW(TAG, "WiFi OTA already running");
         return false;
     }
 
     s_active = true;
-    set_state(OTA_WIFI_STATE_STARTING);
+    int64_t now = esp_timer_get_time();
+    portENTER_CRITICAL(&s_idle_mux);
+    uint32_t generation = ota_idle_begin(&s_idle, now);
+    portEXIT_CRITICAL(&s_idle_mux);
+    /* Allocate the watchdog before touching BLE/WiFi; otherwise task creation
+     * failure would leave a live OTA server without an inactivity timeout. */
+    if (xTaskCreate(ota_timeout_task, "ota_timeout", 3072, (void *)(uintptr_t)generation,
+                    tskIDLE_PRIORITY + 1, NULL) != pdPASS) {
+        ESP_LOGE(TAG, "cannot create OTA idle watchdog");
+        set_state(OTA_WIFI_STATE_IDLE);
+        s_active = false;
+        return false;
+    }
     release_for_ota();
 
     // SSID with the SoftAP MAC suffix
@@ -1261,7 +1315,6 @@ static bool ota_wifi_server_start_impl(ota_wifi_info_t *info)
     set_state(OTA_WIFI_STATE_READY);
     ESP_LOGI(TAG, "WiFi OTA started: SSID=%s IP=%s", s_ap_ssid, info->ip);
 
-    xTaskCreate(ota_timeout_task, "ota_timeout", 3072, NULL, tskIDLE_PRIORITY + 1, NULL);
     return true;
 }
 
@@ -1273,12 +1326,10 @@ bool ota_wifi_server_start(ota_wifi_info_t *info)
     return started;
 }
 
-bool ota_wifi_server_stop(void)
+static bool ota_wifi_server_stop_impl(void)
 {
-    if (!lifecycle_try_take()) return false;
-    if (s_state == OTA_WIFI_STATE_IDLE) {
+    if (get_state() == OTA_WIFI_STATE_IDLE) {
         s_active = false;
-        lifecycle_give();
         return true;
     }
 
@@ -1286,7 +1337,6 @@ bool ota_wifi_server_stop(void)
         esp_err_t err = httpd_stop(s_httpd);
         if (err != ESP_OK) {
             ESP_LOGW(TAG, "httpd stop failed: %s", esp_err_to_name(err));
-            lifecycle_give();
             return false;
         }
         s_httpd = NULL;
@@ -1304,11 +1354,18 @@ bool ota_wifi_server_stop(void)
     s_stat_expected = 0;
     s_bootmedia_prepared_size = 0;
     s_bootmedia_prepared_manifest_size = 0;
-    s_state = OTA_WIFI_STATE_IDLE;
+    set_state(OTA_WIFI_STATE_IDLE);
     s_active = false;
     ESP_LOGI(TAG, "WiFi OTA stopped");
-    lifecycle_give();
     return true;
+}
+
+bool ota_wifi_server_stop(void)
+{
+    if (!lifecycle_try_take()) return false;
+    bool stopped = ota_wifi_server_stop_impl();
+    lifecycle_give();
+    return stopped;
 }
 
 bool ota_wifi_server_is_active(void)

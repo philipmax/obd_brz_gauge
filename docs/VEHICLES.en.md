@@ -320,3 +320,5 @@ Firmware enables independent RPM/speed priority scheduling with minimum request 
 ## Scirocco 2.0T profile library check
 
 The user-provided Car Scanner `vehicle-profiles.json` (1304 profiles) contains no dedicated profile named `Scirocco`, `Sirocco` or `尚酷`. Related profiles `872` (`PQ25, PQ35, PQ46`) and `873` (`PQ25, PQ35, PQ46 + UDS AT/DSG DQ500`) contain VW parameters, but their ECM pressure request is `VWTP:01:2173`, a transport the current engine does not support. Dashboard `222211` is a percentage and cannot be imported directly as bar. Profile `742` for EA888 Gen.3 / MQB cannot be considered compatible based only on 2.0T displacement. Year, engine and ECU information require verification. No unverified dedicated Scirocco profile is added; the generic standard PID path remains independently usable.
+
+Oil-temperature hysteresis now confirms jumps of 16–19°C and rounds negative temperatures correctly.

@@ -280,3 +280,5 @@ V1 硬件板（`CONFIG_OBD_HW_VERSION_V1_WAVESHARE`）上接了 ADS1115 模拟�
 ## 尚酷 2.0T 参数库核对
 
 核对用户提供的 Car Scanner `vehicle-profiles.json`（1304 份档案），未找到 `Scirocco` / `Sirocco` / `尚酷` 命名的专用档案。相关 `872`（`PQ25, PQ35, PQ46`）和 `873`（`PQ25, PQ35, PQ46 + UDS AT/DSG DQ500`）包含大众参数，但其 ECM 压力请求为 `VWTP:01:2173`，当前引擎不支持该传输。Dashboard 的 `222211` 是百分比，不能作为 bar 直接导入。`742` 的 EA888 Gen.3 / MQB 参数也不能只凭 2.0T 排量判为兼容。需要年份、发动机和 ECU 信息验证；本次不新增未经验证的尚酷专用配置，通用标准 PID 路径仍可单独使用。
+
+油温迟滞滤波现在能确认 16～19°C 的跳变，并正确取整负温度。

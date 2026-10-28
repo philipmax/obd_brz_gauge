@@ -51,6 +51,8 @@ static const char *TAG = "sd_card";
 
 static SemaphoreHandle_t s_lock;        /* guards mount/unmount/state changes */
 static SemaphoreHandle_t s_io_mutex;    /* guards s_io_buf */
+static StaticSemaphore_t s_lock_storage;
+static StaticSemaphore_t s_io_mutex_storage;
 static uint8_t          *s_io_buf;      /* SD_IO_BUF_SIZE, DMA | INTERNAL, never freed */
 static sdmmc_card_t     *s_card;
 static volatile sd_state_t s_state = SD_STATE_ABSENT;
@@ -210,10 +212,10 @@ static uint32_t ms_since(TickType_t t)
 esp_err_t sd_card_init(void)
 {
     if (!s_lock) {
-        s_lock = xSemaphoreCreateMutex();
-        s_io_mutex = xSemaphoreCreateMutex();
-        if (!s_lock || !s_io_mutex) return ESP_ERR_NO_MEM;
+        s_lock = xSemaphoreCreateMutexStatic(&s_lock_storage);
     }
+    if (!s_io_mutex) s_io_mutex = xSemaphoreCreateMutexStatic(&s_io_mutex_storage);
+    if (!s_lock || !s_io_mutex) return ESP_ERR_NO_MEM;
     if (!s_io_buf) {
         s_io_buf = heap_caps_malloc(SD_IO_BUF_SIZE, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
         if (!s_io_buf) ESP_LOGW(TAG, "no internal DMA RAM for bounce buffer; PSRAM I/O will be slow");
@@ -569,21 +571,42 @@ esp_err_t sd_card_remove(const char *path)
     return ESP_FAIL;
 }
 
-/* FAT rename refuses an existing destination: drop it first. The window
- * between unlink and rename is a few ms; .part is complete by then. */
+/* FAT rename cannot replace an existing destination. Keep the old file until
+ * the new rename succeeds; a failed rollback leaves the backup for recovery.
+ * FAT metadata updates still do not guarantee atomic power-loss recovery. */
 esp_err_t sd_card_rename(const char *src, const char *dst)
 {
     if (!src || !dst) return ESP_ERR_INVALID_ARG;
     if (!sd_card_is_mounted()) return ESP_ERR_INVALID_STATE;
     struct stat st;
-    if (stat(dst, &st) == 0) {
-        if (S_ISDIR(st.st_mode)) return ESP_ERR_INVALID_ARG;
-        unlink(dst);
+    if (stat(src, &st) != 0) return ESP_FAIL;
+    if (strcmp(src, dst) == 0) return ESP_OK;
+    if (stat(dst, &st) != 0) {
+        if (errno != ENOENT || rename(src, dst) != 0) {
+            ESP_LOGW(TAG, "rename %s -> %s: errno %d", src, dst, errno);
+            return ESP_FAIL;
+        }
+        return ESP_OK;
+    }
+    if (S_ISDIR(st.st_mode)) return ESP_ERR_INVALID_ARG;
+
+    char backup[SD_PATH_MAX];
+    int n = snprintf(backup, sizeof(backup), "%s.obd-bak", dst);
+    if (n < 0 || (size_t)n >= sizeof(backup)) return ESP_ERR_INVALID_SIZE;
+    /* Never clobber an unrelated or unrecovered backup. */
+    if (stat(backup, &st) == 0) return ESP_ERR_INVALID_STATE;
+    if (errno != ENOENT || rename(dst, backup) != 0) {
+        ESP_LOGW(TAG, "backup %s: errno %d", dst, errno);
+        return ESP_FAIL;
     }
     if (rename(src, dst) != 0) {
         ESP_LOGW(TAG, "rename %s -> %s: errno %d", src, dst, errno);
+        if (rename(backup, dst) != 0) {
+            ESP_LOGE(TAG, "restore %s failed; old file retained at %s", dst, backup);
+        }
         return ESP_FAIL;
     }
+    if (unlink(backup) != 0) ESP_LOGW(TAG, "cannot remove backup %s: errno %d", backup, errno);
     return ESP_OK;
 }
 

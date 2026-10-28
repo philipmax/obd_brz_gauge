@@ -14,7 +14,7 @@ static int serial_test_fsync(int fd);
 #undef fflush
 #undef fsync
 
-static bool locked, busy, ota, fail_open, fail_verify, fail_commit, fail_install, fail_obv;
+static bool locked, busy, ota, fail_open, fail_verify, fail_commit, fail_install, fail_obv, fail_write;
 static bool release_busy_on_wait;
 static TickType_t last_lock_wait;
 static unsigned installs, removes, validations, commits;
@@ -93,6 +93,7 @@ esp_err_t upload_sink_open(upload_sink_t *s, upload_sink_kind_t kind, uint32_t e
 }
 esp_err_t upload_sink_write(upload_sink_t *s, const void *data, size_t len)
 { assert(s->kind == UPLOAD_SINK_MEMORY ? !locked : locked);
+  if (fail_write) { s->failed = true; return ESP_FAIL; }
   if (s->kind == UPLOAD_SINK_MEMORY) memcpy(s->buf + s->received, data, len);
   else { assert(fwrite(data, 1, len, s->fp) == len); file_synced = false; }
   s->received += (uint32_t)len; return ESP_OK; }
@@ -166,7 +167,7 @@ static void data(void)
 static void reset(void)
 {
     abort_session(); assert(!locked); assert(!s_storage_locked);
-    busy = ota = fail_open = fail_verify = fail_commit = fail_install = fail_obv = false;
+    busy = ota = fail_open = fail_verify = fail_commit = fail_install = fail_obv = fail_write = false;
     release_busy_on_wait = false; last_lock_wait = 0;
     installs = removes = validations = commits = 0; ticks = 0; input_mode = 0; output_len = 0;
     committed = false; fail_remove_path = NULL;
@@ -184,6 +185,11 @@ int main(void)
         reset(); assert(begin(theme) == 0);
         assert(process_frame(CMD_ABORT, NULL, 0) == 0); assert(!locked); assert(removes == (unsigned)theme);
         reset(); fail_open = true; assert(begin(theme) == 3); assert(!locked);
+        reset(); assert(begin(theme) == 0); fail_write = true;
+        uint8_t failed_chunk[12] = {0};
+        assert(process_frame(CMD_DATA, failed_chunk, sizeof(failed_chunk)) == 5);
+        assert(!locked && !upload_sink_is_open(&s_sink));
+        assert(boot_files[0] && boot_files[1] && boot_files[2]);
         /* Theme reads / boot jobs may finish while BEGIN waits for storage. */
         reset(); busy = release_busy_on_wait = true;
         assert(begin(theme) == 0); assert(locked);

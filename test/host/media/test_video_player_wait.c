@@ -59,6 +59,7 @@ static void (*during_decode)(void);
 static void (*after_publication)(vp_session_t *);
 static void service_ui(vp_session_t *s);
 static void run_task(unsigned i);
+static void finish(void);
 static lv_obj_t view, screen;
 static _Alignas(16) uint8_t draw1[360 * 40 * 2], draw2[360 * 40 * 2];
 static unsigned refresh_draws;
@@ -357,6 +358,34 @@ static void frame(vp_session_t *s, uint8_t marker)
 }
 static void clear_decoder_event(vp_session_t *s)
 { s->ev->bits &= ~EV_WAKE_DECODER; } /* discard initial publications to test an actual blocking wait */
+
+static void release_reader_gate_during_wait(vp_session_t *s, EventBits_t bit)
+{
+    CHECK(s == test_session && bit == EV_WAKE_READER && s_reader_gate_owned);
+    reader_gate_release();
+}
+
+static void stop_reader_gate_during_wait(vp_session_t *s, EventBits_t bit)
+{
+    CHECK(s == test_session && bit == EV_WAKE_READER && s_reader_gate_owned);
+    s->quit = true;
+    xEventGroupSetBits(s->ev, EV_WAKE_READER);
+}
+
+static void test_reader_gate_handoff_and_stop(void)
+{
+    vp_session_t *s = start(VIDEO_MODE_COMPOSITE, "/__obd_host_no_file__/video.obv");
+    allow_timed = true;
+    s_reader_gate_owned = true; /* previous reader still owns its DMA buffer */
+    before_wait = release_reader_gate_during_wait;
+    CHECK(reader_gate_acquire(s));
+    CHECK(s_reader_gate_owned && now_us == VP_READER_RETRY_MS * 1000);
+    before_wait = stop_reader_gate_during_wait;
+    CHECK(!reader_gate_acquire(s));
+    CHECK(s_reader_gate_owned); /* stopped waiter must not release another reader */
+    reader_gate_release();
+    finish();
+}
 static void finish(void)
 {
     before_wait = NULL; on_block = NULL; during_decode = NULL; after_publication = NULL;
@@ -1480,7 +1509,7 @@ int main(void)
 {
     const test_t tests[] = {
 #define TEST(f) { #f, f }
-        TEST(test_sd_bulk_read_ahead),
+        TEST(test_sd_bulk_read_ahead), TEST(test_reader_gate_handoff_and_stop),
         TEST(test_full_reader_release), TEST(test_full_reader_gap), TEST(test_full_reader_stop),
         TEST(test_composite_stop_waits_for_decoder),
         TEST(test_paused_resume), TEST(test_paused_gap), TEST(test_paused_stop),

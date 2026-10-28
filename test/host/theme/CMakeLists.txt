@@ -114,6 +114,14 @@ target_compile_options(test_media_migration PRIVATE ${TE_WARN})
 target_link_libraries(test_media_migration PRIVATE theme_core)
 add_test(NAME theme_media_migration COMMAND test_media_migration)
 
+add_executable(test_boot_media_invalidate test_boot_media_invalidate.c th_util.c
+    "${REPO_ROOT}/main/app_obd_dsp/boot_media_mount.c"
+    "${REPO_ROOT}/main/app_obd_dsp/flash_writer.c")
+target_include_directories(test_boot_media_invalidate PRIVATE page_stubs "${REPO_ROOT}/main")
+target_compile_options(test_boot_media_invalidate PRIVATE ${TE_WARN})
+target_link_libraries(test_boot_media_invalidate PRIVATE theme_core)
+add_test(NAME theme_boot_media_invalidate COMMAND test_boot_media_invalidate)
+
 option(TE_PAGE_LVGL "Build real-LVGL page integration test" OFF)
 option(TE_PAGE_BENCHMARK "Build stable-page microbenchmark" OFF)
 if(TE_PAGE_BENCHMARK AND NOT TE_PAGE_LVGL)

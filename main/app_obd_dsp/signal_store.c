@@ -144,9 +144,9 @@ bool signal_store_is_local(int slot)
 bool signal_store_set(int slot, int32_t internal)
 {
     if (!slot_ok(slot)) return false;
-    uint32_t t = now_ms();
     bool ok;
     portENTER_CRITICAL(&s_mux);
+    uint32_t t = now_ms();
     int32_t mn, mx;
     bounds_of(slot, &mn, &mx);
     ok = internal >= mn && internal <= mx;
@@ -162,8 +162,8 @@ bool signal_store_set(int slot, int32_t internal)
 void signal_store_set_many(const int *slots, const int32_t *values, size_t count)
 {
     if (!slots || !values || count == 0 || !s_st) return;
-    uint32_t t = now_ms();
     portENTER_CRITICAL(&s_mux);
+    uint32_t t = now_ms();
     for (size_t i = 0; i < count; i++) {
         int slot = slots[i];
         if (!slot_ok(slot) || (s_st->local_mask & (1ULL << slot))) continue;
@@ -223,9 +223,9 @@ void signal_store_invalidate_vehicle(void)
 bool signal_store_get(int slot, int32_t *out)
 {
     if (!slot_ok(slot)) return false;
-    uint32_t t = now_ms();
     bool ok;
     portENTER_CRITICAL(&s_mux);
+    uint32_t t = now_ms();
     ok = fresh_locked(slot, t);
     if (ok && out) *out = s_st->e[slot].value;
     portEXIT_CRITICAL(&s_mux);
@@ -238,9 +238,9 @@ uint64_t signal_store_get_many(const int *slots, size_t count, int32_t *values)
     for (size_t i = 0; i < count; i++) values[i] = 0;
     if (!s_st) return 0;
 
-    uint32_t t = now_ms();
     uint64_t valid = 0;
     portENTER_CRITICAL(&s_mux);
+    uint32_t t = now_ms();
     if (count == 1) {
         const int slot = slots[0];
         if (slot >= 0 && slot < SIG_SLOT_COUNT && fresh_locked(slot, t)) {
@@ -282,8 +282,8 @@ uint64_t signal_store_get_delivered_mask(uint64_t requested, double values[SIG_S
     int32_t raw[SIG_SLOT_COUNT];
     uint64_t valid = 0;
     if (s_st) {
-        uint32_t t = now_ms();
         portENTER_CRITICAL(&s_mux);
+        uint32_t t = now_ms();
         if ((requested & (requested - 1u)) == 0) {
             const unsigned slot = (unsigned)__builtin_ctzll(requested);
             if (fresh_locked((int)slot, t)) {

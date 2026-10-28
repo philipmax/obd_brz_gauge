@@ -29,8 +29,8 @@ extern "C" {
  * File sinks stream to SD (<path>.part, renamed on commit) or buffer in PSRAM
  * and go through config_part_write() for /config.
  *
- * A request that fails half way rolls the sink back to the offset it started
- * at, so the client can retry the same chunk.
+ * A recoverable request failure rolls back to its starting offset for retry.
+ * Unrecoverable file or digest errors set failed; the caller must abort it.
  * -------------------------------------------------------------------------- */
 
 /* SoftAP-stable maximum, verified on hardware. Do not raise. */
@@ -71,6 +71,8 @@ typedef struct {
     const esp_partition_t *ota_part;   /* FIRMWARE */
     char     path[UPLOAD_PATH_MAX];    /* SD_FILE / CONFIG_FILE destination */
     const char *err;          /* static error text of the last failure */
+    bool     verified;        /* complete payload and digest successfully checked */
+    bool     failed;          /* unrecoverable SD or digest failure; abort this session */
 } upload_sink_t;
 
 /* 64 hex chars -> 32 bytes. false on wrong length or a non-hex character. */
@@ -86,7 +88,8 @@ bool      upload_sink_is_open(const upload_sink_t *s);
 esp_err_t upload_sink_write(upload_sink_t *s, const void *data, size_t len);
 /* Receive this request's body (content_len bytes) and append it. base64:
  * the body is base64 text. Tolerates 3 consecutive recv timeouts. On
- * failure the sink is rolled back to where this request started. */
+ * a recoverable failure rolls back to the start. Check failed and abort on an
+ * unrecoverable file or digest error. */
 esp_err_t upload_sink_recv(upload_sink_t *s, httpd_req_t *req, bool base64);
 /* Everything received and the digest matches. Writes nothing. */
 esp_err_t upload_sink_verify(upload_sink_t *s);

@@ -67,6 +67,8 @@ static video_elem_t *elem_state(lv_obj_t *obj)
 /* SD_DIR_THEMES/<theme>/<key>.obv, then SD_DIR_VIDEO/<key>.obv. */
 static bool resolve(const char *theme, const char *key, char *out, size_t cap)
 {
+    if (!out || !cap) return false;
+    out[0] = '\0';
     if (!key || !key[0] || strchr(key, '/') || !sd_card_is_mounted()) return false;
     int n;
     if (theme && theme[0]) {

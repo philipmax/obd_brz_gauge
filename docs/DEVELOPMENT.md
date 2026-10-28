@@ -27,7 +27,7 @@ main/
 │   ├── ota_wifi_server   # WiFi SoftAP HTTP 服务：/ota/* 端点（App 协议不变）
 │   ├── api_v1_handlers / device_web_page.html  # 新 /api/v1/* + 设备自带网页（仅 OTA 模式）
 │   ├── device_identity   # 设备清单 JSON（GET /ota/info，硬件 + build_tag）
-│   └── flash_writer / upload_sink / storage_util  # 分区/文件写入共享工具
+│   └── flash_writer / upload_sink / storage_util  # 旧分区擦除及文件写入工具
 │
 ├── bsp_obd_dsp/          # 板级支持包（换开发板主要改这里）
 │   ├── elm327_ble_client # ELM327 BLE 客户端 + 单线程轮询状态机 + 协议自动检测
@@ -81,6 +81,10 @@ main/
 `tools/vehicles/`（旧车型表→JSON 转换器与 golden fixture 生成器）、
 `bootmedia/slot_a/`（legacy 开机动画源，生成 SD 用的 `build/bootmedia.bin`）。
 
+当前 I2C 定义分为两套：主总线在 V1 使用 SCL GPIO10 / SDA GPIO11，V2/V3 使用 SCL GPIO8 / SDA GPIO7；CST816 触摸另建总线，使用 SCL GPIO3 / SDA GPIO1（所有硬件版本）。具体以 `I2C_Driver.h` 和 `CST816.h` 为准；更换硬件前应核对实际接线。
+
+主总线寄存器读写封装缓存最多 8 个设备并保护并发注册；注册失败或缓存已满时返回错误，不中止固件或反复泄漏设备句柄。写入使用 I2C 驱动的多缓冲事务，寄存器地址与数据在同一事务发送，避免按输入长度占用任务栈。
+
 ### 启动顺序（`main/app_main.c`）
 
 ```
@@ -121,6 +125,7 @@ ELM327 BLE 适配器 ──BLE──→ elm327_ble_client（单线程状态机�
 
 **ELM327 轮询是单线程状态机**：初始化 → （可选）协议自动检测 → 循环轮询各通道。
 改轮询逻辑时不要引入并行请求 —— 一个适配器同时只服务一个请求流（AGENTS.md 红线）。
+BLE 回调通过常驻静态信号量唤醒轮询任务；BLE 关闭时的回调也会唤醒任务退出，信号量不会随任务删除，避免迟到回调访问已释放的任务句柄。
 
 ## 编译配置
 
