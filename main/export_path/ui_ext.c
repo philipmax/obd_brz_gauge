@@ -824,31 +824,14 @@ void ui_ext_no_signal_update(bool signal_ok)
  * ================================================================ */
 
 /* ================================================================
- *  SD theme library: validated selection (UI side of theme_library.h)
- *
- *  A user switch (storage page) restarts the device when the copy is done:
- *  built-in vs theme pages and the palette are chosen once in ui_init().
- *  A write resumed after power loss (boot / card insert) started with an
- *  no selected SD theme, so no theme page exists: theme_load(0) picks it up live.
+ *  SD theme selection: USB preparation and legacy interrupted selection
  * ================================================================ */
 
-#define THEME_LIB_POLL_MS     500
-#define THEME_RESTART_DELAY_US 1500000   // long enough to read "restarting"
-
-static bool    s_theme_switching = false;   // ui_ext_theme_activate() started a write
-static int64_t s_theme_restart_at = 0;      // esp_timer deadline, 0 = none
-static char    s_theme_msg[72] = "";
-static bool    s_theme_msg_ok = true;
-
-static void theme_msg(bool ok, const char *msg)
-{
-    strlcpy(s_theme_msg, msg, sizeof(s_theme_msg));
-    s_theme_msg_ok = ok;
-}
+#define THEME_LIB_POLL_MS 500
 
 esp_err_t ui_ext_theme_prepare_install(void)
 {
-    if (s_boot_theme_job || s_theme_switching || theme_library_get_state(NULL) != THEME_LIB_IDLE) return ESP_ERR_INVALID_STATE;
+    if (s_boot_theme_job || theme_library_get_state(NULL) != THEME_LIB_IDLE) return ESP_ERR_INVALID_STATE;
     if (ui_ScreenPageThemeGauge) {
         if (ui_ScreenPageThemeGauge == lv_scr_act()) {
             if (!ui_ScreenPageSettings) ui_ScreenPageSettings_screen_init();
@@ -863,75 +846,19 @@ esp_err_t ui_ext_theme_prepare_install(void)
     return theme_get_info(&info) == ESP_OK ? ESP_ERR_INVALID_STATE : ESP_OK;
 }
 
-esp_err_t ui_ext_theme_activate(const char *key)
-{
-    if (s_boot_theme_job || s_theme_switching || theme_library_get_state(NULL) != THEME_LIB_IDLE) {
-        return ESP_ERR_INVALID_STATE;
-    }
-    // Delete old pages before selecting a new SD package.
-    if (ui_ScreenPageThemeGauge) {
-        if (ui_ScreenPageThemeGauge == lv_scr_act()) return ESP_ERR_INVALID_STATE;
-        lv_obj_del(ui_ScreenPageThemeGauge);
-        ui_ScreenPageThemeGauge = NULL;
-    }
-    theme_unload();
-    theme_info_t info;
-    if (theme_get_info(&info) == ESP_OK) {   // unload refused: a theme page still exists
-        return ESP_ERR_INVALID_STATE;
-    }
-    esp_err_t err = theme_library_activate(key);
-    if (err != ESP_OK) {
-        theme_load(0);   // Selection unchanged: restore the current theme
-        return err;
-    }
-    s_theme_switching = true;
-    theme_msg(true, "Loading theme...");
-    return ESP_OK;
-}
-
-const char *ui_ext_theme_status(bool *ok)
-{
-    if (ok) *ok = s_theme_msg_ok;
-    return s_theme_msg;
-}
-
 static void theme_lib_timer_cb(lv_timer_t *t)
 {
     (void)t;
-    if (s_theme_restart_at != 0) {
-        if (esp_timer_get_time() >= s_theme_restart_at) esp_restart();
-        return;
-    }
-    uint8_t pct = 0;
-    theme_lib_state_t st = theme_library_get_state(&pct);
-    if (st == THEME_LIB_WRITING) {
-        if (s_theme_switching) {
-            char line[32];
-            snprintf(line, sizeof(line), "Loading theme %u%%", (unsigned)pct);
-            theme_msg(true, line);
-        }
-        return;
-    }
+    theme_lib_state_t st = theme_library_get_state(NULL);
     if (st != THEME_LIB_DONE && st != THEME_LIB_ERROR) return;
     if (s_boot_theme_job) return; // finish the SD reader before reloading its source
-
-    if (st == THEME_LIB_DONE && s_theme_switching) {
-        theme_library_ack();
-        theme_msg(true, "Theme selected, restarting");
-        s_theme_restart_at = esp_timer_get_time() + THEME_RESTART_DELAY_US;
-        return;
-    }
     if (st == THEME_LIB_ERROR) {
-        char line[72];
-        snprintf(line, sizeof(line), "Theme selection failed: %s", theme_library_last_error());
-        theme_msg(false, line);
-        ESP_LOGW("ui_ext", "%s", line);
+        ESP_LOGW("ui_ext", "Theme selection failed: %s", theme_library_last_error());
     }
-    // Reload the persisted SD selection; absent resources use the built-in UI.
+    // A legacy interrupted selection may finish after boot or card insertion.
     esp_err_t err = theme_load(0);
     ESP_LOGI("ui_ext", "SD theme selection reload: %s", esp_err_to_name(err));
     theme_library_ack();
-    s_theme_switching = false;
 }
 
 void ui_ext_init(void)

@@ -1834,3 +1834,19 @@ cmake --build /tmp/obd-snapshot-append
 ctest --test-dir /tmp/obd-snapshot-append --output-on-failure
 /tmp/obd-snapshot-append/bench_master_collect
 ```
+
+## 油门相关数据优先调度验证
+
+2026-10-28：`test/host/engine/test_engine.c` 的 `test_responsive_driver_inputs` 用同一模拟适配器回放修改前后调度。基线为 `10f780ad86a471c4b63e07b1c7fd4d2790fd281a` 的 `vp_engine.c`；主机 Release 构建启用 ASan/UBSan，协议 6、每个应答延迟 2 ms、默认请求间隙 30 ms、十个独立 PID，压力和节气门不设置显式周期。启动稳定后，每种需求掩码各观察 5 秒。此处时间为模拟时钟，不是桌面程序运行耗时，也不是 BLE/ECU/LCD 实测。
+
+| Demanded signals | Before: RPM / speed / boost / TPS reads per 5 s | After: RPM / speed / boost / TPS reads per 5 s | Before: max RPM / speed / boost / TPS request gap (ms) | After: max RPM / speed / boost / TPS request gap (ms) |
+|---|---|---|---|---|
+| RPM + speed + boost + TPS + 6 background | 63 / 31 / 7 / 7 | 52 / 26 / 26 / 26 | 96 / 160 / 640 / 640 | 128 / 192 / 192 / 192 |
+| RPM + speed + boost + 6 background | 63 / 31 / 9 / 0 | 63 / 32 / 31 / 0 | 98 / 162 / 576 / — | 96 / 160 / 160 / — |
+| RPM + speed + boost only | 63 / 32 / 62 / 0 | 63 / 31 / 63 / 0 | 96 / 162 / 98 / — | 96 / 162 / 98 / — |
+
+压力在混合页面不再等待整轮后台参数；只读三个参数时保持原有采样节奏。四个优先信号全开仍共享串行带宽，表中转速与车速频率略降，不能宣称所有参数同时提速。该测试另验证后台参数没有饥饿、切页停止不需要的请求；显式周期、慢速节气门、共用 PID 合并及请求前后命令的不可分割性由独立用例检查。更慢适配器、超时或厂商多命令请求会拉长间隔。
+
+`test/host/signal_store/test_display_response.c` 抽取生产显示更新函数，验证转速、车速、压力（含负值）、节气门及负载在首次刷新显示最新样本，数值未变时不重写标签，失效与恢复仍正确；温度保留原有平滑。`test/host/media/test_video_player_wait.c` 的同帧测试验证 1000 次未跨帧数值更新不唤醒读卡或解码，跨帧与快速往返仍唤醒。原播放器已按目标帧去重，这次减少的是无效任务唤醒，不能据此宣称减少了原本不存在的重复解码或提高了视频帧率。
+
+本轮 engine、signal_store、media 三组共 24 项主机测试通过；四个修改后的生产 C 文件通过 ESP32-S3 编译器 `-fsyntax-only` 检查，未执行完整固件构建或实车延迟测量。

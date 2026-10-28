@@ -1,5 +1,6 @@
 #pragma once
 #include <stdint.h>
+#include <stddef.h>
 #include <stdbool.h>
 
 #ifdef __cplusplus
@@ -17,15 +18,23 @@ void espnow_link_start_master(void);
 // Slave: init WiFi + ESP-NOW, receive the master's broadcast and write it into the local OBD data cache (no ELM327 link).
 void espnow_link_start_slave(void);
 
+// Publish the local page's OBD demand mask. Slaves advertise it in HELLO;
+// masters retain their own mask and merge masks from online slaves.
+void espnow_link_set_demand_mask(uint16_t mask);
+// Demand bits requested by online slaves (master only); zero on a standalone
+// or slave gauge. The caller can OR this into the local ELM demand mask.
+uint16_t espnow_link_remote_demand_mask(void);
+
 // Pause ESP-NOW traffic for OTA, but keep the WiFi driver initialized so the
 // OTA SoftAP can reuse it. The normal OTA flow reboots after completion/exit.
-void espnow_link_pause_for_ota(void);
+// false: worker is still exiting or deinit failed; retry before starting OTA.
+bool espnow_link_pause_for_ota(void);
 
 // Slave: whether master data was received within the last ~2s (for the "waiting for master" hint).
 bool espnow_link_slave_has_data(void);
 
-// Slave: name of the last master heard (empty string = none yet).
-const char *espnow_link_get_master_name(void);
+// Slave: copy a synchronized, NUL-terminated name (empty = none heard yet).
+void espnow_link_copy_master_name(char *out, size_t capacity);
 
 // Slave: copy the currently bound master MAC to out (all-zero = unbound).
 void espnow_link_get_bound_master_mac(uint8_t out[6]);

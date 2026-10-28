@@ -3,6 +3,7 @@
 // One wildcard dispatcher per HTTP method. All handlers run in the single
 // httpd task, so the upload slot below needs no locking.
 #include "api_v1_handlers.h"
+#include "http_u32.h"
 #include "vehicle_web_cors.h"
 
 #include <ctype.h>
@@ -331,11 +332,16 @@ static bool query_param(httpd_req_t *req, const char *key, char *out, size_t out
     return ok;
 }
 
-static uint32_t hdr_u32(httpd_req_t *req, const char *name, uint32_t def)
+static bool hdr_u32(httpd_req_t *req, const char *name, uint32_t def, uint32_t *out)
 {
     char buf[16] = {0};
-    if (httpd_req_get_hdr_value_str(req, name, buf, sizeof(buf)) != ESP_OK) return def;
-    return (uint32_t)strtoul(buf, NULL, 10);
+    if (httpd_req_get_hdr_value_len(req, name) >= sizeof(buf)) return false;
+    esp_err_t err = httpd_req_get_hdr_value_str(req, name, buf, sizeof(buf));
+    if (err == ESP_ERR_NOT_FOUND) {
+        *out = def;
+        return true;
+    }
+    return err == ESP_OK && http_parse_u32(buf, out);
 }
 
 static bool hdr_last(httpd_req_t *req)
@@ -546,12 +552,17 @@ typedef struct {
 static bool parse_chunk(httpd_req_t *req, chunk_hdr_t *h, esp_err_t *ret)
 {
     memset(h, 0, sizeof(*h));
-    h->total = hdr_u32(req, "X-OTA-Size", (uint32_t)req->content_len);
-    h->offset = hdr_u32(req, "X-Offset", 0);
+    if (!hdr_u32(req, "X-OTA-Size", (uint32_t)req->content_len, &h->total) ||
+        !hdr_u32(req, "X-Offset", 0, &h->offset)) {
+        *ret = send_error(req, 400, "bad_request", "invalid size or offset");
+        return false;
+    }
     h->last = hdr_last(req);
     char sha_hex[65] = {0};
-    if (httpd_req_get_hdr_value_str(req, "X-OTA-SHA256", sha_hex, sizeof(sha_hex)) == ESP_OK) {
-        if (!upload_sha_from_hex(sha_hex, h->sha)) {
+    esp_err_t sha_err = httpd_req_get_hdr_value_str(req, "X-OTA-SHA256", sha_hex, sizeof(sha_hex));
+    if (sha_err != ESP_ERR_NOT_FOUND) {
+        if (sha_err != ESP_OK || httpd_req_get_hdr_value_len(req, "X-OTA-SHA256") != 64 ||
+            !upload_sha_from_hex(sha_hex, h->sha)) {
             *ret = send_error(req, 400, "bad_request", "X-OTA-SHA256 must be 64 hex chars");
             return false;
         }
@@ -865,36 +876,6 @@ static esp_err_t h_vehicles_rollback(httpd_req_t *req, const char *arg)
         free(list);
     }
     return send_pending(req, pending);
-}
-
-static esp_err_t remove_vehicle(httpd_req_t *req, const char *id)
-{
-    if (!valid_vehicle_id(id)) return send_error(req, 400, "bad_id", id);
-    esp_err_t err = vp_manager_remove(id);
-    if (err != ESP_OK) return send_vpm_err(req, err);
-    ESP_LOGI(TAG, "vehicle %s removed", id);
-    jbuf_t j;
-    jb_init(&j, 96);
-    jb_raw(&j, "{\"ok\":true");
-    jb_kstr(&j, "removed", id);
-    jb_putc(&j, '}');
-    return send_jb(req, 200, &j);
-}
-
-// POST vehicles/remove {"id":"..."}
-static esp_err_t h_vehicles_remove(httpd_req_t *req, const char *arg)
-{
-    (void)arg;
-    char id[VPM_ID_LEN];
-    esp_err_t ret = ESP_OK;
-    if (!body_string(req, "id", id, sizeof(id), &ret)) return ret;
-    return remove_vehicle(req, id);
-}
-
-// DELETE vehicles/<id>
-static esp_err_t h_vehicle_delete(httpd_req_t *req, const char *id)
-{
-    return remove_vehicle(req, id);
 }
 
 // GET vehicles/<id> — stored source JSON.
@@ -1237,9 +1218,7 @@ static const api_route_t s_routes[] = {
     { "vehicles/activate", false, HTTP_POST,   h_vehicles_activate },
     { "vehicles/reset",    false, HTTP_POST,   h_vehicles_reset },
     { "vehicles/rollback", false, HTTP_POST,   h_vehicles_rollback },
-    { "vehicles/remove",   false, HTTP_POST,   h_vehicles_remove },
     { "vehicles/",         true,  HTTP_GET,    h_vehicle_get },
-    { "vehicles/",         true,  HTTP_DELETE, h_vehicle_delete },
     { "theme/sidecar",     false, HTTP_POST,   h_sidecar_put },
     { "theme/sidecar",     false, HTTP_DELETE, h_sidecar_delete },
     { "fs/put",            false, HTTP_PUT,    h_fs_put },

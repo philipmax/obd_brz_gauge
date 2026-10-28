@@ -96,3 +96,38 @@ add_executable(test_sd_rename test_sd_rename.c "${SD_RENAME_EXCERPT}")
 target_include_directories(test_sd_rename PRIVATE "${CMAKE_CURRENT_BINARY_DIR}" upload_stubs)
 target_compile_options(test_sd_rename PRIVATE -Wall -Wextra -Werror -UNDEBUG)
 add_test(NAME sd_rename COMMAND test_sd_rename)
+
+set(OTA_SPACE_EXCERPT "${CMAKE_CURRENT_BINARY_DIR}/ota_space.inc")
+add_custom_command(OUTPUT "${OTA_SPACE_EXCERPT}"
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/extract_ota_space.py"
+            "${REPO_ROOT}/main/app_obd_dsp/ota_wifi_server.c" "${OTA_SPACE_EXCERPT}"
+    DEPENDS "${REPO_ROOT}/main/app_obd_dsp/ota_wifi_server.c" extract_ota_space.py
+    VERBATIM)
+add_executable(test_ota_space test_ota_space.c "${OTA_SPACE_EXCERPT}")
+target_include_directories(test_ota_space PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+target_compile_options(test_ota_space PRIVATE -Wall -Wextra -Werror -UNDEBUG)
+add_test(NAME ota_space COMMAND test_ota_space)
+
+set(HTTP_HEADERS_EXCERPT "${CMAKE_CURRENT_BINARY_DIR}/http_headers.inc")
+add_custom_command(OUTPUT "${HTTP_HEADERS_EXCERPT}"
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/extract_http_headers.py"
+            "${REPO_ROOT}/main/app_obd_dsp/ota_wifi_server.c"
+            "${REPO_ROOT}/main/app_obd_dsp/api_v1_handlers.c" "${HTTP_HEADERS_EXCERPT}"
+    DEPENDS "${REPO_ROOT}/main/app_obd_dsp/ota_wifi_server.c"
+            "${REPO_ROOT}/main/app_obd_dsp/api_v1_handlers.c" extract_http_headers.py
+    VERBATIM)
+add_executable(test_http_headers test_http_headers.c "${HTTP_HEADERS_EXCERPT}")
+target_include_directories(test_http_headers PRIVATE "${CMAKE_CURRENT_BINARY_DIR}" "${REPO_ROOT}/main")
+target_compile_options(test_http_headers PRIVATE -Wall -Wextra -Werror -UNDEBUG)
+add_test(NAME http_headers COMMAND test_http_headers)
+
+set(OTA_PAGE_EXCERPT "${CMAKE_CURRENT_BINARY_DIR}/ota_page.inc")
+add_custom_command(OUTPUT "${OTA_PAGE_EXCERPT}"
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/extract_ota_page.py"
+            "${REPO_ROOT}/main/export_path/screens/ui_ScreenPageOTAMode.c" "${OTA_PAGE_EXCERPT}"
+    DEPENDS "${REPO_ROOT}/main/export_path/screens/ui_ScreenPageOTAMode.c" extract_ota_page.py
+    VERBATIM)
+add_executable(test_ota_page test_ota_page.c "${OTA_PAGE_EXCERPT}")
+target_include_directories(test_ota_page PRIVATE "${CMAKE_CURRENT_BINARY_DIR}" "${REPO_ROOT}/main")
+target_compile_options(test_ota_page PRIVATE -Wall -Wextra -Werror -UNDEBUG)
+add_test(NAME ota_page COMMAND test_ota_page)

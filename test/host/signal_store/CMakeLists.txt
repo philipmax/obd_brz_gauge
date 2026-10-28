@@ -119,3 +119,17 @@ if(Python3_Interpreter_FOUND)
     add_test(NAME signal_lookup_generator COMMAND Python3::Interpreter
         "${CMAKE_CURRENT_SOURCE_DIR}/test_lookup_generator.py" "${CMAKE_C_COMPILER}")
 endif()
+
+# Check actual label-update behavior, including signed pressure and placeholders.
+if(Python3_Interpreter_FOUND)
+    set(DISPLAY_UPDATE_EXCERPT "${CMAKE_CURRENT_BINARY_DIR}/display_update.inc")
+    add_custom_command(OUTPUT "${DISPLAY_UPDATE_EXCERPT}"
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/extract_display_update.py"
+                "${REPO_ROOT}/main/export_path/ui_disp_item.c" "${DISPLAY_UPDATE_EXCERPT}"
+        DEPENDS "${REPO_ROOT}/main/export_path/ui_disp_item.c" extract_display_update.py
+        VERBATIM)
+    add_executable(test_display_response test_display_response.c "${DISPLAY_UPDATE_EXCERPT}")
+    target_include_directories(test_display_response PRIVATE "${CMAKE_CURRENT_BINARY_DIR}" stubs "${REPO_ROOT}/main")
+    target_compile_options(test_display_response PRIVATE -Wall -Wextra -Werror -UNDEBUG)
+    add_test(NAME display_response COMMAND test_display_response)
+endif()

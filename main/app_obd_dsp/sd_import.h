@@ -26,15 +26,12 @@ extern "C" {
  * storage lock for too long.
  * -------------------------------------------------------------------------- */
 
-/* Full scan (storage_service on card insert / after boot, UI "SCAN"). */
+/* Full scan (storage_service on card insert / after boot). */
 esp_err_t sd_import_scan(void);
 
 /* Boot pass, before vp_manager_init(): RESET.TXT, ACTIVATE.TXT and
  * *.vehicle.json only, so a reset / new profile takes effect this boot. */
 esp_err_t sd_import_scan_boot(void);
-
-/* Files that succeeded / failed in the last completed scan (either kind). */
-void sd_import_last_summary(int *ok, int *err);
 
 #ifdef __cplusplus
 }

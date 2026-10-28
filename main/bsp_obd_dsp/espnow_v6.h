@@ -16,8 +16,8 @@
  * length and then checks version == 5) silently drops every v6 frame.
  *
  * Capability handshake: a v6-capable slave keeps sending the 4-byte v5
- * presence (old masters count it) and additionally an 8-byte v6 HELLO with
- * ESPNOW_CAP_V6_DATA. A master switches to v6 DATA only while every online
+ * presence (old masters count it) and additionally an 8-byte base v6 HELLO
+ * (10 bytes when the demand capability is set) with ESPNOW_CAP_V6_DATA. A master switches to v6 DATA only while every online
  * slave has a fresh HELLO; otherwise it keeps sending v5. Slaves accept both.
  *
  * v6 DATA frame (38 + 6*n + 2 bytes):
@@ -81,8 +81,9 @@ extern "C" {
 #define ESPNOW_V6_MAX_REC         35    /* largest frame = 38 + 35*6 + 2 = 250 B */
 #define ESPNOW_V6_MAX_FRAGS       15
 #define ESPNOW_V6_FRAME_LEN(n)    (ESPNOW_V6_HDR_LEN + (n) * ESPNOW_V6_REC_LEN + ESPNOW_V6_CRC_LEN)
-#define ESPNOW_V6_HELLO_LEN       8     /* magic, version, type, position, caps, u16 reserved */
+#define ESPNOW_V6_HELLO_LEN       8     /* base: magic, version, type, position, caps, u16 reserved */
 #define ESPNOW_CAP_V6_DATA        0x01  /* HELLO caps: slave decodes v6 DATA */
+#define ESPNOW_CAP_DEMAND_MASK    0x02  /* HELLO carries a 16-bit local OBD demand mask */
 
 /* Registry numeric ids (contracts/signals.json; static, never renumbered). */
 #define ESPNOW_ID_RPM             0x0001
@@ -203,6 +204,12 @@ int espnow_rx_apply(const espnow_rx_frame_t *f, bool veh_ok, const espnow_apply_
 /* ---- v6 HELLO (slave -> master capability announcement) ---- */
 size_t espnow_hello_encode(uint8_t position, uint8_t caps, uint8_t *out, size_t cap);
 bool   espnow_hello_decode(const uint8_t *buf, size_t len, uint8_t *position, uint8_t *caps);
+/* Extended HELLO used by new three-gauge firmware. Older masters accept the
+ * first 8 bytes and ignore the appended demand mask. */
+size_t espnow_hello_encode_demand(uint8_t position, uint8_t caps, uint16_t demand_mask,
+                                  uint8_t *out, size_t cap);
+bool   espnow_hello_decode_demand(const uint8_t *buf, size_t len, uint8_t *position,
+                                  uint8_t *caps, uint16_t *demand_mask);
 
 /* ---- helpers ---- */
 /* FNV-1a 32 over id bytes, a 0x00 separator and rev (u16 LE). id NULL = "". */

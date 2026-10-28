@@ -43,17 +43,17 @@ void ui_ScreenPageEasterEgg_screen_init(void)
     const char *mode_str = is_slave ? "SLAVE"
                          : (device_role == ESPNOW_ROLE_MASTER) ? "MASTER" : "STANDALONE";
     const char *conn_label, *conn_name, *conn_status;
+    char name[32];
     if (is_slave) {
         bool linked = espnow_link_slave_has_data();
-        const char *mname = espnow_link_get_master_name();
+        espnow_link_copy_master_name(name, sizeof(name));
         conn_label  = "SLAVE";
-        conn_name   = (linked && mname[0]) ? mname : "--";
+        conn_name   = (linked && name[0]) ? name : "--";
         conn_status = linked ? "Linked" : "Waiting";
     } else {
-        const char *ble_name = elm327_ble_get_connected_name();
-        if (!ble_name || ble_name[0] == '\0') ble_name = "Not set";
+        elm327_ble_copy_connected_name(name, sizeof(name));
         conn_label  = "BLE";
-        conn_name   = ble_name;
+        conn_name   = name[0] ? name : "Not set";
         conn_status = elm327_ble_is_connected() ? "Connected" : "Disconnected";
     }
 

@@ -71,20 +71,11 @@ bool ui_ext_rpm_warn_possible(const nvs_user_cfg_t *cfg,
 // 25ms → 20Hz fast flash. Lower if not fast enough (15→33Hz), raise if too dazzling.
 #define RPM_FLASH_PERIOD_MS 25
 
-/* ---- SD theme library (contract: app_obd_dsp/theme_library.h) ----
-   LVGL task only. Deletes the theme page, unloads theme_0 and starts copying
-   /OBD/THEMES/<key>/theme.bin into it. The device restarts once the copy is done,
-   so every page is rebuilt for the new theme. On error the theme in theme_0 is
-   reloaded. A global timer started by ui_ext_init() also finishes resumed writes. */
-esp_err_t ui_ext_theme_activate(const char *key);
-// Status line for the storage page ("" when nothing to report); *ok = false for errors.
-const char *ui_ext_theme_status(bool *ok);
-
 /* Caller holds LVGL mutex. Release active SD resources before USB replacement. */
 esp_err_t ui_ext_theme_prepare_install(void);
 
 /* ---- Lifecycle ---- */
-void ui_ext_init(void);   // called in app_main after ui_init (starts the theme library timer)
+void ui_ext_init(void);   // called after ui_init; monitors legacy SD selection recovery
 
 #ifdef __cplusplus
 }

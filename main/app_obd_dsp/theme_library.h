@@ -22,20 +22,6 @@ typedef enum {
     THEME_LIB_ERROR,     /* see theme_library_last_error(); ack to clear */
 } theme_lib_state_t;
 
-typedef struct {
-    char     key[STORAGE_THEME_KEY_LEN];   /* directory name under /OBD/THEMES */
-    char     id[STORAGE_THEME_ID_LEN];
-    char     name[64];
-    char     version[16];
-    uint32_t size;                         /* used bytes of theme.bin */
-    bool     active;                       /* persisted selection matches this theme */
-} theme_lib_entry_t;
-
-/* Scan /OBD/THEMES (opens every theme.bin: call from a worker task, not the
- * LVGL task). Returns the number of entries written (0 when no card), or -1
- * while another storage job (import / theme write) runs - retry later. */
-int theme_library_list(theme_lib_entry_t *out, int max);
-
 /* Start asynchronous SD validation and selection; refused during OTA or another storage job. */
 esp_err_t theme_library_activate(const char *key);
 /* Synchronous validation + NVS commit for OTA and migration workers. */

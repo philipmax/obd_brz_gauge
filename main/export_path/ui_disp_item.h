@@ -45,6 +45,13 @@ static inline bool ui_disp_item_is_selectable(uint8_t item)
     return item < DISP_ITEM_COUNT && item != DISP_ITEM_RESERVED_9;
 }
 
+// Dynamic engine inputs should show the latest sample without a second ramp.
+static inline bool ui_disp_item_low_latency(disp_item_t item)
+{
+    return item == DISP_ITEM_RPM || item == DISP_ITEM_SPEED ||
+           item == DISP_ITEM_BOOST || item == DISP_ITEM_TPS || item == DISP_ITEM_LOAD;
+}
+
 // Invalid-sample sentinel for the generic chart page (distinct from legit negative values like coolant temp -10)
 #define CHART_INVALID (-32768)
 
@@ -82,7 +89,7 @@ void disp_item_set_text(lv_obj_t *label, disp_item_t item, int32_t value, bool v
 // Color per NVS alarm threshold (nvs_chart_alarm_get): red above threshold, else white
 void disp_item_set_value_color(lv_obj_t *label, disp_item_t item, int32_t value, bool valid);
 
-// All-in-one update: adaptive-step smoothing + text formatting + alarm coloring
+// Latest-sample dynamic inputs / adaptive-step slow inputs + text / alarm coloring
 // *state holds the currently displayed value; when valid=false the last valid value is kept
 void disp_item_update(int32_t *state, lv_obj_t *label, disp_item_t item,
                       int32_t raw, bool valid, int32_t threshold);

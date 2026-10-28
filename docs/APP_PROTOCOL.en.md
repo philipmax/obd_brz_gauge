@@ -83,6 +83,7 @@ call the unauthenticated `GET /ota/discover` to get this session's token:
 | `/ota/theme/prepare` | POST | Theme preflight (header `X-OTA-Size`), returns `{"ok":true,"storage":"sd","partitionSize":N,"psramFree":N,"largestBlock":N}`, no erase |
 | `/ota/theme` | POST | Chunked theme upload |
 | `/ota/theme/erase` | POST | Delete the selected theme's `/OBD/THEMES/<key>/` directory and clear selection; returns `{"ok":true,"deleted":true|false}` and uses the built-in theme on next boot. Requires a mounted SD card; other themes and shared boot animations are untouched |
+| `/ota/vehicles/clear` | POST | Delete all installed vehicle JSON/PID profiles and SD mirrors, returning `{"ok":true,"cleared":true,"pending":"obd2.generic"}`; requires a mounted SD card and retains the builtin generic profile, templates, themes and animations |
 | `/ota/coredump` | GET | Download the stored coredump image (`application/octet-stream`, `coredump.bin`); returns 204 No Content with an empty body when there is no coredump |
 | `/ota/coredump/erase` | POST | Erase the coredump partition, returns `{"ok":true}` |
 
@@ -116,6 +117,8 @@ Upload bodies:
   SD `/OBD/BOOT/bootmedia.raw` pads the manifest to 4 KB with `0xFF`; SHA excludes padding.
   A manifest length of `0` denotes complete OBV/OBV2, staged as `boot.obv.part`, synced and validated before committing to `boot.obv`. Other old formats are cleaned up after commit; cleanup failures log warnings, preserve the new file and return installation success.
 
+Upload total, manifest-size and offset headers are decimal unsigned 32-bit integers. Explicit empty values, signs, non-digit characters, overflow and oversized values return 400. An absent `X-Offset` defaults to 0; an absent `/api/v1` `X-OTA-Size` defaults to the request body length.
+
 **Errors**: `/ota/*` returns HTTP 400 + `{"error":"<原因>"}`, including `unauthorized`,
 `missing headers`, `invalid headers`, `SD card required`, `not enough SD space`, `install failed`.
 
@@ -124,8 +127,7 @@ first chunks of `/ota/theme` / `/ota/bootmedia` return `theme library busy`.
 
 **Media requires SD**: preflight and upload require mounted SD with free space ≥ physical
 file size (including animation padding) + 64 KB. `storage` is always `"sd"`. Legacy fields
-`partitionSize` (theme) and `free` (animation) mean SD free space minus 64 KB, capped at
-`UINT32_MAX`, not Flash capacity. `psramFree` / `largestBlock` are diagnostics; the entire
+`partitionSize` (theme) and `free` (animation) use one preflight snapshot of SD free space minus 64 KB, clamped to zero and capped at `UINT32_MAX`. They do not reserve space or represent Flash capacity. `psramFree` / `largestBlock` are diagnostics; the entire
 media package need not fit in PSRAM. Animation uploads do not change themes; other formats in the shared directory are cleaned up only after the new animation commits.
 
 ## USB Web Management, Theme and Boot-Animation
@@ -218,7 +220,7 @@ credentials. Other `/api/v1` endpoints do not expose CORS; authentication is unc
 The web vehicle community installs over USB and displays firmware validation results;
 selection and reboot require separate confirmation. Installing never switches profiles automatically.
 Legacy HTTP clients may still be blocked by mixed-content/local-network policies.
-Alternatively, download `<id>.vehicle.json` to SD `/OBD/IMPORT/` and import on the storage page.
+Firmware also processes files in SD `/OBD/IMPORT/` automatically on boot or card insertion.
 Community profiles are not vehicle-certified. Verify compatibility, requests and decoding while parked;
 a matching ID may replace an existing profile, so back it up first.
 
@@ -238,8 +240,6 @@ map to 400 `invalid_arg`, 404 `not_found`, 409 `invalid_state` /
 | `/api/v1/vehicles/activate` | POST | `{"id":"..."}` | `{"ok":true,"pending":"<id>","reboot_required":true}`; 400 `bad_id` |
 | `/api/v1/vehicles/reset` | POST | – | same, `pending` is `obd2.generic`; also cancels a vehicle the first-boot migration still wanted to activate |
 | `/api/v1/vehicles/rollback` | POST | – | same, `pending` is the previous vehicle |
-| `/api/v1/vehicles/remove` | POST | `{"id":"..."}` | `{"ok":true,"removed":"<id>"}`; the current and builtin vehicles cannot be removed |
-| `/api/v1/vehicles/<id>` | DELETE | – | same as `vehicles/remove` |
 | `/api/v1/theme/sidecar` | POST | chunked upload of a sidecar or a full `.gaugeproj.json` (≤32 MB) | `{ok,size,report}`; saving requires the SD card: 409 `sd_unavailable`, 507 `sd_full`; 422 `invalid_sidecar` |
 | `/api/v1/theme/sidecar` | DELETE | `?theme=<id>` (≤64 chars, omitted = current theme) | `{"ok":true}`; 409 `sd_unavailable` without an SD card |
 | `/api/v1/fs/put` | PUT / POST | `?path=`, chunked body | `{ok,path,size}`; 400 `bad_path`, 409 `sd_unavailable` / `config_unavailable`, 507 `sd_full` / `config_full` |
@@ -295,7 +295,7 @@ a time.
 | Frame | Direction | Length | Content |
 |-------|-----------|--------|---------|
 | v5 presence | slave → master | 4 B | magic, version `5`, position 1..3; every 500 ms |
-| v6 HELLO | slave → master | 8 B | see table below; every 500 ms, sent together with v5 presence |
+| v6 HELLO | slave → master | 8 B (10 B with demand mask) | see table below; every 500 ms, sent together with v5 presence |
 | v5 control | both ways | 6 B | magic, version `5`, cmd (`1` linked-test start / `2` sync RPM warning threshold), u16 arg |
 | v5 DATA | master → slave | 47 B | legacy fixed structure, see below |
 | v6 DATA | master → slave | 38 + 6n + 2 B (≤250) | see table below |
@@ -348,8 +348,14 @@ slave is bound to a master MAC, it only accepts frames from that MAC.
 | 2 | 1 | version `6` |
 | 3 | 1 | type `2` |
 | 4 | 1 | position 1..3 |
-| 5 | 1 | caps: bit0 = decodes v6 DATA |
+| 5 | 1 | caps: bit0 = decodes v6 DATA; bit1 = appended local page demand mask |
 | 6 | 2 | reserved, 0 (receivers accept length ≥ 8) |
+| 8 | 2 | local OBD demand mask when caps bit1 is set; bit i maps to `SIG_OBD_*` |
+
+Each slave advertises the OBD signals needed by its current page. The master unions
+fresh masks from all slaves within the 2 s online window, then asks the single OBD
+poller for those signals and broadcasts them. Older firmware keeps using the 8-byte
+HELLO and ignores the appended fields.
 
 **v5 DATA** (47 B, legacy units): offset 0 magic, 2 version, 3 flags (same
 bit layout as v6), 4 seq u32, 8 rpm u16, 10 speed u8, 11 sweep_step, 12

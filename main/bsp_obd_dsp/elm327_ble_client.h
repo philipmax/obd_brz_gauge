@@ -15,6 +15,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -66,8 +67,8 @@ void elm327_ble_disconnect(void);
 // gets the whole 2.4 GHz radio. One-way: OTA mode ends with a reboot.
 void elm327_ble_pause_for_ota(void);
 
-// Name of the bound / connected adapter ("OBDII" when none was given).
-const char *elm327_ble_get_connected_name(void);
+// Copy a synchronized, NUL-terminated adapter name ("OBDII" by default).
+void elm327_ble_copy_connected_name(char *out, size_t capacity);
 
 #ifdef __cplusplus
 }

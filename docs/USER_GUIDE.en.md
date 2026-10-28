@@ -81,6 +81,8 @@ the Logo, and a failed theme preparation falls back to the built-in page. Theme 
 
 When data times out or BLE drops, gauge pages show a **NO SIGNAL** banner.
 
+RPM, speed, boost and throttle receive priority polling when demanded by the current page. Built-in numeric, speed and needle pages display these inputs and load from the latest sample without an extra display ramp. Slower inputs such as temperature retain smoothing. Actual update speed remains limited by the adapter, ECU and profile minimum sampling periods.
+
 **Deleting a saved device on the BLE SCAN page**: tapping the ✕ next to the
 saved device in the list immediately disconnects the current ELM327 link and
 clears the saved name / MAC — **it does not auto-reconnect**; you must scan
@@ -142,6 +144,11 @@ The cluster also supports a **linked RPM warning**: past the threshold the
 three gauges light up in position order and then all flash (toggleable as
 Linked mode on the RPM warning page), plus the synchronized "RACE / AS / ONE"
 boot animation.
+
+The master merges the signals demanded by each online slave's current page.
+When a slave switches to boost, oil temperature or another signal page, the
+master adds that signal on the next poll round; slaves never open their own
+OBD connection or create extra requests.
 
 TEST on the RPM warning page uses the master-generated ramp; pressing TEST again on either
 master or slave restarts it. A request shortens the master's idle broadcast wait, but send batches
@@ -231,3 +238,5 @@ On the web USB flasher, choose “Clear installed vehicle profiles” in the veh
 ## Video decode ahead and double buffering
 
 Playback retains sequential SD read-ahead, a PSRAM compressed-frame ring and a persistent JPEG decoder. Fullscreen mode decodes the next frame's first MCU strip or whole image ahead of time and starts panel transfer at its source deadline. Two internal DMA strips alternate by parity; submission waits for the previous transfer and never overwrites an in-flight buffer. Composite themes retain front/back frame buffers and LVGL handoff. OBV2 also decodes ahead, retaining compressed frames and shifting the timeline on pause; expired frames follow existing skip rules. Decode timing excludes deadline sleep. Actual FPS still requires device measurement; host tests do not establish a fixed hardware frame rate.
+
+On entering OTA, the gauge stops multi-gauge communication and finishes current work. It may briefly show `WiFi: Starting...` before the hotspot is ready.

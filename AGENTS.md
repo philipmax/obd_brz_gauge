@@ -41,6 +41,7 @@ BLE 连 ELM327 兼容适配器读车况，ESP-NOW 三连表联动，双主题系
 - `main/export_path/ui_theme_generated.c`、`main/export_path/theme_assets/` 是生成物，永远不要手改
 - `main/export_path/ui_ext.c` 是手写扩展区，SquareLine 重导出不得覆盖
 - ELM327 轮询是**单线程状态机**，不要引入并行/交错请求
+- ESP-NOW 从表 DATA 回调只入队，维护任务统一应用数据和处理超时；OTA 必须等 `espnow_link_pause_for_ota()` 返回 true，禁止从外部删除主从表维护任务（`espnow_link.c`）
 - 全屏视频借用 LVGL DMA 缓冲时必须保护刷新回调；仅 `lv_timer_pause` 会被切页/布局更新自动恢复（`main/media/video_player.c`）
 - BLE 任务无限等待时必须注册 `shutdown_cb`；唤醒对象不得随任务删除释放（`ble_hub.h` / `racechrono_ble_diy.c`）
 - 视频 ring 保持单生产者/单消费者；消费者释放前不得改写已提交帧（锁外读取依赖此约束，见 `main/media/video_ring_peek.h`）

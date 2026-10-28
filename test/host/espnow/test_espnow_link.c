@@ -5,6 +5,7 @@
 #include "espnow_test_sdk.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
+#include "freertos/queue.h"
 #include "bsp_obd_dsp/espnow_link.h"
 #include "bsp_obd_dsp/espnow_v6.h"
 #include "bsp_obd_dsp/nvs_storage.h"
@@ -20,12 +21,12 @@
 typedef enum {
     IDLE, LOCAL, REMOTE, V6, RESTART, THRESHOLD, SATURATE, STORM,
     PRE_TAKE, OTA_ACTIVE, OTA_IDLE, CREATE_FAIL, SLAVE, HIGH_CLOCK,
-    ZERO_THRESHOLD, REMOTE_IDLE, SNAPSHOT_RESTART, SCENARIO_COUNT
+    ZERO_THRESHOLD, REMOTE_IDLE, SNAPSHOT_RESTART, STOP_COLLECT, SLAVE_FAIL, SCENARIO_COUNT
 } scenario_t;
 static const char *const names[] = {
     "idle", "local", "remote", "v6", "restart", "threshold", "saturate", "storm",
     "before_take", "ota_active", "ota_idle", "create_fail", "slave", "64bit_clock",
-    "zero_threshold", "remote_idle", "snapshot_restart"
+    "zero_threshold", "remote_idle", "snapshot_restart", "stop_during_collect", "slave_create_fail"
 };
 static scenario_t scenario;
 static TaskFunction_t worker;
@@ -43,6 +44,34 @@ static nvs_user_cfg_t cfg;
 typedef enum { START_LOCAL, START_REMOTE, SET_THRESHOLD, STOP_OTA } action_t;
 static struct { int64_t at; action_t action; } events[1100];
 static unsigned event_count, event_index;
+static unsigned slave_wait_phase, slave_invalidations, slave_data_writes;
+static int32_t slave_rpm, slave_link;
+static bool slave_stop_requested;
+static void slave_receive(int32_t rpm);
+
+QueueHandle_t xQueueCreateStatic(UBaseType_t capacity, UBaseType_t item_size,
+                                uint8_t *bytes, StaticQueue_t *storage)
+{
+    CHECK(!lock_depth && capacity == 8 && item_size && bytes && storage);
+    *storage = (StaticQueue_t){.bytes=bytes, .size=item_size, .capacity=capacity};
+    return storage;
+}
+BaseType_t xQueueSend(QueueHandle_t q, const void *item, TickType_t wait)
+{
+    CHECK(!lock_depth && q && item && !wait);
+    if (q->count == q->capacity) return pdFALSE;
+    memcpy(q->bytes + ((q->head + q->count) % q->capacity) * q->size, item, q->size);
+    q->count++;
+    return pdTRUE;
+}
+BaseType_t xQueueReceive(QueueHandle_t q, void *item, TickType_t wait)
+{
+    CHECK(!lock_depth && q && item && !wait);
+    if (!q->count) return pdFALSE;
+    memcpy(item, q->bytes + q->head * q->size, q->size);
+    q->head = (q->head + 1) % q->capacity; q->count--;
+    return pdTRUE;
+}
 
 void ble_test_enter(portMUX_TYPE *mux) { CHECK(!mux->locked); mux->locked = true; lock_depth++; }
 void ble_test_exit(portMUX_TYPE *mux) { CHECK(mux->locked && lock_depth); mux->locked = false; lock_depth--; }
@@ -69,14 +98,13 @@ static void inject(action_t action)
     case START_REMOTE: start(true); break;
     case SET_THRESHOLD: cfg.rpm_warn_threshold = 9000; break;
     case STOP_OTA: {
-        espnow_link_pause_for_ota();
-        CHECK(deleted && !espnow_link_linktest_active());
-        CHECK(!override_active && !override_rpm);
+        CHECK(!espnow_link_pause_for_ota());
+        CHECK(!deleted && !deinit_count && !espnow_link_linktest_active());
         unsigned old_gives = gives;
         espnow_link_trigger_linked_test(); remote_start(late_recv_fn);
         CHECK(!espnow_link_linktest_active() && gives == old_gives);
-        espnow_link_pause_for_ota();
-        CHECK(deletes == 1 && deinit_count == 1);
+        CHECK(!espnow_link_pause_for_ota());
+        CHECK(!deletes && !deinit_count);
         break;
     }
     }
@@ -93,7 +121,44 @@ BaseType_t xSemaphoreGive(SemaphoreHandle_t sem)
 { CHECK(sem == wake_sem && !lock_depth); gives++; sem->token = true; return pdTRUE; }
 BaseType_t xSemaphoreTake(SemaphoreHandle_t sem, TickType_t ticks)
 {
-    CHECK(sem == wake_sem && !lock_depth && ticks && ticks <= 100);
+    CHECK(sem == wake_sem && !lock_depth && ticks && ticks <= (scenario == SLAVE ? 250u : 100u));
+    if (scenario == SLAVE) {
+        CHECK(++waits < 10);
+        if (sem->token) { sem->token = false; return pdTRUE; }
+        unsigned phase = slave_wait_phase++;
+        if (phase == 0) {
+            CHECK(!slave_data_writes && !espnow_link_slave_has_data()); // binding changed after enqueue
+            uint8_t mac[6] = {1}; espnow_link_bind_master(mac);
+            slave_receive(7777);
+            now_us += 2000000; // expire the queued packet before the worker gets to it
+            sem->token = false;
+            return pdTRUE;
+        }
+        if (phase == 1) {
+            CHECK(!slave_data_writes && !espnow_link_slave_has_data());
+            for (int i=0; i<10; i++) slave_receive(1000 + i); // bounded FIFO
+            sem->token = false;
+            return pdTRUE;
+        }
+        if (phase == 2) {
+            CHECK(slave_rpm == 1007 && slave_link == SIG_LINK_DATA && slave_data_writes == 8);
+            CHECK(espnow_link_slave_has_data());
+            char name[16]; memset(name, 0x5A, sizeof(name));
+            espnow_link_copy_master_name(NULL, 10);
+            espnow_link_copy_master_name(name, 0); CHECK(name[0] == 0x5A);
+            espnow_link_copy_master_name(name, 1); CHECK(name[0] == 0 && name[1] == 0x5A);
+            espnow_link_copy_master_name(name, 4); CHECK(!strcmp(name, "Rad") && name[4] == 0x5A);
+            espnow_link_copy_master_name(name, sizeof(name)); CHECK(!strcmp(name, "RadioMaster"));
+            CHECK(name[12] == 0x5A);
+            slave_receive(2222);
+            CHECK(slave_rpm == 1007); // callback only queues, never reenters the store
+            sem->token = false;
+            return pdTRUE;
+        }
+        CHECK(phase == 3 && slave_rpm == 2222);
+        now_us += 2000000; // timeout clears the old values on this same worker
+        return pdFALSE;
+    }
     CHECK(++waits < 100000);  // a stale token/event must not cause a busy loop
     if (scenario == PRE_TAKE && !pre_injected) { pre_injected = true; start(false); }
     if (sem->token) { sem->token = false; return pdTRUE; }
@@ -111,14 +176,18 @@ BaseType_t xSemaphoreTake(SemaphoreHandle_t sem, TickType_t ticks)
 BaseType_t xTaskCreate(TaskFunction_t fn, const char *name, uint32_t stack,
                        void *arg, UBaseType_t priority, TaskHandle_t *handle)
 {
-    (void)arg; CHECK(!lock_depth && priority == 4); creates++;
+    (void)arg; CHECK(!lock_depth && priority == 4 && !handle); creates++;
     CHECK(creates == 1);  // no independent 3KB link-test task
-    if (scenario == SLAVE) { CHECK(!strcmp(name, "espnow_pres") && stack == 2560); }
+    if (scenario == SLAVE || scenario == SLAVE_FAIL) { CHECK(!strcmp(name, "espnow_pres") && stack == 3584 && !handle); }
     else CHECK(!strcmp(name, "espnow_tx") && stack == 3584);
-    if (scenario == CREATE_FAIL) return pdFALSE;
-    worker = fn; *handle = &worker; return pdPASS;
+    if (scenario == CREATE_FAIL || scenario == SLAVE_FAIL) return pdFALSE;
+    worker = fn; if (handle) *handle = &worker; return pdPASS;
 }
-void vTaskDelete(TaskHandle_t task) { CHECK(task == &worker && !lock_depth); deletes++; deleted = true; }
+void vTaskDelete(TaskHandle_t task) {
+    CHECK(task == NULL && !lock_depth);
+    deletes++; deleted = true;
+    longjmp(task_exit, 1);
+}
 void vTaskDelay(TickType_t ticks) { (void)ticks; CHECK(false); }
 nvs_user_cfg_t nvs_cfg_read(void)
 { CHECK(!lock_depth); configs++; expected_active = oracle(&expected_rpm); return cfg; }
@@ -145,6 +214,10 @@ const char *vp_manager_active_id(void) { return "test.profile"; }
 uint64_t signal_store_get_many(const int *slots, size_t count, int32_t *values)
 {
     CHECK(!lock_depth);
+    if (scenario == STOP_COLLECT && !snapshot_injected) {
+        snapshot_injected = true;
+        CHECK(!espnow_link_pause_for_ota() && !deleted && !deinit_count);
+    }
     if (scenario == SNAPSHOT_RESTART && now_us == origin + 8300000 && !snapshot_injected) {
         snapshot_injected = true; start(true); // after completion sample, before packet assembly
     }
@@ -159,12 +232,37 @@ uint64_t signal_store_get_many(const int *slots, size_t count, int32_t *values)
 int signal_store_veh_count(void) { return 0; }
 int signal_store_slot_by_id(uint16_t id) { for (int i = 0; i < SIG_STD_COUNT; i++) if (sig_registry[i].num_id == id) return i; return SIG_SLOT_NONE; }
 bool signal_store_is_local(int slot) { (void)slot; return false; }
-bool signal_store_set(int slot, int32_t value) { (void)slot; (void)value; return true; }
+bool signal_store_set(int slot, int32_t value) {
+    CHECK(!lock_depth);
+    if (scenario == SLAVE && slot == SIG_SYS_OBD_LINK) slave_link = value;
+    return true;
+}
 void signal_store_set_many(const int *slots, const int32_t *values, size_t count)
-{ (void)slots; (void)values; (void)count; }
+{
+    CHECK(!lock_depth);
+    if (scenario != SLAVE) return;
+    for (size_t i=0; i<count; i++) if (slots[i] == SIG_OBD_RPM) {
+        slave_rpm = values[i]; slave_data_writes++;
+        if (slave_rpm == 3333) {
+            CHECK(!espnow_link_pause_for_ota());
+            CHECK(!deleted && !deinit_count); // never kill a worker inside signal_store
+            slave_stop_requested = true;
+        }
+    }
+}
 void signal_store_invalidate(int slot) { (void)slot; }
 void signal_store_invalidate_many(const int *slots, size_t count) { (void)slots; (void)count; }
-void signal_store_invalidate_vehicle(void) {}
+void signal_store_invalidate_vehicle(void) {
+    CHECK(!lock_depth);
+    if (scenario != SLAVE) return;
+    slave_invalidations++;
+    if (slave_invalidations == 1) {
+        unsigned before = slave_data_writes;
+        slave_receive(3333); // receive during timeout invalidation
+        CHECK(slave_data_writes == before); // callback cannot interleave writes
+    }
+    slave_rpm = 0;
+}
 bool app_event_send(app_event_type_t type, uint32_t data) { (void)type; (void)data; return true; }
 
 void *heap_caps_malloc(size_t bytes, unsigned caps) { (void)caps; return malloc(bytes); }
@@ -186,8 +284,10 @@ esp_err_t esp_now_send(const uint8_t *mac, const uint8_t *data, size_t len)
 {
     (void)mac; CHECK(!lock_depth && !deinitialized);
     if (scenario == SLAVE) {
-        CHECK(espnow_classify(data, len) == ESPNOW_PKT_V5_CTRL && len == 6 && data[3] == 1);
-        slave_requests++; return ESP_OK;
+        espnow_pkt_kind_t kind = espnow_classify(data, len);
+        CHECK(kind == ESPNOW_PKT_V5_CTRL || kind == ESPNOW_PKT_V5_PRESENCE || kind == ESPNOW_PKT_V6_HELLO);
+        if (kind == ESPNOW_PKT_V5_CTRL) { CHECK(len == 6 && data[3] == 1); slave_requests++; }
+        return ESP_OK;
     }
     const uint16_t rpm = expected_rpm;
     const bool active = expected_active;
@@ -213,14 +313,39 @@ esp_err_t esp_now_send(const uint8_t *mac, const uint8_t *data, size_t len)
     packets++; if (active) active_packets++; else idle_packets++;
     return ESP_OK;
 }
+static void slave_receive(int32_t rpm)
+{
+    espnow_snapshot_t snapshot;
+    uint8_t frame[ESPNOW_FRAME_MAX], mac[6] = {1};
+    esp_now_recv_info_t info = {.src_addr = mac};
+    espnow_snapshot_init(&snapshot);
+    snapshot.flags = ESPNOW_FLAG_ELM;
+    memcpy(snapshot.name, "RadioMaster", 12);
+    espnow_snapshot_put(&snapshot, ESPNOW_ID_RPM, rpm);
+    size_t len = rpm == 3333 ? espnow_v6_encode(&snapshot, 0, frame, sizeof(frame))
+                             : espnow_v5_encode(&snapshot, frame, sizeof(frame));
+    CHECK(len > 0 && late_recv_fn); late_recv_fn(&info, frame, (int)len);
+    memset(frame, 0xA5, sizeof(frame)); // caller's buffer is no longer valid after the callback
+}
 static void setup(void)
 {
     origin = scenario == HIGH_CLOCK ? INT64_C(5000000000000) : ORIGIN;
     now_us = origin; end_us = origin + 9000000;
     cfg.rpm_warn_threshold = scenario == SATURATE ? UINT16_MAX : scenario == ZERO_THRESHOLD ? 0 : 7000;
     cfg.rpm_warn_linked_en = 1;
+    if (scenario == SLAVE_FAIL) {
+        espnow_link_start_slave(); CHECK(!worker && !espnow_link_slave_has_data());
+        slave_receive(1234); CHECK(!slave_data_writes && !espnow_link_slave_has_data());
+        CHECK(espnow_link_pause_for_ota() && deinit_count == 1); return;
+    }
     if (scenario == SLAVE) {
-        espnow_link_start_slave(); espnow_link_trigger_linked_test();
+        espnow_link_start_slave();
+        CHECK(!espnow_link_slave_has_data());
+        now_us = INT64_C(5000000000000);
+        slave_receive(6666);
+        uint8_t new_master[6] = {2}; espnow_link_bind_master(new_master);
+        CHECK(!slave_data_writes && !espnow_link_slave_has_data());
+        espnow_link_trigger_linked_test();
         CHECK(slave_requests == 1 && !espnow_link_linktest_active()); return;
     }
     espnow_link_start_master(); CHECK(creates == 1 && wake_sem);
@@ -233,9 +358,18 @@ static void setup(void)
     case IDLE: end_us = origin + 1000000; break;
     case REMOTE: start(true); break;
     case V6: {
-        uint8_t mac[6] = {1}, hello[ESPNOW_V6_HELLO_LEN];
+        uint8_t mac[6] = {1}, hello[ESPNOW_V6_HELLO_LEN + 2];
         esp_now_recv_info_t info = {.src_addr = mac};
-        recv_fn(&info, hello, (int)espnow_hello_encode(1, ESPNOW_CAP_V6_DATA, hello, sizeof(hello)));
+        recv_fn(&info, hello, (int)espnow_hello_encode_demand(
+            1, ESPNOW_CAP_V6_DATA | ESPNOW_CAP_DEMAND_MASK,
+            (uint16_t)((1u << SIG_OBD_SPEED) | (1u << SIG_OBD_BOOST)),
+            hello, sizeof(hello)));
+        CHECK(espnow_master_online_slaves() == 1);
+        CHECK(espnow_link_remote_demand_mask() ==
+              (uint16_t)((1u << SIG_OBD_SPEED) | (1u << SIG_OBD_BOOST)));
+        now_us += 2000000;
+        CHECK(espnow_master_online_slaves() == 0);
+        now_us = origin; /* restore virtual clock before starting the worker */
         end_us = origin + 1000000; start(false); break;
     }
     case RESTART: start(false); event(8299000, START_REMOTE); end_us = origin + 17000000; break;
@@ -255,9 +389,17 @@ static void setup(void)
 static void run(scenario_t value)
 {
     scenario = value; setup();
-    if (worker && scenario != SLAVE) { if (!setjmp(task_exit)) worker(NULL); }
+    if (worker) { if (!setjmp(task_exit)) worker(NULL); }
+    if (scenario == SLAVE) {
+        CHECK(slave_stop_requested && deleted && deletes == 1 && slave_invalidations == 2);
+        CHECK(slave_data_writes == 10 && !slave_rpm && slave_link == SIG_LINK_NONE);
+        CHECK(!espnow_link_slave_has_data() && espnow_link_pause_for_ota() && deinit_count == 1);
+        unsigned before = slave_data_writes;
+        slave_receive(9999); // retained late callback must not revive a stopped worker
+        CHECK(slave_data_writes == before && !espnow_link_slave_has_data());
+    }
     CHECK(!lock_depth);
-    if (scenario != SLAVE && scenario != CREATE_FAIL) CHECK(configs == packets);
+    if (scenario != SLAVE && scenario != CREATE_FAIL && scenario != STOP_COLLECT) CHECK(configs == packets);
     if (scenario == IDLE) CHECK(packets == 10 && waits == 10 && !overrides);
     if (scenario == LOCAL || scenario == REMOTE || scenario == SATURATE || scenario == HIGH_CLOCK || scenario == ZERO_THRESHOLD)
         CHECK(active_packets == 415 && idle_packets == 7 && overrides == 416);
@@ -265,7 +407,12 @@ static void run(scenario_t value)
     if (scenario == STORM || scenario == PRE_TAKE) CHECK(packets == 50);
     if (scenario == REMOTE_IDLE) CHECK(packets == 50 && active_packets == 49 && last_frame_us == origin + 983456);
     if (scenario == SNAPSHOT_RESTART) CHECK(snapshot_injected && active_packets == 829 && idle_packets == 5);
-    if (scenario == OTA_ACTIVE || scenario == OTA_IDLE) CHECK(deleted && deinit_count == 1);
+    if (scenario == STOP_COLLECT) CHECK(snapshot_injected && configs == 1 && !packets);
+    if (scenario == OTA_ACTIVE || scenario == OTA_IDLE || scenario == STOP_COLLECT) {
+        CHECK(deleted && !override_active && !override_rpm);
+        CHECK(espnow_link_pause_for_ota() && deinit_count == 1);
+        CHECK(espnow_link_pause_for_ota() && deinit_count == 1);
+    }
     printf("%-14s packets=%u cfg=%u override=%u waits=%u gives=%u tasks=%u\n",
            names[value], packets, configs, overrides, waits, gives, creates);
     fflush(stdout);
@@ -278,6 +425,6 @@ int main(void)
         int status; CHECK(waitpid(pid, &status, 0) == pid);
         CHECK(WIFEXITED(status) && WEXITSTATUS(status) == 0);
     }
-    puts("17 real ESP-NOW worker/callback/lifecycle scenarios passed");
+    puts("19 real ESP-NOW worker/callback/lifecycle scenarios passed");
     return 0;
 }

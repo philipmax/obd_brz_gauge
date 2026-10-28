@@ -1427,14 +1427,15 @@ esp_err_t video_player_set_position(double position)
     if (!s || !s->value_driven || !isfinite(position)) return ESP_ERR_INVALID_STATE;
     taskENTER_CRITICAL(&s->lock);
     double next = fmax(0.0, fmin(1.0, position));
-    if (s->position != next && (!s->hdr_ready ||
+    bool changed = s->position != next && (!s->hdr_ready ||
         floor(s->position * (s->info.frame_count - 1u) + 0.5) !=
-        floor(next * (s->info.frame_count - 1u) + 0.5))) {
-        s->position_revision++;
-    }
+        floor(next * (s->info.frame_count - 1u) + 0.5));
+    if (changed) s->position_revision++;
     s->position = next;
     taskEXIT_CRITICAL(&s->lock);
-    xEventGroupSetBits(s->ev, EV_WAKE_READER | EV_WAKE_DECODER);
+    // Sub-frame RPM/throttle jitter cannot change the picture. Avoid waking
+    // both workers until the quantized target actually changes (ABA included).
+    if (changed) xEventGroupSetBits(s->ev, EV_WAKE_READER | EV_WAKE_DECODER);
     return ESP_OK;
 }
 

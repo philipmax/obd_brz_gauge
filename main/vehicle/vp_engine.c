@@ -59,6 +59,7 @@
 #define ENG_IDLE_MS         50
 #define ENG_WAIT_CAP        100
 #define ENG_DEF_GEAR_TOL    0.15f
+#define ENG_RESP_SIGNAL_COUNT 4u
 #define ENG_EMA_ALPHA       0.3f
 #define ENG_HYST_NONE       (-100)
 
@@ -149,6 +150,7 @@ struct vp_engine {
     uint8_t  det_proto;     /* detected this session (0 = none) */
     uint8_t  detect_next;   /* current candidate index */
     uint8_t  detect_attempt;
+    bool     detect_fallback; /* generic 0100 probe fell back to demanded RPM */
     bool     skip_init_atz; /* adapter check already reset the ELM state */
     bool     mon_ok;
     bool     busy;
@@ -193,9 +195,10 @@ struct vp_engine {
     uint8_t  round_pos;
     bool     in_round;
     bool     every_done;
-    uint8_t  slot_req[3 + VP_MAX_EVERY_SIGNALS];
+    uint8_t  slot_req[2 + ENG_RESP_SIGNAL_COUNT + VP_MAX_EVERY_SIGNALS];
     uint8_t  slot_n;
     uint8_t  slot_pos;
+    bool     rpm_refreshed;
     int16_t  pending_after_req;
     int16_t  chain_req;
     bool     chain_failed;
@@ -228,6 +231,7 @@ struct vp_engine {
     uint8_t  heal_count;
 
     /* derived signals */
+    int16_t  sig_rpm;
     int16_t  sig_gear;
     int32_t  rpm;
     int32_t  speed;
@@ -1928,6 +1932,7 @@ static void start_detect(vp_engine_t *e)
     e->st.phase = e->phase;
     e->detect_next = 0;
     e->detect_attempt = 0;
+    e->detect_fallback = false;
     e->run_proto = 0;
     q_clear(e);
     elog(e, "protocol auto-detect across %u candidates",
@@ -1987,6 +1992,7 @@ static void detect_next(vp_engine_t *e)
     proto = detect_protocol(e, e->detect_next);
     e->run_proto = proto;
     e->detect_attempt++;
+    e->detect_fallback = false;
     q_push(e, K_AT, "ATZ", ENG_AT_DELAY);
     push_init(e, "ATD", ENG_AT_DELAY);
     push_init(e, "ATD0", ENG_AT_DELAY);
@@ -2014,6 +2020,7 @@ static void detect_done(vp_engine_t *e, const eng_step_t *s, int how)
     size_t expect_len = 0;
     const uint8_t *d;
     size_t n;
+    const char *probe = s->cmd;
 
     (void)s;
     /* Protocol probing must use the profile's connection check.  Hard-coding
@@ -2034,7 +2041,7 @@ static void detect_done(vp_engine_t *e, const eng_step_t *s, int how)
         }
         return;
     }
-    if (!vp_parse_hex_bytes(e->p->check_connection[0] ? e->p->check_connection : "0100",
+    if (!vp_parse_hex_bytes(probe,
                             false, expect, sizeof(expect), &expect_len)) {
         q_clear(e);
         detect_next(e);
@@ -2042,6 +2049,29 @@ static void detect_done(vp_engine_t *e, const eng_step_t *s, int how)
     }
     expect[0] = (uint8_t)(expect[0] + 0x40u);
     if (!answered || !resp_match(e, expect, expect_len, &d, &n)) {
+        /* Some generic ECUs do not implement the supported-PID bitmap (0100)
+         * but do answer the demanded RPM PID. Try that once for each
+         * candidate before discarding the protocol. Explicit profile checks
+         * keep their original semantics. */
+        bool generic_check = e->p->check_connection[0] == '\0';
+        bool has_rpm = false;
+        if (generic_check && !e->detect_fallback) {
+            for (uint16_t i = 0; i < e->p->n_req; i++) {
+                if (!(e->req[i].flags & VP_REQ_F_RAW) && e->req[i].service == 0x01 &&
+                    e->req[i].tx_len >= 2 && e->req[i].tx[1] == 0x0C) {
+                    has_rpm = true;
+                    break;
+                }
+            }
+        }
+        if (has_rpm && !strcmp(probe, "0100")) {
+            eng_step_t *fallback;
+            e->detect_fallback = true;
+            q_clear(e);
+            fallback = q_push(e, K_DETECT, "010C", 0);
+            if (fallback) fallback->timeout_ms = connection_timeout(e);
+            return;
+        }
         /* APK retries each candidate before moving to the next protocol. */
         q_clear(e);
         detect_next(e);
@@ -2121,12 +2151,24 @@ static void enter_run(vp_engine_t *e, uint32_t now)
 /* polling plan                                                        */
 /* ------------------------------------------------------------------ */
 
-/* Motion is serviced at each completed request slot, using real send times.
- * Never preempt a state/before/request/after or ISO-TP transaction. */
-static bool motion_signal(const vp_engine_t *e, int i)
+/* Fast-changing driver inputs are serviced before each background slot.
+ * Keep state/before/request/after and ISO-TP transactions indivisible. */
+static bool responsive_signal(const vp_engine_t *e, int i)
 {
-    return e->cfg.responsive_polling &&
-           (e->sigs[i].slot == SIG_OBD_RPM || e->sigs[i].slot == SIG_OBD_SPEED);
+    if (!e->cfg.responsive_polling) return false;
+    int slot = e->sigs[i].slot;
+    if (slot == SIG_OBD_RPM || slot == SIG_OBD_SPEED) return true;
+    /* A profile can explicitly retain slow polling for auxiliary inputs. */
+    return e->sig[i].rate != VP_RATE_SLOW &&
+           (slot == SIG_OBD_BOOST || slot == SIG_OBD_THROTTLE);
+}
+
+static uint32_t responsive_period(const vp_engine_t *e, int i)
+{
+    if (e->sig[i].period_ms) return e->sig[i].period_ms;
+    if (e->sigs[i].slot == SIG_OBD_RPM) return 50u;
+    if (e->sigs[i].slot == SIG_OBD_SPEED) return 100u;
+    return 0u;  /* pressure / throttle: each batch, bounded by serial polling */
 }
 
 static bool request_ready(const vp_engine_t *e, uint8_t r, uint32_t now)
@@ -2136,13 +2178,12 @@ static bool request_ready(const vp_engine_t *e, uint8_t r, uint32_t now)
     return elapsed(now, e->req_last_ms[r], 1000u << (failures - 1u));
 }
 
-static bool motion_due(const vp_engine_t *e, int i, uint32_t now)
+static bool responsive_due(const vp_engine_t *e, int i, uint32_t now)
 {
     const vp_source_t *src = cur_src(e, i);
-    if (!motion_signal(e, i) || !sig_driven(e, i) || !signal_demanded(e, i) ||
+    if (!responsive_signal(e, i) || !sig_driven(e, i) || !signal_demanded(e, i) ||
         src->kind != VP_SRC_REQ || !request_ready(e, (uint8_t)src->ref, now)) return false;
-    uint32_t period = e->sig[i].period_ms;
-    if (!period) period = e->sigs[i].slot == SIG_OBD_RPM ? 50u : 100u;
+    uint32_t period = responsive_period(e, i);
     return !(e->req_seen_mask & (UINT32_C(1) << src->ref)) ||
            elapsed(now, e->req_last_ms[src->ref], period);
 }
@@ -2150,7 +2191,7 @@ static bool motion_due(const vp_engine_t *e, int i, uint32_t now)
 static bool poll_candidate(const vp_engine_t *e, int i)
 {
     if (!sig_driven(e, i) || e->sig[i].rate == VP_RATE_EVERY ||
-        !signal_demanded(e, i) || motion_signal(e, i)) return false;
+        !signal_demanded(e, i) || responsive_signal(e, i)) return false;
     return cur_src(e, i)->kind == VP_SRC_REQ;
 }
 
@@ -2178,7 +2219,7 @@ static size_t every_reqs(const vp_engine_t *e, uint8_t *out, uint32_t now)
     for (k = 0; k < e->n_every; k++) {
         int i = e->every_sig[k];
         const vp_source_t *s;
-        if (!sig_driven(e, i) || !signal_demanded(e, i) || motion_signal(e, i)) continue;
+        if (!sig_driven(e, i) || !signal_demanded(e, i) || responsive_signal(e, i)) continue;
         s = cur_src(e, i);
         if (s->kind != VP_SRC_REQ || !request_ready(e, (uint8_t)s->ref, now)) continue;
         for (j = 0; j < n && out[j] != s->ref; j++) {}
@@ -2226,7 +2267,7 @@ static void start_round(vp_engine_t *e, uint32_t now)
     }
     e->in_round = e->round_n > 0 || every_reqs(e, ev, now) > 0;
     for (int i = 0; i < e->p->n_sig; i++) {
-        if (motion_due(e, i, now)) e->in_round = true;
+        if (responsive_due(e, i, now)) e->in_round = true;
     }
 }
 
@@ -2237,11 +2278,12 @@ static bool build_slot(vp_engine_t *e, uint32_t now)
 
     e->slot_n = 0;
     e->slot_pos = 0;
+    e->rpm_refreshed = false;
     if (e->round_pos >= e->round_n && e->every_done) return false;
     e->every_done = true;
-    /* Two motion samples at most, then one background request for fairness. */
+    /* At most four dynamic inputs, then one background request for fairness. */
     for (int i = 0; i < e->p->n_sig; i++) {
-        if (!motion_due(e, i, now)) continue;
+        if (!responsive_due(e, i, now)) continue;
         uint8_t r = (uint8_t)cur_src(e, i)->ref;
         for (k = 0; k < e->slot_n && e->slot_req[k] != r; k++) {}
         if (k == e->slot_n) e->slot_req[e->slot_n++] = r;
@@ -2249,17 +2291,43 @@ static bool build_slot(vp_engine_t *e, uint32_t now)
     while (e->round_pos < e->round_n) {
         uint8_t main_req = e->round_req[e->round_pos++];
         if (!request_demanded(e, main_req) || !request_ready(e, main_req, now)) continue;
-        for (k = 0; k < nev; k++) e->slot_req[e->slot_n++] = ev[k];
         for (k = 0; k < nev; k++) {
-            if (ev[k] == main_req) break;
+            size_t j;
+            for (j = 0; j < e->slot_n && e->slot_req[j] != ev[k]; j++) {}
+            if (j == e->slot_n) e->slot_req[e->slot_n++] = ev[k];
         }
-        if (k == nev) e->slot_req[e->slot_n++] = main_req;
+        for (k = 0; k < e->slot_n && e->slot_req[k] != main_req; k++) {}
+        if (k == e->slot_n) e->slot_req[e->slot_n++] = main_req;
         break;
     }
     if (e->round_n == 0) {
-        for (k = 0; k < nev; k++) e->slot_req[e->slot_n++] = ev[k];
+        for (k = 0; k < nev; k++) {
+            size_t j;
+            for (j = 0; j < e->slot_n && e->slot_req[j] != ev[k]; j++) {}
+            if (j == e->slot_n) e->slot_req[e->slot_n++] = ev[k];
+        }
     }
     return e->slot_n > 0;
+}
+
+/* A full dynamic-input batch must not halve RPM freshness. Insert at most
+ * one overdue RPM refresh after two completed requests, then finish the batch
+ * including its background item. Short batches do not need this extra sample;
+ * this never interrupts an in-flight chain. */
+static void refresh_rpm_slot(vp_engine_t *e, uint32_t now)
+{
+    if (!e->cfg.responsive_polling || e->rpm_refreshed || e->slot_pos < 2 ||
+        e->slot_n - e->slot_pos < 2 || e->sig_rpm < 0 ||
+        !responsive_due(e, e->sig_rpm, now) || e->slot_n >= sizeof(e->slot_req)) return;
+    uint8_t r = (uint8_t)cur_src(e, e->sig_rpm)->ref;
+    for (uint8_t k = e->slot_pos; k < e->slot_n; k++) {
+        if (e->slot_req[k] == r) return; // an RPM request is already pending
+    }
+    memmove(e->slot_req + e->slot_pos + 1, e->slot_req + e->slot_pos,
+            (size_t)e->slot_n - e->slot_pos);
+    e->slot_req[e->slot_pos] = r;
+    e->slot_n++;
+    e->rpm_refreshed = true;
 }
 
 /* Queue the first adapter-state change request r needs; false when none. */
@@ -2437,6 +2505,7 @@ static void plan_run(vp_engine_t *e, uint32_t now)
     }
     for (guard = 0; guard < 4; guard++) {
         if (e->slot_pos < e->slot_n) {
+            refresh_rpm_slot(e, now);
             uint8_t r = e->slot_req[e->slot_pos];
 
             if (push_pending_after(e, r)) return;
@@ -2474,11 +2543,10 @@ static void plan_run(vp_engine_t *e, uint32_t now)
             e->round_no++;
             uint32_t idle = ENG_IDLE_MS;
             for (int i = 0; i < e->p->n_sig; i++) {
-                if (!motion_signal(e, i) || !sig_driven(e, i) || !signal_demanded(e, i)) continue;
+                if (!responsive_signal(e, i) || !sig_driven(e, i) || !signal_demanded(e, i)) continue;
                 const vp_source_t *src = cur_src(e, i);
                 if (src->kind != VP_SRC_REQ || !request_ready(e, (uint8_t)src->ref, now)) continue;
-                uint32_t period = e->sig[i].period_ms;
-                if (!period) period = e->sigs[i].slot == SIG_OBD_RPM ? 50u : 100u;
+                uint32_t period = responsive_period(e, i);
                 uint32_t age = now - e->req_last_ms[src->ref];
                 uint32_t wait = age < period ? period - age : 1u;
                 if (wait < idle) idle = wait;
@@ -3040,6 +3108,7 @@ vp_engine_t *vp_engine_create(const vp_profile_t *p, const vp_engine_sink_t *sin
     e->phase = VP_ENGINE_PH_DOWN;
     e->link = SIG_LINK_NONE;
     e->mon_ok = true;
+    e->sig_rpm = -1;
     e->sig_gear = -1;
     e->obd_demand_mask = (UINT16_C(1) << SIG_OBD_COUNT) - 1u;
     memset(e->req_head, ENG_INDEX_NONE, sizeof(e->req_head));
@@ -3064,6 +3133,7 @@ vp_engine_t *vp_engine_create(const vp_profile_t *p, const vp_engine_sink_t *sin
             int slot = registry_slot(s->key);
             g->slot = (int16_t)slot;
             g->factor = unit_factor(slot, s->unit);
+            if (slot == SIG_OBD_RPM) e->sig_rpm = (int16_t)i;
             if (slot == SIG_OBD_GEAR) e->sig_gear = (int16_t)i;
         }
         if (g->slot == SIG_SLOT_NONE) {

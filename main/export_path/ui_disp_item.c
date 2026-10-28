@@ -197,8 +197,9 @@ void disp_item_update(int32_t *state, lv_obj_t *label, disp_item_t item,
     int32_t previous = *state;
     was_placeholder = (strcmp(lv_label_get_text(label), "--") == 0);
     if (valid) {
-        // RPM is output directly, without the +1/+1 stepping animation: large range and fast changes — smoothing would just look "stuck"
-        *state = (item == DISP_ITEM_RPM) ? raw : anim_step_i32(*state, raw, threshold);
+        // Acquisition already limits the sample rate; do not add display lag
+        // to RPM, speed, pressure, throttle or engine load.
+        *state = ui_disp_item_low_latency(item) ? raw : anim_step_i32(*state, raw, threshold);
     }
     // invalid: keep *state unchanged, avoiding a climb from 0 when data returns
     // Only rebuild the label text when the rendered value actually changed; color follows

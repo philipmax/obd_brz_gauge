@@ -603,7 +603,15 @@ static void test_classify_hello(void)
     CHECK(espnow_hello_decode(buf, len, &pos, &caps));
     CHECK_EQ(pos, 2);
     CHECK_EQ(caps, ESPNOW_CAP_V6_DATA);
-    CHECK(!espnow_hello_decode(buf, len - 1, &pos, &caps));
+    uint16_t demand = 0;
+    len = espnow_hello_encode_demand(2, ESPNOW_CAP_V6_DATA | ESPNOW_CAP_DEMAND_MASK,
+                                     (uint16_t)((1u << 1) | (1u << 3)), buf, sizeof(buf));
+    CHECK_EQ(len, ESPNOW_V6_HELLO_LEN + 2);
+    CHECK(espnow_hello_decode_demand(buf, len, &pos, &caps, &demand));
+    CHECK_EQ(demand, (uint16_t)((1u << 1) | (1u << 3)));
+    CHECK(espnow_hello_decode(buf, len, &pos, &caps));
+    CHECK_EQ(caps, (uint8_t)(ESPNOW_CAP_V6_DATA | ESPNOW_CAP_DEMAND_MASK));
+    CHECK(!espnow_hello_decode(buf, ESPNOW_V6_HELLO_LEN - 1, &pos, &caps));
     CHECK(espnow_hello_decode(buf, len + 4, &pos, &caps));   /* appended fields tolerated */
     CHECK(!espnow_v6_decode(buf, len, &(espnow_rx_frame_t){0}));
     buf[3] = ESPNOW_V6_TYPE_DATA;

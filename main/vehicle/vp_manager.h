@@ -78,8 +78,6 @@ esp_err_t vp_manager_remove(const char *id);
 esp_err_t vp_manager_clear_installed(void);
 /* Fill up to max entries (builtin first); returns the count. */
 int       vp_manager_list(vpm_entry_t *out, int max);
-/* Copy the source JSON of id to SD /OBD/EXPORT/<id>.vehicle.json. */
-esp_err_t vp_manager_export(const char *id);
 /* Read the stored source JSON of id into a fresh PSRAM buffer (caller frees). */
 esp_err_t vp_manager_read_json(const char *id, char **out, size_t *out_len);
 

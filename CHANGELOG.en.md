@@ -5,7 +5,55 @@ English | [简体中文](CHANGELOG.md)
 Newest first. Behavior and flashing changes only; pure refactors and comment
 cleanups live in the git history.
 
+## exFAT, protocol detection and multi-gauge demand sync
+
+- Enable FatFs exFAT in a build-local copy while retaining FAT32 and never formatting the SD card. Generic auto-detection now retries each candidate with a declared RPM `010C` request when `0100` has no response.
+- Slaves advertise current page demand through a compatible v6 HELLO extension; the master merges fresh online demands and polls the needed RPM, speed, boost, oil-temperature and other signals once for the cluster.
+
 ---
+
+## USB receiver task priority
+
+- Lower the persistent USB receiver from priority 5 to 3, below OBD polling and LVGL at 4, reducing preemption of real-time data and display work during busy USB communication. Web flashing, resource upload and vehicle management flows remain unchanged.
+
+## Driver-input response and video scheduling
+
+- Prioritize demanded RPM, speed, boost and throttle, with one overdue RPM refresh in longer batches. Deduplicate shared PIDs while retaining explicit periods, slow settings, failure backoff and complete serial transactions. Remove the additional built-in numeric/needle display ramp for these inputs and load; value-driven video wakes SD and decoder workers only when its target frame changes.
+
+## Multi-gauge receive and OTA shutdown handoff
+
+- Copy slave DATA packets into a bounded queue and apply signals plus timeouts on one worker, preventing timeout cleanup from overwriting new data. Recheck binding and age before consumption. Master and slave workers finish current work and exit cooperatively for OTA; the page retries hotspot startup instead of forcibly deleting tasks holding resources.
+
+
+## Upload numeric-header validation
+
+- Strictly validate upload totals, chunk offsets and animation manifest sizes. Reject empty, negative, trailing-character, oversized and overflowing values so malformed offsets cannot become a new upload start. Defaults apply only to absent optional headers.
+
+
+## OTA space preflight fix
+
+- Use one available-space snapshot for theme and boot-animation upload preflight, avoiding an unsigned underflow when free space falls below the reserve.
+
+
+## Multi-gauge slave receive timing
+
+- Synchronize the slave’s 64-bit last-received timestamp across the radio callback, UI and timeout task.
+
+
+## Multi-gauge presence synchronization
+
+- Synchronize the master’s slave presence and protocol-version records across the radio callback, display and sender tasks.
+
+
+## BLE notification subscription ordering
+
+- Wait for notification registration to succeed before writing the subscription descriptor. Reconnect after an asynchronous registration failure instead of leaving a connected link unable to receive adapter responses.
+
+
+## BLE connection timing synchronization
+
+- Synchronize connection, notification-ready and scan timestamps to prevent torn 64-bit reads across tasks.
+
 
 ## Temperature hysteresis fix
 

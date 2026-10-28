@@ -93,8 +93,8 @@ static volatile bool     s_notify_ready;
 static volatile bool     s_mtu_ready;
 static volatile bool     s_notify_configured;
 static volatile bool     s_opening;
-static volatile int64_t  s_open_us;
-static volatile int64_t  s_ready_us;
+static int64_t           s_open_us;
+static int64_t           s_ready_us;
 static volatile uint16_t s_att_mtu = 23;
 static svc_range_t       s_svc[SVC_COUNT];
 static uint16_t          s_all_attr_end;
@@ -115,7 +115,7 @@ static volatile bool     s_target_valid;
 static volatile bool     s_scan_only;
 static volatile bool     s_paused;
 static volatile bool     s_registered;
-static volatile int64_t  s_last_scan_us;
+static int64_t           s_last_scan_us;
 static ble_scan_found_cb_t s_scan_cb;
 static ble_scan_result_t s_scan_list[BLE_SCAN_MAX_DEVICES];
 static int               s_scan_count;
@@ -140,6 +140,23 @@ static volatile uint32_t     s_rx_dropped;
 static void wake_task(void)
 {
     if (s_poll_wake) xSemaphoreGive(s_poll_wake);
+}
+
+/* These timestamps are shared with the Bluedroid/UI tasks. ESP32-S3 is a
+ * 32-bit target, so volatile alone cannot make an int64_t access atomic. */
+static void link_time_set(int64_t *timestamp, int64_t value)
+{
+    portENTER_CRITICAL(&s_lock);
+    *timestamp = value;
+    portEXIT_CRITICAL(&s_lock);
+}
+
+static int64_t link_time_get(const int64_t *timestamp)
+{
+    portENTER_CRITICAL(&s_lock);
+    int64_t value = *timestamp;
+    portEXIT_CRITICAL(&s_lock);
+    return value;
 }
 
 static bool mac_nonzero(const uint8_t *m)
@@ -187,7 +204,7 @@ static void bind_target(const uint8_t *mac)
 static esp_err_t scan_start(uint32_t duration_s)
 {
     if (!ble_hub_is_ready()) return ESP_ERR_INVALID_STATE;
-    s_last_scan_us = esp_timer_get_time();
+    link_time_set(&s_last_scan_us, esp_timer_get_time());
     esp_err_t err = ble_hub_scan_start(BLE_HUB_APP_ELM327, &k_scan_params, duration_s);
     if (err != ESP_OK) ESP_LOGD(TAG, "scan start: %s", esp_err_to_name(err));
     return err;
@@ -269,9 +286,11 @@ static void gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param)
 
     ble_hub_scan_stop(BLE_HUB_APP_ELM327);
     memcpy(s_peer_bda, param->scan_rst.bda, sizeof(esp_bd_addr_t));
-    s_open_us = esp_timer_get_time();
+    link_time_set(&s_open_us, esp_timer_get_time());
     s_opening = true;
-    ESP_LOGI(TAG, "found %s (RSSI %d), connecting", s_target_name, param->scan_rst.rssi);
+    char name[sizeof(s_target_name)];
+    elm327_ble_copy_connected_name(name, sizeof(name));
+    ESP_LOGI(TAG, "found %s (RSSI %d), connecting", name, param->scan_rst.rssi);
     esp_err_t err = esp_ble_gattc_open(gif, s_peer_bda, param->scan_rst.ble_addr_type, true);
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "open: %s", esp_err_to_name(err));
@@ -294,7 +313,9 @@ static void link_open(esp_gatt_if_t gattc_if, uint16_t conn_id)
         esp_ble_gattc_close(gattc_if, conn_id);
         return;
     }
-    ESP_LOGI(TAG, "connected to %s", s_target_name);
+    char name[sizeof(s_target_name)];
+    elm327_ble_copy_connected_name(name, sizeof(name));
+    ESP_LOGI(TAG, "connected to %s", name);
     /* ELM327 BLE clones commonly accept the phone-sized MTU used by Car
      * Scanner. Discovery can run in parallel; writes use the negotiated value
      * once ESP_GATTC_CFG_MTU_EVT arrives and keep the 20-byte fallback before
@@ -312,7 +333,7 @@ static void link_open(esp_gatt_if_t gattc_if, uint16_t conn_id)
 static void notify_ready(void)
 {
     if (!s_mtu_ready || !s_notify_configured) return;
-    s_ready_us = esp_timer_get_time();
+    link_time_set(&s_ready_us, esp_timer_get_time());
     s_notify_ready = true;
     wake_task();
 }
@@ -424,10 +445,26 @@ static void setup_channel(esp_gatt_if_t gattc_if)
         esp_ble_gattc_close(gattc_if, s_conn_id);
         return;
     }
+}
+
+/* Registration is asynchronous; subscribe only after Bluedroid accepts it. */
+static void notify_registered(esp_gatt_if_t gattc_if, esp_gatt_status_t status, uint16_t handle)
+{
+    if (!s_connected || handle != s_notify_handle) return;
+    if (status != ESP_GATT_OK) {
+        ESP_LOGW(TAG, "notify registration failed, status %d", status);
+        esp_ble_gattc_close(gattc_if, s_conn_id);
+        return;
+    }
     esp_gattc_descr_elem_t descr[2];
     uint16_t n = 2;
     esp_bt_uuid_t cccd = { .len = ESP_UUID_LEN_16, .uuid = { .uuid16 = UUID16_CCCD } };
-    st = esp_ble_gattc_get_descr_by_char_handle(gattc_if, s_conn_id, s_notify_handle, cccd, descr, &n);
+    esp_gatt_status_t st = esp_ble_gattc_get_descr_by_char_handle(gattc_if, s_conn_id, s_notify_handle, cccd, descr, &n);
+    if (st != ESP_GATT_OK && st != ESP_GATT_NOT_FOUND) {
+        ESP_LOGW(TAG, "CCCD lookup failed, status %d", st);
+        esp_ble_gattc_close(gattc_if, s_conn_id);
+        return;
+    }
     if (st == ESP_GATT_OK && n > 0) {
         s_cccd_handle = descr[0].handle;
         uint8_t en[2] = { s_notify_indicate ? 0x02 : 0x01, 0x00 };
@@ -518,6 +555,10 @@ static void gattc_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp_ble
             break;
         }
         setup_channel(gattc_if);
+        break;
+
+    case ESP_GATTC_REG_FOR_NOTIFY_EVT:
+        notify_registered(gattc_if, param->reg_for_notify.status, param->reg_for_notify.handle);
         break;
 
     case ESP_GATTC_WRITE_DESCR_EVT:
@@ -813,13 +854,13 @@ static void rx_drain(void)
 /* Keep looking for a bound adapter while it is not connected. */
 static void reconnect_watchdog(int64_t now)
 {
-    if (s_opening && now - s_open_us > OPEN_GUARD_US) {
+    if (s_opening && now - link_time_get(&s_open_us) > OPEN_GUARD_US) {
         ESP_LOGW(TAG, "connect attempt timed out");
         s_opening = false;
     }
     if (!s_target_valid || s_scan_only || s_connected || s_opening) return;
     if (s_gattc_if == ESP_GATT_IF_NONE || ble_hub_scan_active(NULL)) return;
-    if (now - s_last_scan_us < RESCAN_GAP_US) return;
+    if (now - link_time_get(&s_last_scan_us) < RESCAN_GAP_US) return;
     scan_start(SCAN_RECONNECT_S);
 }
 
@@ -876,7 +917,7 @@ static void obd_task(void *arg)
             continue;
         }
         if (!s_engine_up) {
-            int64_t settle = s_ready_us + NOTIFY_SETTLE_US - now;
+            int64_t settle = link_time_get(&s_ready_us) + NOTIFY_SETTLE_US - now;
             if (settle > 0) {
                 wait_ms = (uint32_t)(settle / 1000) + 1;
                 continue;
@@ -1027,7 +1068,12 @@ void elm327_ble_pause_for_ota(void)
     ESP_LOGI(TAG, "paused for WiFi OTA");
 }
 
-const char *elm327_ble_get_connected_name(void)
+void elm327_ble_copy_connected_name(char *out, size_t capacity)
 {
-    return s_target_name;
+    if (!out || capacity == 0) return;
+    portENTER_CRITICAL(&s_lock);
+    size_t n = capacity - 1 < sizeof(s_target_name) - 1 ? capacity - 1 : sizeof(s_target_name) - 1;
+    memcpy(out, s_target_name, n);
+    out[n] = '\0';
+    portEXIT_CRITICAL(&s_lock);
 }

@@ -28,6 +28,8 @@ lv_obj_t *ui_LabelOTAModeVersion = NULL;
 // Internal reference to WiFi SSID label for dynamic updates
 static lv_obj_t *s_label_wifi_ssid = NULL;
 
+static lv_timer_t *s_start_timer;
+static void start_ota_when_ready(lv_timer_t *timer);
 static void ui_event_ota_mode_background(lv_event_t *e);
 
 void ui_ScreenPageOTAMode_screen_init(void)
@@ -96,11 +98,31 @@ void ui_ScreenPageOTAMode_screen_init(void)
     // radio from the SoftAP, stalling the upload mid-transfer.
     elm327_ble_pause_for_ota();
 
-    // Give the single 2.4 GHz radio to the OTA SoftAP. Keep the WiFi driver
-    // itself alive (the SoftAP reuses it), but stop the ESP-NOW broadcast /
-    // presence tasks and deinit only ESP-NOW. Otherwise the master continues a
-    // broadcast every 100 ms while TCP is trying to fill the small RX pool.
-    espnow_link_pause_for_ota();
+    start_ota_when_ready(NULL);
+}
+
+static void start_ota_when_ready(lv_timer_t *timer)
+{
+    (void)timer;
+    // ESP-NOW workers finish their current operations and exit themselves.
+    // Retry on LVGL ticks rather than waiting while holding the display lock.
+    if (!espnow_link_pause_for_ota()) {
+        if (!s_start_timer) {
+            s_start_timer = lv_timer_create(start_ota_when_ready, 100, NULL);
+            if (!s_start_timer) {
+                ESP_LOGE(TAG, "Failed to schedule OTA startup retry");
+                if (s_label_wifi_ssid) {
+                    lv_label_set_text(s_label_wifi_ssid, "WiFi: Failed to start");
+                    lv_obj_set_style_text_color(s_label_wifi_ssid, lv_color_hex(0xFF0000), LV_PART_MAIN | LV_STATE_DEFAULT);
+                }
+            }
+        }
+        return;
+    }
+    if (s_start_timer) {
+        lv_timer_del(s_start_timer);
+        s_start_timer = NULL;
+    }
 
     // ota_wifi_server_start() releases BLE (ble_hub_shutdown), video buffers and
     // theme_0 image caches. Theme page objects must be gone before the caches are
@@ -144,6 +166,10 @@ static void exit_ota_mode(void)
         return;
     }
 
+    if (s_start_timer) {
+        lv_timer_del(s_start_timer);
+        s_start_timer = NULL;
+    }
     ESP_LOGI(TAG, "Rebooting to restore BLE (BT controller was released for the OTA radio)");
     // Give the WiFi teardown and the log line a moment to drain.
     vTaskDelay(pdMS_TO_TICKS(150));

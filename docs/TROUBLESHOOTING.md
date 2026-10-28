@@ -134,7 +134,7 @@ elm327_ble: PARSE_FAIL / TIMEOUT_AGAIN
 | `elm327_ble` | BLE 连接、初始化、轮询、协议检测（`[DETECT]` 前缀）|
 | `vp_manager` | 车型切换、验证期、安全模式、自动回滚 |
 | `sd_import` | SD 卡 `/OBD/IMPORT` 导入处理结果 |
-| `ui_storage` / `storage` | 存储页按钮任务 / 后台存储服务（镜像、恢复、定时扫描）|
+| `storage` | 后台存储服务（镜像、恢复、定时扫描）|
 | `theme_lib` / `theme_mount` | 主题库写入进度 / 开机或插卡时恢复主题写入 |
 | `theme_engine` | 主题分区加载 / 回退 |
 | `coredump` | 崩溃转储保存（配合 `GET /ota/coredump`）|
@@ -175,25 +175,13 @@ idf.py monitor | grep -E "elm327|DETECT"
 **Q：多台仪表协议会互相影响吗？**
 不会。协议存在各表自己的 NVS 里，互不影响。
 
-**Q：插了 SD 卡但仪表显示 `NO CARD` 或 `CARD ERROR`？**
-存储页（设置页上滑）只支持 **FAT16 / FAT32**，exFAT 或未格式化的卡会显示
-`CARD ERROR`，提示 "Use FAT32"；设备从不会自动格式化卡，需要在电脑上重新格式化
-成 FAT32。显示 `NO SD SLOT` 是正常的——只有 V1 微雪板有卡槽，V2/V3 板没有。
+**Q：SD 卡或导入没有生效？**
 
-**Q：SD 卡导入车型 / 主题没有生效？**
-存储页点 SCAN 或等开机 / 插卡自动扫描后，去 `/OBD/IMPORT` 看处理结果：成功的文件
-被改名为 `<文件名>.ok`，失败的是 `<文件名>.err` 并多出一个同名 `.err.txt`，第一行
-是失败原因、后面是逐条校验问题；也可以直接看 `/OBD/IMPORT.LOG` 的汇总记录，或者
-在 OTA 模式网页（`http://192.168.4.1/`）的 "Import log" 面板里查看。注意
-`*.vehicle.json` 安装后**不会自动激活**，需要额外的 `ACTIVATE.TXT` 或去车型页手动
-USE。
+固件支持 FAT16 / FAT32 / exFAT；未格式化的卡需要在电脑上格式化，设备不会自动格式化。先检查卡槽、接线和挂载日志。后台会在开机或插卡后扫描 `/OBD/IMPORT`；结果可通过 `/OBD/IMPORT.LOG` 或 OTA 页面中的导入日志检查。安装车型后需单独选择并启用，安装本身不会自动切换车型。
 
-**Q：存储页提示 "Theme write failed" 或 "Busy, try again" / "theme library busy"？**
-"Busy, try again"：有另一个 SD / 主题任务正在跑（导入、镜像、另一次主题写入），
-等它结束再试。"Theme write failed: <原因>"：主题包本身有问题（损坏、超出
-theme_0 分区大小、schema 版本不支持），写入失败会自动恢复原来的主题，不影响正常使用。
-"theme library busy" 也会出现在 OTA 网页推送主题 / 开机动画时——这两类写入和存储页
-的主题写入共用同一把锁，等 SD 侧的写入结束再从 App 推送。
+**Q：主题或开机动画上传时提示忙？**
+
+可能有其他存储任务正在进行，等待结束后重试。若反复失败，请检查上传响应和设备日志中的具体错误。
 
 **Q：车型页 VEHICLE 按钮显示 `SAFE`，或者仪表一直跑 Generic，不切车型？**
 这是**安全模式**：固件连续异常重启（崩溃 / 看门狗）达到 3 次，下次开机会强制只跑

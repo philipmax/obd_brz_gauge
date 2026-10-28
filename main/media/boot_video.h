@@ -43,7 +43,6 @@ void     boot_video_update(uint32_t elapsed_ms);
 boot_video_state_t boot_video_get_state(void);
 /* True once the first frame is visible (fullscreen playback can initially be loading). */
 bool     boot_video_first_frame_presented(void);
-bool     boot_video_is_finished(void);
 /* Stop and free everything (safe to call when not playing). */
 void     boot_video_destroy(void);
 

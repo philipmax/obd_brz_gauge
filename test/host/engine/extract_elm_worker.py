@@ -13,4 +13,5 @@ parts = []
 for start, end in sections:
     i = source.index(start)
     parts.append(source[i:source.index(end, i)])
+parts.append(source[source.index('void elm327_ble_copy_connected_name('):])
 Path(sys.argv[2]).write_text('\n'.join(parts))

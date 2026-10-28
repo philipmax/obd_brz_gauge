@@ -1740,6 +1740,22 @@ static void test_detect(void)
     VT_CHECK(f->valid[SIG_OBD_SPEED]);
     fake_stop(f, p);
 
+    /* Some generic ECUs answer the demanded RPM PID but return NO DATA for
+     * the supported-PID bitmap. Keep protocol detection useful in that case. */
+    f = fake_reset();
+    p = compile_q(P_HEAD("t.det-rpm-fallback", "{'proto':0}") "'signals':[" S_RPM "]}");
+    VT_CHECK(p != NULL);
+    if (!p) return;
+    f->detect_proto = 6;
+    set_resp(f, "", "0100", "NO DATA");
+    set_resp(f, "", "010C", "41 0C 0B B8");
+    fake_start(f, p, 0);
+    VT_CHECK(pump_rounds(f, 1));
+    VT_CHECK_INT(f->proto_detected, 6);
+    VT_CHECK(count_cmd(f, "010C") >= 2); /* probe plus normal warm/poll path */
+    VT_CHECK_INT(f->val[SIG_OBD_RPM], 750);
+    fake_stop(f, p);
+
     /* A later candidate must be reached when the earlier CAN protocols fail. */
     f = fake_reset();
     p = compile_q(P_HEAD("t.det-fallback", "{'proto':0}") "'signals':[" S_RPM "]}");
@@ -2463,6 +2479,149 @@ static void test_responsive_motion(void)
     fake_stop(f, p);
 }
 
+static void test_responsive_driver_inputs(void)
+{
+    fake_t *f = fake_reset();
+    vp_profile_t *p = compile_q(
+        P_HEAD("t.driver-inputs", "{'proto':6}") "'signals':["
+        "{'id':'obd.rpm','rate':'every','src':[{'req':'010C','len':2,'rpn':[['R',0,16,'be'],['k',4],'/']}]},"
+        "{'id':'obd.speed','src':[{'req':'010D','len':1,'rpn':[['A',0]]}]},"
+        "{'id':'obd.boost','unit':'kPa_rel','src':[{'req':'010B','len':1,'rpn':[['A',0]]}]},"
+        "{'id':'obd.throttle','src':[{'req':'0111','len':1,'rpn':[['A',0]]}]},"
+        "{'id':'obd.coolant_temp','src':[{'req':'0105','len':1,'rpn':[['A',0]]}]},"
+        "{'id':'obd.intake_temp','src':[{'req':'010F','len':1,'rpn':[['A',0]]}]},"
+        "{'id':'obd.oil_temp','src':[{'req':'015C','len':1,'rpn':[['A',0]]}]},"
+        "{'id':'obd.battery_voltage','unit':'mV','src':[{'req':'0142','len':2,'rpn':[['R',0,16,'be']]}]},"
+        "{'id':'obd.load','src':[{'req':'0104','len':1,'rpn':[['A',0]]}]},"
+        "{'id':'obd.afr','src':[{'req':'0144','len':1,'rpn':[['A',0]]}]}]}");
+    VT_CHECK(p != NULL); if (!p) return;
+    f->auto_pos = true;
+    vp_engine_cfg_t cfg = {.responsive_polling = true};
+    fake_start_with_cfg(f, p, &cfg);
+    VT_CHECK(pump_answer(f, "0111"));
+    int first = f->n_req;
+    sim(f, 5000);
+    static const char *const requests[] = {"010C", "010D", "010B", "0111", "0105", "010F", "015C", "0142", "0104", "0144"};
+    int counts[10] = {0}; uint32_t last[10] = {0}, max_gap[10] = {0};
+    for (int i = first; i < f->n_req; i++) {
+        const req_rec_t *r = &f->reqs[i];
+        if (r->phase != VP_ENGINE_PH_RUN) continue;
+        for (int k = 0; k < 10; k++) if (!strcmp(r->tx, requests[k])) {
+            if (last[k] && r->at_ms - last[k] > max_gap[k]) max_gap[k] = r->at_ms - last[k];
+            last[k] = r->at_ms; counts[k]++;
+        }
+    }
+    VT_CHECK(f->valid[SIG_OBD_RPM] && f->valid[SIG_OBD_SPEED] &&
+             f->valid[SIG_OBD_BOOST] && f->valid[SIG_OBD_THROTTLE]);
+    VT_CHECK(counts[0] >= 40 && max_gap[0] <= 160);
+    for (int k = 0; k < 4; k++) {
+        VT_CHECK_MSG(counts[k] >= 20 && max_gap[k] <= 250,
+                     "%s: %d reads / 5s, max request gap %u ms", requests[k], counts[k], (unsigned)max_gap[k]);
+    }
+    for (int k = 4; k < 10; k++) VT_CHECK_MSG(counts[k] > 2, "background %s starved", requests[k]);
+    printf("  full-page simulated 5s: RPM=%d speed=%d boost=%d throttle=%d; max gaps %u/%u/%u/%u ms\n",
+           counts[0], counts[1], counts[2], counts[3], (unsigned)max_gap[0], (unsigned)max_gap[1],
+           (unsigned)max_gap[2], (unsigned)max_gap[3]);
+    /* The common RPM/speed/boost page need not spend bandwidth on TPS. */
+    vp_engine_set_obd_demand_mask(f->eng, UINT16_MAX & ~(UINT16_C(1) << SIG_OBD_THROTTLE));
+    sim(f, 500); first = f->n_req; sim(f, 5000);
+    memset(counts, 0, sizeof(counts)); memset(last, 0, sizeof(last)); memset(max_gap, 0, sizeof(max_gap));
+    for (int i=first; i<f->n_req; i++) {
+        for (int k=0; k<4; k++) if (!strcmp(f->reqs[i].tx, requests[k])) {
+            uint32_t now = f->reqs[i].at_ms;
+            if (last[k] && now-last[k] > max_gap[k]) max_gap[k] = now-last[k];
+            last[k] = now; counts[k]++;
+        }
+    }
+    VT_CHECK(counts[0] >= 50 && max_gap[0] <= 160 && counts[3] == 0);
+    VT_CHECK(counts[1] >= 25 && counts[2] >= 25 && max_gap[1] <= 200 && max_gap[2] <= 200);
+    printf("  RPM/speed/boost page simulated 5s: %d/%d/%d reads; max gaps %u/%u/%u ms\n",
+           counts[0], counts[1], counts[2], (unsigned)max_gap[0], (unsigned)max_gap[1], (unsigned)max_gap[2]);
+    vp_engine_set_obd_demand_mask(f->eng, (UINT16_C(1) << SIG_OBD_RPM) |
+        (UINT16_C(1) << SIG_OBD_SPEED) | (UINT16_C(1) << SIG_OBD_BOOST));
+    sim(f, 500); first = f->n_req; sim(f, 5000);
+    memset(counts, 0, sizeof(counts)); memset(last, 0, sizeof(last)); memset(max_gap, 0, sizeof(max_gap));
+    for (int i=first; i<f->n_req; i++) {
+        for (int k=0; k<4; k++) if (!strcmp(f->reqs[i].tx, requests[k])) {
+            uint32_t now = f->reqs[i].at_ms;
+            if (last[k] && now-last[k] > max_gap[k]) max_gap[k] = now-last[k];
+            last[k] = now; counts[k]++;
+        }
+    }
+    printf("  only RPM/speed/boost simulated 5s: %d/%d/%d reads; max gaps %u/%u/%u ms\n",
+           counts[0], counts[1], counts[2], (unsigned)max_gap[0], (unsigned)max_gap[1], (unsigned)max_gap[2]);
+    VT_CHECK(counts[0] >= 60 && max_gap[0] <= 120 && counts[3] == 0);
+    VT_CHECK(counts[1] >= 30 && max_gap[1] <= 170);
+    VT_CHECK(counts[2] >= 60 && max_gap[2] <= 120);
+    set_resp(f, "", "010B", "41 0B 32"); VT_CHECK(pump_answer(f, "010B"));
+    uint32_t changed_at = f->now;
+    set_resp(f, "", "010B", "41 0B 65"); VT_CHECK(pump_answer(f, "010B"));
+    VT_CHECK_INT(f->val[SIG_OBD_BOOST], 101);
+    VT_CHECK(f->now - changed_at <= 220);
+    printf("  simulated boost step reaches signal sink in %u ms\n", (unsigned)(f->now - changed_at));
+    /* Selecting another page must stop unused fast inputs as well. */
+    vp_engine_set_obd_demand_mask(f->eng, 0); sim(f, 500);
+    int boost = count_cmd(f, "010B"), throttle = count_cmd(f, "0111"); sim(f, 500);
+    VT_CHECK_INT(count_cmd(f, "010B"), boost); VT_CHECK_INT(count_cmd(f, "0111"), throttle);
+    fake_stop(f, p);
+}
+
+static void test_responsive_shared_request(void)
+{
+    fake_t *f = fake_reset();
+    vp_profile_t *p = compile_q(P_HEAD("t.shared-fast", "{'proto':6}") "'signals':["
+        S_RPM ",{'id':'obd.boost','unit':'kPa_rel','src':[{'req':'010B','len':1,'rpn':[['A',0]]}]},"
+        "{'id':'obd.load','src':[{'req':'010B','len':1,'rpn':[['A',0]]}]}]}");
+    VT_CHECK(p != NULL); if (!p) return;
+    f->auto_pos = true; set_resp(f, "", "010B", "41 0B 32");
+    vp_engine_cfg_t cfg = {.responsive_polling = true};
+    fake_start_with_cfg(f, p, &cfg); VT_CHECK(pump_answer(f, "010B")); sim(f, 1000);
+    uint32_t previous_round = UINT32_MAX;
+    int n = 0;
+    for (int i = 0; i < f->n_req; i++) if (!strcmp(f->reqs[i].tx, "010B")) {
+        VT_CHECK_MSG(f->reqs[i].round != previous_round, "shared PID duplicated in round %u", (unsigned)previous_round);
+        previous_round = f->reqs[i].round; n++;
+    }
+    VT_CHECK_MSG(n > 5 && f->writes[SIG_OBD_BOOST] == f->writes[SIG_OBD_LOAD],
+                 "shared: requests=%d boost writes=%d load writes=%d boost=%d load=%d", n,
+                 f->writes[SIG_OBD_BOOST], f->writes[SIG_OBD_LOAD], (int)f->val[SIG_OBD_BOOST], (int)f->val[SIG_OBD_LOAD]);
+    fake_stop(f, p);
+}
+
+static void test_responsive_explicit_periods(void)
+{
+    fake_t *f = fake_reset();
+    vp_profile_t *p = compile_q(P_HEAD("t.fast-periods", "{'proto':6}") "'signals':["
+        "{'id':'obd.speed','period_ms':300,'src':[{'req':'010D','len':1,'rpn':[['A',0]]}]},"
+        "{'id':'obd.boost','unit':'kPa_rel','period_ms':500,'src':[{'req':'010B','len':1,'rpn':[['A',0]]}]},"
+        "{'id':'obd.throttle','rate':'slow','div':4,'src':[{'req':'0111','len':1,'rpn':[['A',0]]}]},"
+        "{'id':'obd.coolant_temp','src':[{'req':'0105','len':1,'rpn':[['A',0]]}]},"
+        "{'id':'obd.rpm','period_ms':120,'src':[{'req':'010C','len':2,'rpn':[['R',0,16,'be'],['k',4],'/']}]}]}");
+    VT_CHECK(p != NULL); if (!p) return;
+    f->auto_pos = true; vp_engine_cfg_t cfg = {.responsive_polling = true};
+    fake_start_with_cfg(f, p, &cfg); VT_CHECK(pump_answer(f, "010B"));
+    int first = f->n_req; sim(f, 5000);
+    uint32_t last_boost = 0, last_speed = 0, last_rpm = 0;
+    int boost = 0, speed = 0, throttle = 0, coolant = 0;
+    for (int i=first; i<f->n_req; i++) {
+        const req_rec_t *r = &f->reqs[i];
+        if (!strcmp(r->tx, "010C")) {
+            if (last_rpm) VT_CHECK(r->at_ms - last_rpm >= 120);
+            last_rpm = r->at_ms;
+        } else if (!strcmp(r->tx, "010B")) {
+            if (last_boost) VT_CHECK(r->at_ms - last_boost >= 500);
+            last_boost = r->at_ms; boost++;
+        } else if (!strcmp(r->tx, "010D")) {
+            if (last_speed) VT_CHECK(r->at_ms - last_speed >= 300);
+            last_speed = r->at_ms; speed++;
+        } else if (!strcmp(r->tx, "0111")) throttle++;
+        else if (!strcmp(r->tx, "0105")) coolant++;
+    }
+    VT_CHECK(boost >= 5 && boost <= 10 && speed >= 10 && speed <= 17);
+    VT_CHECK(throttle > 0 && coolant >= 3 * throttle);
+    fake_stop(f, p);
+}
+
 static void test_builtin_vacuum(void)
 {
     size_t len;
@@ -2491,11 +2650,15 @@ static void test_responsive_chain(void)
     vp_profile_t *p = compile_q(
         P_HEAD("t.motionchain", "{'proto':6}") "'signals':[" S_RPM ","
         "{'id':'obd.speed','src':[{'req':'010D','len':1,'rpn':[['A',0]]}]},"
+        "{'id':'obd.boost','unit':'kPa_rel','src':[{'req':'010B','len':1,'rpn':[['A',0]]}]},"
+        "{'id':'obd.throttle','src':[{'req':'0111','len':1,'rpn':[['A',0]]}]},"
         "{'id':'obd.oil_temp','src':[{'req':'221234','hdr':'7E1','before':['ATCEA10'],"
         "'after':['ATCEA'],'len':1,'rpn':[['A',0]]}]}]}");
     VT_CHECK(p != NULL); if (!p) return;
     set_resp(f, "", "010C", "41 0C 1F 40");
     set_resp(f, "", "010D", "41 0D 3C");
+    set_resp(f, "", "010B", "41 0B 32");
+    set_resp(f, "", "0111", "41 11 32");
     set_resp(f, "", "221234", "62 12 34 64");
     vp_engine_cfg_t cfg = {.responsive_polling = true};
     fake_start_with_cfg(f, p, &cfg); sim(f, 3000);
@@ -2546,7 +2709,7 @@ int main(void)
     RUN(test_hold);
     RUN(test_temp_hyst); RUN(test_temp_hyst_boundaries);
     RUN(test_temperature_255);
-    RUN(test_responsive_motion);
+    RUN(test_responsive_motion); RUN(test_responsive_driver_inputs); RUN(test_responsive_shared_request); RUN(test_responsive_explicit_periods);
     RUN(test_responsive_chain);
     RUN(test_builtin_vacuum);
     RUN(test_fallback_chain);

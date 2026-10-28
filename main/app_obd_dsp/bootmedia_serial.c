@@ -359,6 +359,7 @@ static void bootmedia_serial_task(void *arg)
 
 esp_err_t bootmedia_serial_start(void)
 {
-    BaseType_t ok = xTaskCreate(bootmedia_serial_task, "bootmedia_usb", 8192, NULL, 5, NULL);
+    /* Keep USB transfers below OBD polling and LVGL (both priority 4). */
+    BaseType_t ok = xTaskCreate(bootmedia_serial_task, "bootmedia_usb", 8192, NULL, 3, NULL);
     return ok == pdPASS ? ESP_OK : ESP_ERR_NO_MEM;
 }

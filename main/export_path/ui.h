@@ -197,17 +197,9 @@ void ui_ScreenPageVehicle_screen_init(void);
 extern lv_obj_t * ui_ScreenPageVehicle;
 void ui_event_vehicle_background(lv_event_t * e);
 
-// SCREEN: ui_ScreenPageStorage (swipe up on the settings page: SD state / scan / eject / export)
-void ui_ScreenPageStorage_screen_init(void);
-extern lv_obj_t * ui_ScreenPageStorage;
-void ui_event_storage_background(lv_event_t * e);
 
 // Needle page runtime interface (implemented in ui.c, reuses the disp_item system)
-void ui_needle_page_update(float sweep_ratio, int16_t clt, int16_t iat, int16_t oil,
-                           int16_t load_pct, int16_t tps, int32_t bat_mv,
-                           int16_t oilp_x10,
-                           uint16_t rpm, uint16_t speed, int16_t boost_x10,
-                           int16_t afr_x100);
+
 void ui_needle_apply_source(void);  // rebuild range/name/unit after the data source changes
 int  ui_sweep_get_step(void);       // get the current sweep progress (master broadcasts to slaves)
 // Data-item accessors (ui_disp_item_name/unit/color/range) — see ui_disp_item.h

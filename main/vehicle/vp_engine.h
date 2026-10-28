@@ -38,8 +38,11 @@
  *    div rounds / period_ms), each distinct request once, in signal order;
  *    "every" requests run before each slot's regular request to minimize
  *    their latency; gap_ms after each request; responsive_polling instead
- *    services due RPM/speed (50/100 ms defaults) before background slots,
- *    respects explicit periods and backs failed requests off up to 16 s;
+ *    services demanded RPM/speed/boost/throttle before background slots
+ *    (RPM/speed default to 50/100 ms; pressure/throttle run every batch),
+ *    with one bounded extra RPM refresh per slot;
+ *    explicit periods and slow boost/throttle rates are retained; failed
+ *    requests back off up to 16 s and shared requests are deduplicated;
  *  - standard 11-bit OBD request addresses are mapped to their 29-bit
  *    equivalents on protocols 7/9, together with standard response filters;
  *    legacy protocols 1..5 keep native addressing;
@@ -112,7 +115,7 @@ typedef struct {
     uint16_t link_hold_ms;       /* 0 = 3000 */
     uint16_t vbat_every_ms;      /* ATRV period, 0 = 5000 */
     uint16_t heal_ms;            /* 0 = 10000 */
-    bool responsive_polling;    /* motion deadlines + failed-request backoff; firmware enables this */
+    bool responsive_polling;    /* responsive-input deadlines + failed-request backoff; enabled by firmware */
 } vp_engine_cfg_t;
 
 typedef struct {

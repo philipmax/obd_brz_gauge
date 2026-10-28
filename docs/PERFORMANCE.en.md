@@ -2120,3 +2120,19 @@ cmake --build /tmp/obd-snapshot-append
 ctest --test-dir /tmp/obd-snapshot-append --output-on-failure
 /tmp/obd-snapshot-append/bench_master_collect
 ```
+
+## Driver-input priority scheduling validation
+
+2026-10-28: `test_responsive_driver_inputs` in `test/host/engine/test_engine.c` replays old and new scheduling against the same simulated adapter. The baseline is `vp_engine.c` at `10f780ad86a471c4b63e07b1c7fd4d2790fd281a`. The host Release build enables ASan/UBSan; protocol 6, a 2 ms response delay, the default 30 ms request gap and ten distinct PIDs are used, with no explicit boost/throttle periods. Each demand mask is observed for five seconds after startup settles. These are simulated clock intervals, not host execution timings or measured BLE/ECU/LCD latency.
+
+| Demanded signals | Before: RPM / speed / boost / TPS reads per 5 s | After: RPM / speed / boost / TPS reads per 5 s | Before: max RPM / speed / boost / TPS request gap (ms) | After: max RPM / speed / boost / TPS request gap (ms) |
+|---|---|---|---|---|
+| RPM + speed + boost + TPS + 6 background | 63 / 31 / 7 / 7 | 52 / 26 / 26 / 26 | 96 / 160 / 640 / 640 | 128 / 192 / 192 / 192 |
+| RPM + speed + boost + 6 background | 63 / 31 / 9 / 0 | 63 / 32 / 31 / 0 | 98 / 162 / 576 / — | 96 / 160 / 160 / — |
+| RPM + speed + boost only | 63 / 32 / 62 / 0 | 63 / 31 / 63 / 0 | 96 / 162 / 98 / — | 96 / 162 / 98 / — |
+
+Boost no longer waits for the entire background round on mixed pages; a three-input-only page retains its sampling cadence. Four simultaneous priority inputs still share serial bandwidth: RPM and speed rates decrease slightly in the table, so this is not a simultaneous speedup of every parameter. The test also checks background service and stopping unneeded requests after page changes. Separate cases cover explicit periods, slow throttle polling, shared-PID deduplication and indivisible before/after command chains. Slower adapters, timeouts and proprietary multicommand requests increase these intervals.
+
+`test/host/signal_store/test_display_response.c` extracts the production display update function and checks first-refresh latest-sample output for RPM, speed, boost (including negative values), throttle and load; unchanged samples avoid rewriting labels, and invalid/recovery behavior remains correct. Temperature retains its ramp. The same-frame case in `test/host/media/test_video_player_wait.c` verifies that 1000 sub-frame updates do not wake the SD reader or decoder, while frame changes and rapid round trips still wake them. The player already deduplicated target frames; this change removes unnecessary worker wakeups and does not demonstrate fewer nonexistent duplicate decodes or higher video frame rate.
+
+All 24 host tests across engine, signal_store and media pass for this round. The four changed production C files pass the ESP32-S3 compiler's `-fsyntax-only` check. No full firmware build or vehicle-latency measurement was performed.

@@ -77,6 +77,7 @@ App 连上设备 SoftAP 后走 HTTP（所有路径都应答 OPTIONS 预检，COR
 | `/ota/theme/prepare` | POST | 主题预检（头 `X-OTA-Size`），返回 `{"ok":true,"storage":"sd","partitionSize":N,"psramFree":N,"largestBlock":N}`，不擦除 |
 | `/ota/theme` | POST | 主题分块上传 |
 | `/ota/theme/erase` | POST | 删除当前选中主题的 `/OBD/THEMES/<key>/` 目录并清除选择；返回 `{"ok":true,"deleted":true|false}`，下次开机使用内置默认主题。需要 SD 卡挂载；其他主题、公共开机动画不受影响 |
+| `/ota/vehicles/clear` | POST | 清空所有已安装车型的 JSON/PID 配置与 SD 镜像，返回 `{"ok":true,"cleared":true,"pending":"obd2.generic"}`；需要 SD 卡挂载，保留内置通用车型、模板、主题和动画 |
 | `/ota/coredump` | GET | 下载已保存的 coredump 镜像（`application/octet-stream`，`coredump.bin`）；没有 coredump 时返回 204 No Content、空 Body |
 | `/ota/coredump/erase` | POST | 擦除 coredump 分区，返回 `{"ok":true}` |
 
@@ -106,6 +107,8 @@ App 的主题、开机动画、车型安装/启用和主题删除每次操作都
   SD 文件 `/OBD/BOOT/bootmedia.raw` 中 manifest 补 `0xFF` 到 4 KB，SHA 不包含填充。
   manifest 长度为 `0` 时为完整 OBV/OBV2，写入 `boot.obv.part`，同步并验证后才提交为 `boot.obv`。新动画提交成功后清理其他旧格式；清理失败记录警告，保留新文件并返回安装成功。
 
+上传总长度、manifest 长度和偏移头部使用十进制无符号 32 位整数；显式空值、符号、非数字字符、溢出或超长值返回 400。`X-Offset` 缺省为 0；`/api/v1` 的 `X-OTA-Size` 缺省为请求体长度。
+
 **错误响应**：`/ota/*` 出错为 HTTP 400 + `{"error":"<原因>"}`，如 `unauthorized`、
 `missing headers`、`invalid headers`、`SD card required`、`not enough SD space`、`install failed`。
 
@@ -114,7 +117,7 @@ App 的主题、开机动画、车型安装/启用和主题删除每次操作都
 
 **媒体必须用 SD**：prepare 与上传都要求已挂载 SD，空闲空间至少为文件大小（动画含填充）
 加 64 KB 余量。`storage` 固定为 `"sd"`；主题兼容字段 `partitionSize` 和动画 `free`
-表示 SD 空闲空间减 64 KB（截到 `UINT32_MAX`），不再表示 Flash 容量；`psramFree` /
+表示预检时一次采样的 SD 空闲空间减 64 KB（不足时为 0，截到 `UINT32_MAX`），不预留空间，也不表示 Flash 容量；`psramFree` /
 `largestBlock` 仅供诊断，不要求整个媒体包能装入 PSRAM。动画上传不改变主题；只有新动画提交成功后才清理公共目录中的其他旧格式。
 
 ## USB 网页管理、主题与开机动画
@@ -192,8 +195,7 @@ DATA 写入发生不可恢复的存储或摘要错误时返回状态 `5`，并�
 不允许跨源凭据。其余 `/api/v1` 端点不开放 CORS，鉴权不变。
 
 网页车型社区通过 USB 安装、查看固件校验报告，再独立确认启用和重启，安装不会自动切换车型。
-旧 HTTP 客户端仍可能受混合内容/局域网策略限制；也可下载
-`<id>.vehicle.json` 到 SD `/OBD/IMPORT/` 后在存储页导入。社区配置不是实车认证，
+旧 HTTP 客户端仍可能受混合内容/局域网策略限制。固件也会在开机或插卡后自动处理 SD `/OBD/IMPORT/` 中的文件。社区配置不是实车认证，
 请在停车时核对车型、请求与解码；同 ID 安装可能替换旧配置，建议先备份。
 
 成功返回 `{"ok":true,...}`；失败统一为 `{"ok":false,"error":"<code>","detail":"<说明>"}`——
@@ -210,8 +212,6 @@ token 缺失或错误 401 `unauthorized`，路径未知 404 `not_found`，方法
 | `/api/v1/vehicles/activate` | POST | `{"id":"..."}` | `{"ok":true,"pending":"<id>","reboot_required":true}`；400 `bad_id` |
 | `/api/v1/vehicles/reset` | POST | – | 同上，`pending` 为 `obd2.generic`；同时取消首启迁移待激活的车型 |
 | `/api/v1/vehicles/rollback` | POST | – | 同上，`pending` 为上一个车型 |
-| `/api/v1/vehicles/remove` | POST | `{"id":"..."}` | `{"ok":true,"removed":"<id>"}`；当前车型和内置车型不能删 |
-| `/api/v1/vehicles/<id>` | DELETE | – | 同 `vehicles/remove` |
 | `/api/v1/theme/sidecar` | POST | 分块上传 sidecar 或完整 `.gaugeproj.json`（≤32 MB）| `{ok,size,report}`；保存需要 SD：409 `sd_unavailable`、507 `sd_full`；422 `invalid_sidecar` |
 | `/api/v1/theme/sidecar` | DELETE | `?theme=<id>`（≤64 字符，省略 = 当前主题）| `{"ok":true}`；无 SD 返回 409 `sd_unavailable` |
 | `/api/v1/fs/put` | PUT / POST | `?path=`，分块 Body | `{ok,path,size}`；400 `bad_path`、409 `sd_unavailable` / `config_unavailable`、507 `sd_full` / `config_full` |
@@ -256,7 +256,7 @@ token 缺失或错误 401 `unauthorized`，路径未知 404 `not_found`，方法
 | 帧 | 方向 | 长度 | 内容 |
 |----|------|------|------|
 | v5 presence | 从 → 主 | 4 B | magic、版本 `5`、位置 1..3；每 500 ms |
-| v6 HELLO | 从 → 主 | 8 B | 见下表；每 500 ms，与 v5 presence 一起发 |
+| v6 HELLO | 从 → 主 | 8 B（带需求掩码时 10 B） | 见下表；每 500 ms，与 v5 presence 一起发 |
 | v5 控制 | 双向 | 6 B | magic、版本 `5`、cmd（`1` 联动测试开始 / `2` 同步转速告警阈值）、u16 参数 |
 | v5 DATA | 主 → 从 | 47 B | 旧格式固定结构，见下 |
 | v6 DATA | 主 → 从 | 38 + 6n + 2 B（≤250）| 见下表 |
@@ -302,8 +302,12 @@ token 缺失或错误 401 `unauthorized`，路径未知 404 `not_found`，方法
 | 2 | 1 | version `6` |
 | 3 | 1 | type `2` |
 | 4 | 1 | 位置 1..3 |
-| 5 | 1 | caps：bit0 = 能解码 v6 DATA |
+| 5 | 1 | caps：bit0 = 能解码 v6 DATA；bit1 = 附加本地页面需求掩码 |
 | 6 | 2 | 保留，填 0（接收方接受长度 ≥ 8）|
+| 8 | 2 | caps bit1 置位时的本地 OBD 需求掩码；bit i 对应 `SIG_OBD_*` |
+
+从表把当前页面需要的 OBD 信号放进需求掩码。主表在 2 s 在线窗口内合并所有从表掩码，
+再一次性向 OBD 轮询器请求并广播这些信号；旧固件仍按 8 B HELLO 工作并忽略附加字段。
 
 **v5 DATA**（47 B，旧单位）：偏移 0 magic、2 版本、3 flags（位定义同 v6）、4 seq u32、8 rpm u16、
 10 车速 u8、11 sweep_step、12 intro_step、13 水温、15 进气温、17 油温、19 油压、21 增压、

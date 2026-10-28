@@ -53,15 +53,6 @@ typedef struct {
     int         err;
 } scan_t;
 
-static volatile int s_last_ok;
-static volatile int s_last_err;
-
-void sd_import_last_summary(int *ok, int *err)
-{
-    if (ok) *ok = s_last_ok;
-    if (err) *err = s_last_err;
-}
-
 /* ------------------------------------------------------------------ */
 
 static kind_t kind_of(const char *name)
@@ -417,8 +408,6 @@ static esp_err_t run_scan(bool boot)
     }
     if (ok) ok = process_kind(s, K_RESET);   /* last: wins over ACTIVATE.TXT */
 
-    s_last_ok = s->ok;
-    s_last_err = s->err;
     if (s->ok || s->err) {
         ESP_LOGI(TAG, "%s scan: %d ok, %d failed", boot ? "boot" : "full", s->ok, s->err);
     }

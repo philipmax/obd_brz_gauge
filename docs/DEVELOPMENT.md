@@ -64,20 +64,20 @@ main/
 │
 └── export_path/          # LVGL UI（SquareLine 导出 + 手写扩展）
     ├── ui.c              # 页面创建顺序、手势导航（轮播环）、联动报警逻辑
-    ├── screens/          # 24 个页面：Logo/Main/Gear/ThemeGauge/Rpm/Speed/ODBProtocal/
+    ├── screens/          # 23 个页面：Logo/Gear/ThemeGauge/Rpm/Speed/ODBProtocal/
     │                     #   EasterEgg(版本页)/BLEScan/OTAMode/Temp/TempCustom/
     │                     #   OilPressure(曲线页)/ChartConfig/ChartAlarm/Info/InfoCustom/
-    │                     #   Settings/OilWarn/RpmWarn/Needle/NeedleConfig/MultiGauge/
-    │                     #   Intro/Storage/Vehicle
+    │                     #   Settings/RpmWarn/Needle/NeedleConfig/MultiGauge/
+    │                     #   Intro/Vehicle
     ├── ui_ext.c          # 手写扩展（扫表动画、展厅模式、开机动画调度、主题选择状态轮询）——
     │                     #   SquareLine 重导出时不会覆盖
     ├── ui_disp_item.c    # 显示项枚举（TEMP/INFO 页可映射的数据源；只能追加，见 AGENTS.md）
     └── ui_theme*         # 编译期主题运行时（活动主题、NVS、访问器；生成文件见 THEMES.md）
 ```
 
-仓库顶层还有：`vehicles/catalog/`（17 个 `*.vehicle.json` 车型，固件只内置
+仓库顶层还有：`vehicles/catalog/`（18 个 `*.vehicle.json` 车型，固件只内置
 `obd2.generic`，其余按需从 SD / App / 车型页安装）、`contracts/`（信号表、
-车型 JSON schema、规则引擎黄金向量）、`test/host/`（7 套纯 C 单元测试）、
+车型 JSON schema、规则引擎黄金向量）、`test/host/`（9 套纯 C 单元测试）、
 `tools/vehicles/`（旧车型表→JSON 转换器与 golden fixture 生成器）、
 `bootmedia/slot_a/`（legacy 开机动画源，生成 SD 用的 `build/bootmedia.bin`）。
 
@@ -100,6 +100,7 @@ cJSON hooks（PSRAM；内部 RAM 仅在 PSRAM 耗尽时兜底）
   （仅已绑定 MAC 才自动连接）+ ADS1115 油压（仅 V1 板，且当前车型不走 OBD 油压时）
   + ESP-NOW master（仅 MASTER）+ RaceChrono
 → storage_service_start（按 SD 状态每 1/3/10s 轮询；卡任务在启动 5s 后 / 插卡时 / OTA 结束时触发）
+→ bootmedia_serial_start（常驻 USB 接收任务，优先级 3）
 → ota_valid task（15s 自检标记槽位有效）
 ```
 
@@ -116,7 +117,7 @@ ELM327 BLE 适配器 ──BLE──→ elm327_ble_client（单线程状态机�
            LVGL 页面刷新        theme_tick()      espnow_link（主表广播，v6 TLV）
            （内置表盘页，经       （运行时主题页面）         │
             obd_data_cache 门面）                          ▼
-                                              从表 espnow_link 接收 → 直接渲染
+                                              从表 espnow_link 排队接收 → 维护任务 → 渲染
 ```
 
 每个车型 profile（`vehicles/catalog/*.vehicle.json`，编译态 `vp_profile_t`）
@@ -126,6 +127,9 @@ ELM327 BLE 适配器 ──BLE──→ elm327_ble_client（单线程状态机�
 **ELM327 轮询是单线程状态机**：初始化 → （可选）协议自动检测 → 循环轮询各通道。
 改轮询逻辑时不要引入并行请求 —— 一个适配器同时只服务一个请求流（AGENTS.md 红线）。
 BLE 回调通过常驻静态信号量唤醒轮询任务；BLE 关闭时的回调也会唤醒任务退出，信号量不会随任务删除，避免迟到回调访问已释放的任务句柄。
+BLE 连接和扫描的 64 位时间戳使用临界区同步，避免双核并发读写时读取不完整。
+
+USB 接收任务 `bootmedia_usb` 的优先级为 3，低于 OBD 轮询和 LVGL 的 4，避免 USB 通信繁忙时以更高优先级抢占实时数据与显示任务。USB 仍在正常开机后常驻，空闲时阻塞等待接收；网页刷写、资源上传和管理 RPC 流程保持不变。
 
 ## 编译配置
 
@@ -387,7 +391,7 @@ ctest --test-dir /tmp/obd-theme-page-tests --output-on-failure
 
 `spi_lock` 提取固定 ESP-IDF v5.5.3 源文件中的真实 `schedule_core` / `bg_exit_core` 函数，编译旧版负对照与修复版，检查 242 组锁/后台传输状态以及补丁幂等、未知上下文拒绝。边界用 stub，不模拟实际中断时序或 LCD 性能。默认下载固定版本并校验 SHA-256；离线时传 `-DSPI_LOCK_SOURCE=/path/to/esp-idf/components/esp_hw_support/spi_bus_lock.c`（必须是原始 v5.5.3）。CI 在 `host-storage` 中一并执行。
 
-固件构建在 `project()` 之后加载 `cmake/idf_spi_bus_lock.cmake`，把上游提交 `26263a36a2b3fe0649ccb20a02517c6c4b18e01b` 的 SPI 锁修复应用到构建目录副本，再替换 `esp_hw_support` 的该源文件；不编辑本机 SDK。补丁精确匹配上下文，已应用时保持不变，未知 SDK 会停止配置并要求人工核对。升级 SDK 时先核对该补丁和 `spi_lock` 负对照版本。
+固件构建在 `project()` 之后加载 `cmake/idf_spi_bus_lock.cmake`，把上游提交 `26263a36a2b3fe0649ccb20a02517c6c4b18e01b` 的 SPI 锁修复应用到构建目录副本，再替换 `esp_hw_support` 的该源文件；`cmake/idf_fatfs_exfat.cmake` 同样将 FatFs 的 `ff.c`、`ff.h`、`ffunicode.c`、`ffconf.h` 复制到构建目录并仅在本项目中打开 SDK 默认关闭的 `FF_FS_EXFAT`，因此 FAT32 仍可用且固件不会自动格式化 SD 卡。两个补丁都精确匹配上下文，未知 SDK 会停止配置并要求人工核对。升级 SDK 时先核对这些补丁及其负对照版本。
 
 CI（`.github/workflows/ci.yml`）跑 9 个 job：`contracts`（
 `contracts/check_contracts.py` + `tools/gen_layout.py --check --no-idf`）和
@@ -428,3 +432,7 @@ firmware/release/
 - 英文文档内部互链指向对应的 `.en.md` 版本；链到代码和分区文件的路径不变
 - 每份成对文档标题下都有语言切换行（`[English](X.en.md) | 简体中文`）；
   新增文档时中英两份一起建
+
+三连表主表的从表在线与协议版本记录使用同一临界区，在无线回调和读取任务之间保持一致。
+
+ESP-NOW 从表 DATA 回调复制原始数据到常驻的 8 帧队列，由从表维护任务统一解码、写入信号和检查超时；队列满时丢弃新帧并在任务中记录警告。消费时重新检查绑定 MAC 和接收时间，过期帧不能恢复在线状态。主从表 OTA 停止均使用任务自行退出的握手：`espnow_link_pause_for_ota()` 未完成时返回 false，LVGL 定时重试后再启动热点，不等待或强制删除持有资源的任务。队列和唤醒信号量在本次启动期间常驻。

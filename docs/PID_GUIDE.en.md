@@ -420,8 +420,8 @@ executed; update `rpn` to change decoding. CAN sources can directly change
 `bit` / `bits` / `endian` / `signed`.
 
 `period_ms` accepts 20..60000 and specifies a minimum interval; it cannot be used
-with `rate: "every"`. Templates use `round` for requested signals: RPM 100 ms;
-speed/gear/load/throttle/boost 200 ms; AFR/oil pressure 500 ms;
+with `rate: "every"`. Templates use `round` for requested signals: RPM 50 ms; speed 100 ms;
+gear/load/throttle/boost 200 ms; AFR/oil pressure 500 ms;
 temperatures/voltage 1000 ms. Firmware sends requests one at a time, so actual
 frequency depends on response time. A `rate: "every"` signal is polled before
 each regular slot to reduce the wait for fast signals such as RPM; it is still
@@ -453,6 +453,10 @@ Builtin Generic and profiles omitting `obd.boost` now inherit `010B`, estimating
 
 Coolant and oil signal limits and builtin gauge scales now extend to 255°C; oil hysteresis and ESP-NOW v5 receive limits are extended too. Large temperature jumps still require consecutive confirmation. Standard single-byte `0105` / `015C` with `A-40` can only represent up to 215°C; 255°C requires a capable source formula and cannot be created by raising limits. Catalog profiles are updated to rev 3 with matching import templates. Firmware does not overwrite explicit old `valid` bounds or negative-pressure clamps in installed profiles; reimport the updated profile and check custom formula limits.
 
-## RPM and speed acquisition scheduling
+## RPM, speed and driver-input acquisition scheduling
 
-Firmware enables independent RPM/speed priority scheduling with minimum request intervals of 50 / 100 ms when unspecified. Explicit `period_ms` remains authoritative; new import templates use 50 / 100 ms. Deadlines use actual send times, inserting due samples between complete requests while retaining background service in each slot. Before/after commands, multiframe transactions and prompt waits remain uninterrupted. Consecutive failures back off for 1 / 2 / 4 / 8 / 16 seconds; success and reconnect reset the backoff. The speed cache retains actual samples and leaves display smoothing to the UI, avoiding extra delay in gear calculation and linked gauges. Only demanded page/gear signals are requested; RPM remains enabled. These are minimum intervals, not guaranteed 20 / 10 Hz rates: adapter, protocol, timeouts and request count determine throughput.
+Firmware schedules demanded RPM, speed, boost and throttle requests ahead of background parameters. Without `period_ms`, RPM/speed have minimum request intervals of 50 / 100 ms, while boost/throttle are serviced in each batch. Explicit `period_ms` remains authoritative, and explicit `rate: "slow"` keeps boost/throttle on the slow path. New import templates use RPM 50 ms, speed 100 ms and boost/throttle 200 ms; installed profiles are not rewritten automatically.
+
+Deadlines use actual send times. Signals sharing a PID are deduplicated within a batch. After at least two requests have completed in a longer batch with at least two requests remaining, at most one overdue RPM refresh is inserted before finishing the remaining parameters. Background polling retains service, and before/after commands, multiframe transactions and prompt waits remain uninterrupted. Consecutive failures back off for 1 / 2 / 4 / 8 / 16 seconds; success and reconnect reset the backoff. Only demanded page/gear signals are requested; RPM remains enabled.
+
+The speed cache retains actual samples. Built-in numeric, speed and needle pages show the latest RPM, speed, boost, throttle and load samples without an additional display ramp; slower inputs such as temperature retain smoothing. Periods are minimum intervals, not guaranteed 20 / 10 Hz rates: adapter, protocol, timeouts, request count and profile determine throughput. Additional simultaneous priority inputs share the serial bandwidth; see the simulated scheduling comparison in [PERFORMANCE.en.md](PERFORMANCE.en.md#driver-input-priority-scheduling-validation).

@@ -149,7 +149,7 @@ elm327_ble: PARSE_FAIL / TIMEOUT_AGAIN
 | `elm327_ble` | BLE connection, init, polling, protocol detection (`[DETECT]` prefix) |
 | `vp_manager` | vehicle switching, verification period, safe mode, auto rollback |
 | `sd_import` | processing results for SD card `/OBD/IMPORT` |
-| `ui_storage` / `storage` | storage-page button jobs / background storage service (mirroring, resume, periodic scans) |
+| `storage` | background storage service (mirroring, resume, periodic scans) |
 | `theme_lib` / `theme_mount` | theme-library write progress / resuming a theme write at boot or card insert |
 | `theme_engine` | theme partition loading / fallback |
 | `coredump` | core dump storage (paired with `GET /ota/coredump`) |
@@ -199,33 +199,13 @@ standard PID `01 5C`.
 **Q: do multiple gauges interfere over protocols?**
 No. Each gauge stores its protocol in its own NVS.
 
-**Q: card inserted but the gauge shows `NO CARD` or `CARD ERROR`?**
-The storage page (swipe up from Settings) only supports **FAT16 / FAT32** —
-an exFAT or unformatted card shows `CARD ERROR` with the hint "Use FAT32";
-the device never formats the card automatically, so reformat it to FAT32 on
-a computer. Seeing `NO SD SLOT` is normal — only the V1 Waveshare board has
-a card slot, V2/V3 boards do not.
+**Q: the SD card or an import does not work?**
 
-**Q: an SD import (vehicle profile / theme) didn't take effect?**
-After tapping SCAN on the storage page (or waiting for the automatic scan at
-boot / card insert), check the results in `/OBD/IMPORT`: successful files are
-renamed to `<filename>.ok`, failed ones to `<filename>.err` with a matching
-`<filename>.err.txt` — first line is the failure reason, followed by one
-line per validator issue. You can also check the summary in
-`/OBD/IMPORT.LOG`, or the "Import log" panel on the OTA mode web page.
-Note that installing a `*.vehicle.json` **never auto-activates it** — you
-also need an `ACTIVATE.TXT` or to tap USE on the vehicle page manually.
+Firmware supports FAT16 / FAT32 / exFAT; format an unformatted card on a computer. The device never formats it automatically. Check the card slot, wiring and mount logs. The background service scans `/OBD/IMPORT` on boot or card insertion; inspect `/OBD/IMPORT.LOG` or the import log on the OTA page for results. Select and activate an installed profile separately; installation does not switch profiles automatically.
 
-**Q: storage page says "Theme write failed" or "Busy, try again" / "theme library busy"?**
-"Busy, try again": another SD / theme job is already running (an import, a
-config mirror, another theme write) — wait for it to finish and retry.
-"Theme write failed: <reason>": something is wrong with the theme package
-itself (corrupt, larger than the theme_0 partition, unsupported schema
-version); a failed write automatically restores the previous theme, so
-normal use is unaffected. "theme library busy" also shows up when pushing a
-theme or boot animation from the OTA web page — that path shares the same
-lock with the storage page's theme write, so wait for the SD-side write to
-finish before pushing from the app.
+**Q: a theme or boot-animation upload reports busy?**
+
+Another storage job may be running. Wait for it to finish and retry. If it keeps failing, check the upload response and device logs for the actual error.
 
 **Q: the VEHICLE button on the vehicle page shows `SAFE`, or the gauge keeps running Generic and won't switch vehicles?**
 That's **safe mode**: after 3 abnormal resets in a row (crash / watchdog),

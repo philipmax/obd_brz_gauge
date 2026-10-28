@@ -18,6 +18,7 @@
 //   peers and channel untouched.
 #include "ota_wifi_server.h"
 #include "ota_idle_tracker.h"
+#include "http_u32.h"
 #include "vehicle_web_cors.h"
 
 #include <stdio.h>
@@ -51,6 +52,7 @@
 #include "app_obd_dsp/upload_sink.h"
 #include "bsp_obd_dsp/ble_hub.h"
 #include "bsp_obd_dsp/sd_card.h"
+#include "vehicle/vp_manager.h"
 #include "media/video_elem.h"
 #include "media/boot_obv_validate.h"
 #include "media/video_player.h"
@@ -396,13 +398,20 @@ static esp_err_t send_204(httpd_req_t *req)
 
 static bool hdr_present(httpd_req_t *req, const char *name, char *buf, size_t len)
 {
-    return httpd_req_get_hdr_value_str(req, name, buf, len) == ESP_OK;
+    return httpd_req_get_hdr_value_len(req, name) < len &&
+           httpd_req_get_hdr_value_str(req, name, buf, len) == ESP_OK;
 }
 
-static uint32_t hdr_u32(httpd_req_t *req, const char *name, uint32_t def)
+static bool hdr_u32(httpd_req_t *req, const char *name, uint32_t def, uint32_t *out)
 {
     char buf[16] = {0};
-    return hdr_present(req, name, buf, sizeof(buf)) ? (uint32_t)strtoul(buf, NULL, 10) : def;
+    if (httpd_req_get_hdr_value_len(req, name) >= sizeof(buf)) return false;
+    esp_err_t err = httpd_req_get_hdr_value_str(req, name, buf, sizeof(buf));
+    if (err == ESP_ERR_NOT_FOUND) {
+        *out = def;
+        return true;
+    }
+    return err == ESP_OK && http_parse_u32(buf, out);
 }
 
 static bool hdr_last(httpd_req_t *req)
@@ -434,10 +443,18 @@ static bool consume_body(httpd_req_t *req)
     return true;
 }
 
+/* One snapshot avoids an unsigned underflow if free space changes between
+ * the capacity check and the value reported to the client. */
+static uint64_t sd_available_bytes(void)
+{
+    if (!sd_card_is_mounted()) return 0;
+    uint64_t free_bytes = sd_card_get_free_bytes();
+    return free_bytes > BOOTMEDIA_SD_MARGIN ? free_bytes - BOOTMEDIA_SD_MARGIN : 0;
+}
+
 static bool sd_can_hold(uint64_t total)
 {
-    return sd_card_is_mounted() &&
-           sd_card_get_free_bytes() >= (uint64_t)total + BOOTMEDIA_SD_MARGIN;
+    return sd_card_is_mounted() && total <= sd_available_bytes();
 }
 
 /* ------------------------------------------------------------------ */
@@ -678,11 +695,10 @@ static bool parse_chunk_headers(httpd_req_t *req, uint8_t sha[32], uint32_t *exp
         return false;
     }
     *is_base64 = hdr_base64(req);
-    *expected = (uint32_t)strtoul(size_str, NULL, 10);
-    *offset = hdr_u32(req, "X-Offset", 0);
+    bool sizes_ok = http_parse_u32(size_str, expected) && hdr_u32(req, "X-Offset", 0, offset);
     *is_last = hdr_last(req);
 
-    if (!upload_sha_from_hex(sha_hex, sha) || *expected == 0 || *offset > *expected) {
+    if (!sizes_ok || !upload_sha_from_hex(sha_hex, sha) || *expected == 0 || *offset > *expected) {
         *ret = send_err(req, "invalid headers");
         return false;
     }
@@ -761,14 +777,14 @@ static esp_err_t theme_prepare_handler(httpd_req_t *req)
         return send_err(req, "missing prepare size");
     }
 
-    uint32_t total_size = (uint32_t)strtoul(size_str, NULL, 10);
-    if (total_size == 0) {
+    uint32_t total_size;
+    if (!http_parse_u32(size_str, &total_size) || total_size == 0) {
         return send_err(req, "invalid prepare size");
     }
 
     if (!sd_card_is_mounted()) return send_err(req, "SD card required");
-    if (!sd_can_hold(total_size)) return send_err(req, "not enough SD space");
-    uint64_t free_bytes = sd_card_get_free_bytes() - BOOTMEDIA_SD_MARGIN;
+    uint64_t free_bytes = sd_available_bytes();
+    if (free_bytes < total_size) return send_err(req, "not enough SD space");
     size_t partition_size = free_bytes > UINT32_MAX ? UINT32_MAX : (size_t)free_bytes;
     size_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     size_t psram_free = heap_caps_get_free_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
@@ -817,6 +833,17 @@ static esp_err_t theme_erase_handler(httpd_req_t *req)
     snprintf(json, sizeof(json), "{\"ok\":true,\"deleted\":%s}",
              deleted ? "true" : "false");
     return send_json_response(req, 200, json);
+}
+
+// POST /ota/vehicles/clear — delete all installed vehicle/PID profiles and
+// leave builtin obd2.generic selected for the next boot.
+static esp_err_t vehicle_clear_handler(httpd_req_t *req)
+{
+    if (!validate_token(req)) return send_err(req, "unauthorized");
+    if (!consume_body(req)) return send_err(req, "receive failed");
+    if (vp_manager_clear_installed() != ESP_OK) return send_err(req, "vehicle clear failed");
+    return send_json_response(req, 200,
+                              "{\"ok\":true,\"cleared\":true,\"pending\":\"obd2.generic\"}");
 }
 
 // POST /ota/theme — stream, validate, import and select an SD package.
@@ -940,19 +967,20 @@ static esp_err_t bootmedia_prepare_handler(httpd_req_t *req)
         return send_err(req, "missing prepare sizes");
     }
 
-    uint32_t total_size = (uint32_t)strtoul(total_str, NULL, 10);
-    uint32_t manifest_size = (uint32_t)strtoul(manifest_str, NULL, 10);
-    if (total_size == 0 || (manifest_size != 0 &&
-        (manifest_size >= total_size || manifest_size > BOOT_MEDIA_MANIFEST_MAX))) {
+    uint32_t total_size, manifest_size;
+    if (!http_parse_u32(total_str, &total_size) ||
+        !http_parse_u32(manifest_str, &manifest_size) || total_size == 0 ||
+        (manifest_size != 0 &&
+         (manifest_size >= total_size || manifest_size > BOOT_MEDIA_MANIFEST_MAX))) {
         return send_err(req, "invalid prepare sizes");
     }
 
     if (!sd_card_is_mounted()) return send_err(req, "SD card required");
     uint64_t required = manifest_size == 0 ? total_size :
         (uint64_t)total_size + BOOT_MEDIA_BIN_OFFSET - manifest_size;
-    if (!sd_can_hold(required))
+    uint64_t sd_free = sd_available_bytes();
+    if (sd_free < required)
         return send_err(req, "not enough SD space");
-    uint64_t sd_free = sd_card_get_free_bytes() - BOOTMEDIA_SD_MARGIN;
     size_t free_space = sd_free > UINT32_MAX ? UINT32_MAX : (size_t)sd_free;
     size_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     size_t psram_free = heap_caps_get_free_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
@@ -988,6 +1016,10 @@ static esp_err_t bootmedia_handle(httpd_req_t *req, bool legacy_path)
     const bool has_size = hdr_present(req, "X-OTA-Size", size_str, sizeof(size_str));
     const bool has_manifest = hdr_present(req, "X-OTA-Manifest-Size", manifest_str,
                                           sizeof(manifest_str));
+    if ((!has_size && httpd_req_get_hdr_value_len(req, "X-OTA-Size") > 0) ||
+        (!has_manifest && httpd_req_get_hdr_value_len(req, "X-OTA-Manifest-Size") > 0)) {
+        return send_err(req, "invalid sizes");
+    }
     if (has_size != has_manifest) {
         return send_err(req, "missing headers");
     }
@@ -1003,12 +1035,13 @@ static esp_err_t bootmedia_handle(httpd_req_t *req, bool legacy_path)
     }
 
     bool is_base64 = hdr_base64(req);
-    uint32_t total_size = (uint32_t)strtoul(size_str, NULL, 10);
-    uint32_t manifest_size = (uint32_t)strtoul(manifest_str, NULL, 10);
-    uint32_t offset = hdr_u32(req, "X-Offset", 0);
+    uint32_t total_size = 0, manifest_size = 0, offset = 0;
+    bool sizes_ok = http_parse_u32(size_str, &total_size) &&
+                    http_parse_u32(manifest_str, &manifest_size) &&
+                    hdr_u32(req, "X-Offset", 0, &offset);
     bool is_last = hdr_last(req);
 
-    if (total_size == 0 || (manifest_size != 0 &&
+    if (!sizes_ok || total_size == 0 || (manifest_size != 0 &&
         (manifest_size > BOOT_MEDIA_MANIFEST_MAX || manifest_size >= total_size)) || offset > total_size ||
         (!is_base64 && (uint32_t)req->content_len > total_size - offset)) {
         ESP_LOGE(TAG, "invalid sizes/offset: total=%lu manifest=%lu offset=%lu content_len=%d",
@@ -1136,6 +1169,7 @@ static void register_handlers(void)
     register_uri("/ota/theme/prepare", HTTP_POST, theme_prepare_handler);
     register_uri("/ota/theme/erase", HTTP_POST, theme_erase_handler);
     register_uri("/ota/theme", HTTP_POST, theme_handler);
+    register_uri("/ota/vehicles/clear", HTTP_POST, vehicle_clear_handler);
     register_uri("/ota/coredump", HTTP_GET, coredump_get_handler);
     register_uri("/ota/coredump/erase", HTTP_POST, coredump_erase_handler);
 

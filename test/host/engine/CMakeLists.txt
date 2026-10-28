@@ -108,6 +108,17 @@ target_include_directories(test_elm_wakeup PRIVATE "${CMAKE_CURRENT_BINARY_DIR}"
 target_compile_options(test_elm_wakeup PRIVATE ${EH_WARN} -UNDEBUG)
 add_test(NAME elm_wakeup COMMAND test_elm_wakeup)
 
+set(ELM_NOTIFY_EXCERPT "${CMAKE_CURRENT_BINARY_DIR}/elm_notify.inc")
+add_custom_command(OUTPUT "${ELM_NOTIFY_EXCERPT}"
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/extract_elm_notify.py"
+            "${REPO_ROOT}/main/bsp_obd_dsp/elm327_ble_client.c" "${ELM_NOTIFY_EXCERPT}"
+    DEPENDS "${REPO_ROOT}/main/bsp_obd_dsp/elm327_ble_client.c" extract_elm_notify.py
+    VERBATIM)
+add_executable(test_elm_notify test_elm_notify.c "${ELM_NOTIFY_EXCERPT}")
+target_include_directories(test_elm_notify PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+target_compile_options(test_elm_notify PRIVATE ${EH_WARN} -UNDEBUG)
+add_test(NAME elm_notify COMMAND test_elm_notify)
+
 # Selection-only timing: opt in with a separate Release build, sanitizers off.
 option(EH_CAN_BENCHMARK "Build CAN rule-selection microbenchmark" OFF)
 if(EH_CAN_BENCHMARK)

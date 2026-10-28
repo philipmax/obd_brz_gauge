@@ -149,9 +149,6 @@ lv_obj_t * ui_ScreenPageMultiGauge;
 // SCREEN: ui_ScreenPageVehicle (vehicle profile select / rollback / reset)
 lv_obj_t * ui_ScreenPageVehicle;
 
-// SCREEN: ui_ScreenPageStorage (SD state / scan / eject / export)
-lv_obj_t * ui_ScreenPageStorage;
-
 // SCREEN: ui_ScreenPageChartConfig (chart data-source selection)
 void ui_ScreenPageChartConfig_screen_init(void);
 lv_obj_t * ui_ScreenPageChartConfig;
@@ -190,26 +187,7 @@ static uint16_t usSaveProtTimeCnt = 0; //OBD protocol save timer
 #define OIL_PRESS_TREND_SAMPLE_MS 1000
 
 /* ---- Digit-ramp animation thresholds (used by disp_item_update) ---- */
-#define ANIM_THRESH_SPD   10   // speed diff ≤10 steps by ±1
 #define ANIM_THRESH_TEMP   5   // temperature diff ≤5 steps by ±1
-
-// Adaptive step: diff ≤ threshold steps by ±1, diff > threshold approaches proportionally
-// The RPM/Speed pages must update label + arc together, which differs from disp_item_update, so a local copy is kept
-static inline int32_t anim_step_i32(int32_t displayed, int32_t target, int32_t threshold)
-{
-    int32_t diff = target - displayed;
-    if (diff == 0) return displayed;
-    int32_t abs_diff = (diff > 0) ? diff : -diff;
-    int32_t step = (diff > 0) ? 1 : -1;
-
-    if (abs_diff > threshold) {
-        int32_t rapid = abs_diff / 2;     // eat ~50% of the gap per tick (was 33%, faster convergence)
-        if (rapid < 2) rapid = 2;          // minimum 2 steps
-        if (rapid > abs_diff) rapid = abs_diff;
-        step = (diff > 0) ? rapid : -rapid;
-    }
-    return displayed + step;
-}
 
 // RPM warning flash (test ticks, strobe, linked ramp) migrated to ui_ext.c — see ui_ext_rpm_flash_tick()
 
@@ -280,13 +258,13 @@ static void ui_needle_page_update_with_source(uint8_t src, float sweep_ratio,
         s_last_needle_src = src;
         s_disp_needle = 0;  // reset on source switch, avoiding a ramp from the old source's value
     }
-    /* Threshold = 3% of range: small ranges (temps) smooth by ±1, large ranges (RPM) approach proportionally */
+    /* Only slow inputs use a ramp; dynamic inputs take the latest sample. */
     int32_t needle_thresh = (ns->nmax - ns->nmin) / 30;
     if (needle_thresh < 2) needle_thresh = 2;
 
     disp_item_update(&s_disp_needle, ui_NeedleValueLabel, src, raw, valid, needle_thresh);
 
-    // Needle position: use the smoothed value (div < 1 would be a divide-by-zero panic)
+    // Needle and label share the displayed value (guard the scale divisor).
     int32_t div = (ns->div >= 1) ? ns->div : 1;
     int32_t nval = (s_disp_needle / div);
     if (nval < ns->nmin) nval = ns->nmin;
@@ -295,15 +273,6 @@ static void ui_needle_page_update_with_source(uint8_t src, float sweep_ratio,
         lv_meter_set_indicator_value(ui_NeedleMeter, ui_NeedleIndic, nval);
         s_last_needle_meter = nval;
     }
-}
-
-void ui_needle_page_update(float sweep_ratio, int16_t clt, int16_t iat, int16_t oil,
-                           int16_t load_pct, int16_t tps, int32_t bat_mv,
-                           int16_t oilp_x10, uint16_t rpm, uint16_t speed,
-                           int16_t boost_x10, int16_t afr_x100)
-{
-    ui_needle_page_update_with_source(needle_active_source(), sweep_ratio,
-        clt, iat, oil, load_pct, tps, bat_mv, oilp_x10, rpm, speed, boost_x10, afr_x100);
 }
 
 static void oil_pressure_trend_init(void)
@@ -432,7 +401,7 @@ static uint32_t ui_refresh_period_ms_for_screen(lv_obj_t *scr,
         return 33;
     }
     if (scr == ui_ScreenPageSettings || scr == ui_ScreenPageMultiGauge ||
-        scr == ui_ScreenPageVehicle || scr == ui_ScreenPageStorage ||
+        scr == ui_ScreenPageVehicle ||
         scr == ui_ScreenPageBLEScan || scr == ui_ScreenPageOTAMode || scr == ui_ScreenPageODBProtocal ||
         scr == ui_ScreenPageTempCustom || scr == ui_ScreenPageInfoCustom ||
         scr == ui_ScreenPageNeedleConfig || scr == ui_ScreenPageChartConfig ||
@@ -571,7 +540,11 @@ void my_timerMain(lv_timer_t * timer)
             obd_demand_mask = last_obd_demand_mask;
         obd_demand_mask |= (uint16_t)(1u << SIG_OBD_RPM);
     }
+    // Advertise this unit's page demand. A master separately unions fresh
+    // masks received from slaves before asking the OBD worker for a snapshot.
+    espnow_link_set_demand_mask(obd_demand_mask);
     last_obd_demand_mask = obd_demand_mask;
+    obd_demand_mask |= espnow_link_remote_demand_mask();
     elm327_ble_set_obd_demand_mask(obd_demand_mask);
 
     if (!IN_SWEEP && live_data_screen) {
@@ -666,10 +639,8 @@ void my_timerMain(lv_timer_t * timer)
     }
     /*Speed page: same as above, refresh only while the page is active*/
     if (scr == ui_ScreenPageSpeed) {
-        static int32_t s_disp_spd = 0;
+        int32_t s_disp_spd = ucSpeed; // display the newest ECU sample on this refresh
         static int32_t s_last_spd = -1;
-        if (IN_SWEEP) { s_disp_spd = ucSpeed; }
-        else { s_disp_spd = anim_step_i32(s_disp_spd, (int32_t)ucSpeed, ANIM_THRESH_SPD); }
         if (s_disp_spd != s_last_spd) {
             s_last_spd = s_disp_spd;
             lv_label_set_text_fmt(ui_SpeedPageArcLabelSpeedText, "%d", (int)s_disp_spd);
@@ -822,16 +793,15 @@ void my_timerMain(lv_timer_t * timer)
         const char *mode_str = is_slave ? "SLAVE"
                              : (user_cfg.device_role == ESPNOW_ROLE_MASTER) ? "MASTER" : "STANDALONE";
         const char *conn_label, *conn_name;
-
+        char name[32];
         if (is_slave) {
-            const char *mname = espnow_link_get_master_name();
+            espnow_link_copy_master_name(name, sizeof(name));
             conn_label = "SLAVE";
-            conn_name  = (ble_now && mname[0]) ? mname : "--";
+            conn_name = (ble_now && name[0]) ? name : "--";
         } else {
-            const char *dev_name = elm327_ble_get_connected_name();
-            if(!dev_name || dev_name[0] == '\0') dev_name = "Not set";
+            elm327_ble_copy_connected_name(name, sizeof(name));
             conn_label = "BLE";
-            conn_name  = dev_name;
+            conn_name = name[0] ? name : "Not set";
         }
 
         snprintf(info_text, sizeof(info_text),
@@ -1284,7 +1254,6 @@ void ui_init(void)
     ui_ScreenPageNeedleConfig = NULL;   // config page lazy-loaded
     ui_ScreenPageMultiGauge = NULL;     // triple-gauge settings page lazy-loaded
     ui_ScreenPageVehicle = NULL;        // vehicle profile page lazy-loaded
-    ui_ScreenPageStorage = NULL;        // SD storage page lazy-loaded
     ui_ScreenPageChartConfig = NULL;    // chart data-source selection page lazy-loaded
     ui_ScreenPageChartAlarm = NULL;     // chart alarm settings page lazy-loaded
     ui_ScreenPageIntro = NULL;          // boot animation page lazy-loaded
@@ -1374,19 +1343,6 @@ void ui_event_vehicle_background(lv_event_t * e)
     if(code == LV_EVENT_GESTURE){
         lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_get_act());
         if(dir == LV_DIR_TOP || dir == LV_DIR_LEFT || dir == LV_DIR_RIGHT){
-            lv_indev_wait_release(lv_indev_get_act());
-            _ui_screen_change(&ui_ScreenPageSettings, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageSettings_screen_init);
-        }
-    }
-}
-
-// Storage page gestures: swipe down/left/right → return to the settings page
-void ui_event_storage_background(lv_event_t * e)
-{
-    lv_event_code_t code = lv_event_get_code(e);
-    if(code == LV_EVENT_GESTURE){
-        lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_get_act());
-        if(dir == LV_DIR_BOTTOM || dir == LV_DIR_LEFT || dir == LV_DIR_RIGHT){
             lv_indev_wait_release(lv_indev_get_act());
             _ui_screen_change(&ui_ScreenPageSettings, LV_SCR_LOAD_ANIM_FADE_ON, 5, 0, &ui_ScreenPageSettings_screen_init);
         }

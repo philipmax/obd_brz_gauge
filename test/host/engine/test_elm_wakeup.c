@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 /* Compile the actual ELM worker, start and shutdown wake paths. The scheduler
  * is deterministic; it does not model BLE timing or FreeRTOS internals. */
@@ -29,8 +30,8 @@ typedef struct { void (*gap_cb)(void); void (*gattc_cb)(void); void (*gatts_cb)(
 #define STATS_EVERY_US 60000000
 #define PERF_BEGIN(name) ((void)0)
 #define PERF_END(metric, start, count) ((void)0)
-#define portENTER_CRITICAL(lock) ((void)(lock))
-#define portEXIT_CRITICAL(lock) ((void)(lock))
+#define portENTER_CRITICAL(lock) do { assert(*(lock) == 0); (*(lock))++; lock_entries++; } while (0)
+#define portEXIT_CRITICAL(lock) do { assert(*(lock) == 1); (*(lock))--; } while (0)
 #define ESP_LOGE(tag, ...) ((void)(tag))
 #define ESP_LOGI(tag, ...) ((void)(tag))
 #define ESP_LOGW(tag, ...) ((void)(tag))
@@ -38,7 +39,9 @@ typedef struct { void (*gap_cb)(void); void (*gattc_cb)(void); void (*gatts_cb)(
 static const char *TAG = "test";
 static StaticSemaphore_t s_poll_wake_storage, s_tx_done_storage;
 static SemaphoreHandle_t s_poll_wake, s_tx_done;
+static char s_target_name[32] = "OBDII";
 static int s_lock;
+static unsigned lock_entries;
 static bool s_registered, s_task_started, s_paused, s_connected, s_notify_ready, s_engine_up, s_quiet;
 static int64_t s_ready_us, s_reconnect_us;
 static void *s_rx, *s_engine;
@@ -88,6 +91,19 @@ static void log_stats(void) {}
 
 int main(void)
 {
+    link_time_set(&s_ready_us, INT64_C(0x123456789abcdef));
+    assert(link_time_get(&s_ready_us) == INT64_C(0x123456789abcdef));
+    assert(lock_entries == 2 && s_lock == 0);
+    char name[40]; memset(name, 0x5A, sizeof(name));
+    elm327_ble_copy_connected_name(NULL, 10);
+    elm327_ble_copy_connected_name(name, 0); assert(name[0] == 0x5A);
+    elm327_ble_copy_connected_name(name, 1); assert(name[0] == 0 && name[1] == 0x5A);
+    elm327_ble_copy_connected_name(name, 4); assert(!strcmp(name, "OBD") && name[4] == 0x5A);
+    elm327_ble_copy_connected_name(name, sizeof(name)); assert(!strcmp(name, "OBDII"));
+    memset(s_target_name, 'X', sizeof(s_target_name)-1); s_target_name[31] = 0;
+    elm327_ble_copy_connected_name(name, 32); assert(strlen(name) == 31 && name[32] == 0x5A);
+    s_target_name[0] = 'Y'; assert(name[0] == 'X'); // caller owns the snapshot
+    assert(s_lock == 0);
     fail_semaphore=true; assert(!ensure_registered() && !s_poll_wake && !shutdown_callback);
     fail_semaphore=false; assert(ensure_registered() && shutdown_callback && s_poll_wake);
     wake_task(); wake_task(); assert(s_poll_wake->token && gives==2); /* events coalesce */

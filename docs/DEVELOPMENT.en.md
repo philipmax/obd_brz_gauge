@@ -64,21 +64,21 @@ main/
 │
 └── export_path/          # LVGL UI (SquareLine export + hand-written extensions)
     ├── ui.c              # page creation order, gesture navigation (carousel), linked-warning logic
-    ├── screens/          # 24 screens: Logo/Main/Gear/ThemeGauge/Rpm/Speed/ODBProtocal/
+    ├── screens/          # 23 screens: Logo/Gear/ThemeGauge/Rpm/Speed/ODBProtocal/
     │                     #   EasterEgg(version)/BLEScan/OTAMode/Temp/TempCustom/
     │                     #   OilPressure(chart)/ChartConfig/ChartAlarm/Info/InfoCustom/
-    │                     #   Settings/OilWarn/RpmWarn/Needle/NeedleConfig/MultiGauge/
-    │                     #   Intro/Storage/Vehicle
+    │                     #   Settings/RpmWarn/Needle/NeedleConfig/MultiGauge/
+    │                     #   Intro/Vehicle
     ├── ui_ext.c          # hand-written extensions (sweep, showroom, boot animation scheduling, theme-library write poll) —
     │                     #   survives SquareLine re-exports
     ├── ui_disp_item.c    # display-item enum (data sources mappable onto TEMP/INFO pages; append-only, see AGENTS.md)
     └── ui_theme*         # compiled-theme runtime (active theme, NVS, accessors; generated files: THEMES.en.md)
 ```
 
-The repo root also has: `vehicles/catalog/` (17 `*.vehicle.json` profiles; the
+The repo root also has: `vehicles/catalog/` (18 `*.vehicle.json` profiles; the
 firmware only builds in `obd2.generic`, the rest install on demand from SD /
 App / the vehicle page), `contracts/` (signal table, vehicle JSON schema,
-rules-engine golden vectors), `test/host/` (7 pure-C unit-test suites),
+rules-engine golden vectors), `test/host/` (9 pure-C unit-test suites),
 `tools/vehicles/` (legacy-table → JSON converters and golden-fixture
 generators), `bootmedia/slot_a/` (legacy animation source, generating
 `build/bootmedia.bin` for SD installation).
@@ -104,6 +104,7 @@ cJSON hooks (PSRAM; internal RAM only as a fallback once PSRAM is exhausted)
   when the active vehicle profile does NOT read oil pressure over OBD)
   + ESP-NOW master (MASTER only) + RaceChrono
 → storage_service_start (state-based 1/3/10 s SD poll; card jobs fire 5 s after start / on card insert / after OTA ends)
+→ bootmedia_serial_start (persistent USB receiver, priority 3)
 → ota_valid task (15 s self-check marks the slot valid)
 ```
 
@@ -120,7 +121,7 @@ ELM327 BLE adapter ──BLE──→ elm327_ble_client (single-thread state mac
            LVGL page refresh     theme_tick()     espnow_link (master broadcast, v6 TLV)
            (built-in gauges,     (runtime theme         │
             via obd_data_cache)      pages)             ▼
-                                              slave espnow_link receive → direct render
+                                              slave espnow_link queue → worker → render
 ```
 
 Each vehicle profile (`vehicles/catalog/*.vehicle.json`, compiled into a
@@ -134,6 +135,9 @@ branches hard-coded on the vehicle's name.
 requests when touching it — one adapter serves one request stream at a time
 (an AGENTS.md hard rule).
 BLE callbacks wake the polling task with a persistent static semaphore. The BLE shutdown callback also wakes the task to exit; the semaphore survives task deletion so late callbacks do not access a freed task handle.
+BLE connection and scan timestamps use a critical section to prevent torn 64-bit reads across tasks on the 32-bit target.
+
+The `bootmedia_usb` receiver runs at priority 3, below OBD polling and LVGL at 4, so busy USB communication does not preempt real-time data and display tasks at a higher priority. USB remains available after normal boot and blocks waiting for input when idle; web flashing, resource upload and management RPC flows remain unchanged.
 
 ## Build configuration
 
@@ -439,7 +443,7 @@ enables this test.
 
 `spi_lock` extracts the real `schedule_core` / `bg_exit_core` functions from pinned ESP-IDF v5.5.3 sources and compiles the stock negative control and patched version. It checks 242 lock/background-transfer states plus patch idempotence and rejection of unknown context. Platform boundaries are stubbed; this does not model actual interrupt timing or LCD performance. By default it downloads the pinned release with SHA-256 verification; offline, pass `-DSPI_LOCK_SOURCE=/path/to/esp-idf/components/esp_hw_support/spi_bus_lock.c` (stock v5.5.3 required). CI runs it within `host-storage`.
 
-After `project()`, firmware builds include `cmake/idf_spi_bus_lock.cmake` to apply the SPI lock fix from upstream commit `26263a36a2b3fe0649ccb20a02517c6c4b18e01b` to a build-local copy and replace that source in `esp_hw_support`. The installed SDK is unchanged. Patch context is matched exactly; already-applied hunks are unchanged and unknown SDK context stops configuration for review. When upgrading the SDK, review both this patch and the `spi_lock` negative-control version.
+After `project()`, firmware builds include `cmake/idf_spi_bus_lock.cmake` to apply the SPI lock fix from upstream commit `26263a36a2b3fe0649ccb20a02517c6c4b18e01b` to a build-local copy and replace that source in `esp_hw_support`. `cmake/idf_fatfs_exfat.cmake` likewise copies FatFs `ff.c`, `ff.h`, `ffunicode.c` and `ffconf.h` into the build tree and enables the SDK's otherwise disabled `FF_FS_EXFAT` only for this project, so FAT32 remains supported and the firmware never formats an SD card. The installed SDK is unchanged. Both patches match exact context and unknown SDK context stops configuration for review. When upgrading the SDK, review these patches and their negative-control versions.
 
 CI (`.github/workflows/ci.yml`) runs 9 jobs: `contracts`
 (`contracts/check_contracts.py` + `tools/gen_layout.py --check --no-idf`) and
@@ -485,3 +489,7 @@ The store server uses a dedicated firmware checkout, fetches `origin/main` every
 - Every paired file carries a language-switch line under its title
   (`English | [简体中文](X.md)`); when adding a new document, create both
   languages together
+
+The multi-gauge master protects slave presence and protocol-version records with one critical section shared by the radio callback and readers.
+
+The ESP-NOW slave DATA callback copies raw payloads into a persistent eight-frame queue. The slave worker alone decodes packets, writes signals and checks timeouts. A full queue drops new frames and the worker logs a warning. Consumption rechecks the bound MAC and receive time so expired packets cannot restore online status. Both master and slave workers exit cooperatively for OTA: `espnow_link_pause_for_ota()` returns false until they finish, and LVGL retries on a timer before starting the hotspot, without waiting or forcibly deleting a task holding resources. The queue and wake semaphores remain alive for the boot session.

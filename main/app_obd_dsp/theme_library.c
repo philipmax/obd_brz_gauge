@@ -164,43 +164,6 @@ esp_err_t theme_library_delete_current(bool *deleted)
     return err;
 }
 
-/* ------------------------------------------------------------------ */
-/* List                                                                */
-/* ------------------------------------------------------------------ */
-
-int theme_library_list(theme_lib_entry_t *out, int max)
-{
-    if (!out || max <= 0 || !sd_card_is_mounted()) return 0;
-    if (!storage_job_lock(pdMS_TO_TICKS(1000))) return -1;
-    DIR *dir = opendir(SD_DIR_THEMES);
-    if (!dir) {
-        storage_job_unlock();
-        return 0;
-    }
-    char cur[STORAGE_THEME_KEY_LEN];
-    theme_library_current_key(cur, sizeof(cur));
-    char path[PATH_LEN];
-    int n = 0;
-    struct dirent *e;
-    while (n < max && (e = readdir(dir)) != NULL) {
-        if (e->d_type != DT_DIR || e->d_name[0] == '.' || !key_ok(e->d_name)) continue;
-        theme_path(e->d_name, path, sizeof(path));
-        storage_theme_meta_t meta;
-        if (storage_theme_meta_from_file(path, &meta) != ESP_OK) continue;
-        theme_lib_entry_t *t = &out[n++];
-        memset(t, 0, sizeof(*t));
-        strlcpy(t->key, e->d_name, sizeof(t->key));
-        strlcpy(t->id, meta.id, sizeof(t->id));
-        strlcpy(t->name, meta.name, sizeof(t->name));
-        strlcpy(t->version, meta.version, sizeof(t->version));
-        t->size = meta.used_len;
-        t->active = strcmp(t->key, cur) == 0;
-    }
-    closedir(dir);
-    storage_job_unlock();
-    return n;
-}
-
 /* Validate the SD package and commit its key. NVS commits atomically; the
  * previous selection survives any failure before that commit. */
 esp_err_t theme_library_select(const char *key)

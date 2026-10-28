@@ -69,6 +69,7 @@
 - **两套主题系统**：编译期 TOML 主题（改颜色/素材）与 SD 运行时主题（自定义表盘页面布局），见 [docs/THEMES.md](docs/THEMES.md)
 - **App OTA**：配套手机 App 走 WiFi 热点传输，SHA256 校验 + 15 秒开机自检失败自动回滚
 - **开机动画**：OFF / RACE / VIDEO 三模式，VIDEO 模式可从手机 App 上传自制动画（360×360 圆形安全区）
+- **SD 卡**：支持 FAT32 与 exFAT（exFAT 是独立文件系统；固件不会自动格式化存储卡）
 - **RaceChrono BLE 输出**：可作为 RaceChrono DIY 设备向手机 App 提供数据
 - **自愈连接**：数据中断自动重初始化重连；自动协议保留自动设置，无有效数据时重新探测，兼容 11/29 位 CAN、J1850 和 K 线响应
 
@@ -170,4 +171,4 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 GNU General Public License for more details.
 ```
 
-通用配置支持 MAP 负压估算，水温／油温显示上限为 255°C；转速、车速按独立截止时间优先采集。旧的已安装配置需重新导入才能应用显式范围修复，详见 [车型文档](docs/VEHICLES.md)。
+通用配置支持 MAP 负压估算，水温／油温显示上限为 255°C；转速、车速、涡轮压力和节气门按页面需求优先采集。旧的已安装配置需重新导入才能应用显式范围修复，详见 [车型文档](docs/VEHICLES.md)。

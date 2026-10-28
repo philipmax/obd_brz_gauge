@@ -364,14 +364,22 @@ size_t espnow_v6_encode(const espnow_snapshot_t *s, int frag, uint8_t *out, size
 
 size_t espnow_hello_encode(uint8_t position, uint8_t caps, uint8_t *out, size_t cap)
 {
-    if (!out || cap < ESPNOW_V6_HELLO_LEN) return 0;
-    memset(out, 0, ESPNOW_V6_HELLO_LEN);
+    return espnow_hello_encode_demand(position, caps, 0, out, cap);
+}
+
+size_t espnow_hello_encode_demand(uint8_t position, uint8_t caps, uint16_t demand_mask,
+                                  uint8_t *out, size_t cap)
+{
+    const size_t len = (caps & ESPNOW_CAP_DEMAND_MASK) ? ESPNOW_V6_HELLO_LEN + 2u : ESPNOW_V6_HELLO_LEN;
+    if (!out || cap < len) return 0;
+    memset(out, 0, len);
     put_u16(out, ESPNOW_MAGIC);
     out[2] = ESPNOW_V6_VERSION;
     out[V6_OFS_TYPE] = ESPNOW_V6_TYPE_HELLO;
     out[HELLO_OFS_POS] = position;
     out[HELLO_OFS_CAPS] = caps;
-    return ESPNOW_V6_HELLO_LEN;
+    if (caps & ESPNOW_CAP_DEMAND_MASK) put_u16(out + ESPNOW_V6_HELLO_LEN, demand_mask);
+    return len;
 }
 
 /* ---------------------------------------------------------------- decoders */
@@ -492,12 +500,21 @@ bool espnow_v6_decode(const uint8_t *buf, size_t len, espnow_rx_frame_t *f)
 
 bool espnow_hello_decode(const uint8_t *buf, size_t len, uint8_t *position, uint8_t *caps)
 {
+    return espnow_hello_decode_demand(buf, len, position, caps, NULL);
+}
+
+bool espnow_hello_decode_demand(const uint8_t *buf, size_t len, uint8_t *position,
+                                uint8_t *caps, uint16_t *demand_mask)
+{
     /* >= : later firmware may append fields; this one only reads the first 8 bytes */
     if (!buf || len < ESPNOW_V6_HELLO_LEN || len > ESPNOW_FRAME_MAX) return false;
     if (get_u16(buf) != ESPNOW_MAGIC || buf[2] != ESPNOW_V6_VERSION ||
         buf[V6_OFS_TYPE] != ESPNOW_V6_TYPE_HELLO) return false;
     if (position) *position = buf[HELLO_OFS_POS];
     if (caps) *caps = buf[HELLO_OFS_CAPS];
+    if (demand_mask) *demand_mask = ((buf[HELLO_OFS_CAPS] & ESPNOW_CAP_DEMAND_MASK) &&
+                                    len >= ESPNOW_V6_HELLO_LEN + 2u)
+        ? get_u16(buf + ESPNOW_V6_HELLO_LEN) : 0;
     return true;
 }
 

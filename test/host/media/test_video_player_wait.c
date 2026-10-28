@@ -1430,6 +1430,25 @@ static void test_value_reader_seek(void)
     CHECK(video_player_set_position(NAN) == ESP_ERR_INVALID_STATE);
     finish();
 }
+static void test_value_frame_wakes(void)
+{
+    vp_session_t *s = prepared(VIDEO_MODE_COMPOSITE, 64);
+    s->value_driven = true; s->ev->bits = 0;
+    uint32_t revision = s->position_revision;
+    for (unsigned i=0; i<1000; i++) {
+        CHECK(video_player_set_position((i % 10) * .001) == ESP_OK);
+        CHECK(s->position_revision == revision && !s->ev->bits);
+    }
+    CHECK(video_player_set_position(.5) == ESP_OK);
+    CHECK(s->position_revision == revision + 1 &&
+          (s->ev->bits & (EV_WAKE_READER | EV_WAKE_DECODER)) == (EV_WAKE_READER | EV_WAKE_DECODER));
+    s->ev->bits = 0;
+    CHECK(video_player_set_position(.501) == ESP_OK);
+    CHECK(s->position_revision == revision + 1 && !s->ev->bits);
+    CHECK(video_player_set_position(0) == ESP_OK); // A -> B -> A still requires a new read
+    CHECK(s->position_revision == revision + 2 && s->ev->bits);
+    finish();
+}
 static void value_decode_moving(void)
 {
     CHECK(video_player_set_position(1) == ESP_OK);
@@ -1526,7 +1545,7 @@ int main(void)
         TEST(test_timed_fullscreen_finish), TEST(test_timed_truncated_prebuffer),
         TEST(test_timed_slow_decode_completes), TEST(test_timed_stall_catches_up),
         TEST(test_timed_decode_error_remains_fatal),
-        TEST(test_path_limit), TEST(test_value_reader_seek), TEST(test_value_decoder_latest), TEST(test_value_decoder_error),
+        TEST(test_path_limit), TEST(test_value_reader_seek), TEST(test_value_frame_wakes), TEST(test_value_decoder_latest), TEST(test_value_decoder_error),
         TEST(test_ui_event_pause_loading), TEST(test_ui_event_pause_pending), TEST(test_ui_event_pause_late_publish),
         TEST(test_ui_event_pause_decode), TEST(test_ui_event_pause_publish), TEST(test_ui_event_pause_stop),
         TEST(test_ui_event_fullscreen_control), TEST(test_fullscreen_invalidation_guard), TEST(test_ui_event_invalid_control),

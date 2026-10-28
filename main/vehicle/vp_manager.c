@@ -1147,28 +1147,6 @@ esp_err_t vp_manager_read_json(const char *id, char **out, size_t *out_len)
     return e;
 }
 
-esp_err_t vp_manager_export(const char *id)
-{
-    char path[VPM_PATH_LEN];
-    char *src = NULL;
-    size_t len = 0;
-    esp_err_t e;
-
-    if (!id || !id[0]) return ESP_ERR_INVALID_ARG;
-    if (!sd_card_is_mounted()) return ESP_ERR_INVALID_STATE;
-    lock();
-    e = read_source(id, &src, &len, NULL);
-    if (e == ESP_OK) {
-        sd_card_mkdir(SD_DIR_EXPORT);
-        snprintf(path, sizeof(path), "%s/%s.vehicle.json", SD_DIR_EXPORT, is_generic(id) ? VPM_GENERIC_ID : id);
-        e = sd_card_write_file_atomic(path, src, len);
-        heap_caps_free(src);
-    }
-    if (e != ESP_OK) set_err("export %s: %s", id, esp_err_to_name(e));
-    unlock();
-    return e;
-}
-
 /* ------------------------------------------------------------------ */
 /* verification hooks (ELM327 task)                                    */
 /* ------------------------------------------------------------------ */

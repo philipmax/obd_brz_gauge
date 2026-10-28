@@ -16,6 +16,8 @@
 #define espnow_v6_decode portable_espnow_v6_decode
 #define espnow_rx_apply portable_espnow_rx_apply
 #define espnow_hello_encode portable_espnow_hello_encode
+#define espnow_hello_encode_demand portable_espnow_hello_encode_demand
 #define espnow_hello_decode portable_espnow_hello_decode
+#define espnow_hello_decode_demand portable_espnow_hello_decode_demand
 #define espnow_crc16 portable_espnow_crc16
 #include "../../../main/bsp_obd_dsp/espnow_v6.c"

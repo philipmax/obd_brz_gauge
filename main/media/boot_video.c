@@ -396,11 +396,6 @@ bool boot_video_first_frame_presented(void)
     return video_player_first_frame_presented();
 }
 
-bool boot_video_is_finished(void)
-{
-    return boot_video_get_state() != BOOT_VIDEO_RUNNING;
-}
-
 void boot_video_destroy(void)
 {
     boot_video_t *bv = s_bv;

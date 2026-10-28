@@ -89,6 +89,8 @@ signals default to OBD2. Use `disabled: true` for one signal or root
   SHA256-verified, with a 15-second boot self-check and automatic rollback
 - **Boot animation** — OFF / RACE / VIDEO modes; VIDEO plays a custom
   animation uploaded from the phone app (360×360 circular safe area)
+- **SD card** — supports FAT32 and exFAT (exFAT is a separate filesystem; the
+  firmware does not auto-format cards)
 - **RaceChrono BLE output** — can act as a RaceChrono DIY device
 - **Self-healing link** — re-initializes and reconnects automatically when
   data stalls; Auto retains its selection and re-probes on decode failures,
@@ -203,4 +205,4 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 GNU General Public License for more details.
 ```
 
-Generic supports MAP vacuum estimation and coolant/oil display limits up to 255°C. RPM and speed use independent priority deadlines. Reimport older installed profiles to apply explicit range fixes; see [vehicle documentation](docs/VEHICLES.en.md).
+Generic supports MAP vacuum estimation and coolant/oil display limits up to 255°C. RPM, speed, boost and throttle receive priority polling when demanded by the page. Reimport older installed profiles to apply explicit range fixes; see [vehicle documentation](docs/VEHICLES.en.md).
