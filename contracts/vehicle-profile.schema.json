@@ -727,6 +727,12 @@
         "multiframe": {
           "type": "boolean"
         },
+        "multiframe_mode": {
+          "type": "string",
+          "enum": [
+            "elm"
+          ]
+        },
         "byte_from_end": {
           "type": "integer",
           "minimum": 1,
@@ -811,6 +817,29 @@
               "multiframe": {
                 "const": true
               }
+            }
+          }
+        },
+        {
+          "title": "multiframe_mode needs multiframe: true and cannot be used with raw",
+          "if": {
+            "required": [
+              "multiframe_mode"
+            ]
+          },
+          "then": {
+            "required": [
+              "multiframe"
+            ],
+            "properties": {
+              "multiframe": {
+                "const": true
+              }
+            },
+            "not": {
+              "required": [
+                "raw"
+              ]
             }
           }
         },

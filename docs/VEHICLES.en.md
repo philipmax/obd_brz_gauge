@@ -45,6 +45,15 @@ The catalog repo currently holds **18 profiles**
 | `jeep.generic` | `jeep` | 7 locked | 29-bit functional `18DB33F1` | Ratio estimate | — | — | Generic placeholder; ratios/tire still need to be refined for the real car |
 | `honda.integra` | `Honda Integra` | 7 locked | 29-bit functional `18DB33F1` | Disabled (CVT) | ✓ | — | 11th-gen Civic platform L15C7; non-Type-R trims may lack a physical oil-temp sensor |
 
+The oil-temperature source in `subaru.zc6.pid` remains the Mode 21 request
+`2101`. `multiframe: true` means the response may span multiple frames. While
+the firmware uses `ATCAF0` to handle that response manually, it wraps the
+request as the ISO-TP single frame `02 21 01` (shown as `022101` in the ELM
+command); do not add the length byte to the JSON.
+To let ELM handle ISO-TP automatically, add `"multiframe_mode": "elm"` to
+that source. The request remains `2101`, the full multiframe response is still
+parsed, and the engine does not switch to `CAF0/CFC0`.
+
 Numbers come from [`vehicles/catalog/*.vehicle.json`](../vehicles/catalog/);
 field definitions are in [`contracts/vehicle-rpn.md`](../contracts/vehicle-rpn.md)
 (the `skygauge.vehicle/1` schema, RPN formula opcodes, service/addressing

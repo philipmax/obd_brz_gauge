@@ -537,7 +537,7 @@ static void deliver(fake_t *f)
     bool flow_control;
 
     if (!f->has_pend || (int32_t)(f->pend_at - f->now) > 0) return;
-    flow_control = !strcmp(f->pend_cmd, "300800");
+    flow_control = !strcmp(f->pend_cmd, "300100");
     f->has_pend = false;
     if (f->n_ans < LOG_MAX) snprintf(f->ans[f->n_ans++], CMD_W, "%s", f->pend_cmd);
     vp_engine_on_rx(f->eng, (const uint8_t *)f->pend, f->pend_len);
@@ -1500,39 +1500,64 @@ static void test_multiframe(void)
     VT_CHECK(p != NULL);
     if (!p) return;
     /* ELM numbered frames (CAF1, H0) with the byte count line */
+    set_resp(f, "", "022101",
+             "014\r0: 61 01 11 22 33 44\r1: 55 66 77 88 99 AA BB\r2: CC DD 82 EE FF 00 00");
+    set_resp(f, "", "010C", "41 0C 0B B8");
+    fake_start(f, p, 0);
+    VT_CHECK(pump_answer(f, "022101"));
+    VT_CHECK_INT(f->val[SIG_OBD_OIL_TEMP], 90);
+    VT_CHECK_INT(f->val[SIG_VEH_BASE], 0x33);
+    /* raw ISO-TP frames (first frame + consecutive frames) */
+    set_resp(f, "", "022101", "10 14 61 01 11 22 33 44");
+    set_resp(f, "", "300100", "21 55 66 77 88 99 AA BB");
+    set_after_fc(f, "22 CC DD 78 EE FF 00 00");
+    VT_CHECK(pump_answer(f, "022101"));
+    sim(f, 50); /* allow request throttling plus the FC/continuation latency. */
+    VT_CHECK_INT(f->val[SIG_OBD_OIL_TEMP], 80);
+    VT_CHECK(count_cmd(f, "ATCAF0") >= 1);
+    VT_CHECK(count_cmd(f, "ATCFC0") >= 1);
+    {
+        int req = find_cmd(f, "022101", 0);
+        int fc = find_cmd(f, "300100", req + 1);
+        VT_CHECK(req >= 0 && fc > req);
+    }
+    /* The next ordinary request restores automatic framing and flow control. */
+    VT_CHECK(pump_answer(f, "010C"));
+    {
+        int req = find_cmd(f, "022101", 0);
+        int caf1 = find_cmd(f, "ATCAF1", req + 1);
+        int cfc1 = find_cmd(f, "ATCFC1", req + 1);
+        VT_CHECK(req >= 0 && caf1 > req && cfc1 > req);
+    }
+    /* compact hex single frame (spaces off) */
+    set_resp(f, "", "022101", "7E8 6101AABBCCDDEE016E02030405");
+    VT_CHECK(pump_answer(f, "022101"));
+    VT_CHECK_INT(f->val[SIG_OBD_OIL_TEMP], 70);
+    VT_CHECK_INT(f->val[SIG_VEH_BASE], 0xCC);
+    fake_stop(f, p);
+}
+
+static void test_multiframe_elm_managed(void)
+{
+    fake_t *f = fake_reset();
+    vp_profile_t *p = compile_q(
+        P_HEAD("t.multi.elm", "{'proto':6}") "'signals':["
+        "{'id':'obd.oil_temp','src':[{'req':'2101','multiframe':true,"
+        "'multiframe_mode':'elm','byte_from_end':5,'rpn':[['X'],['k',40],'-']}]},"
+        S_RPM "]}");
+
+    VT_CHECK(p != NULL);
+    if (!p) return;
     set_resp(f, "", "2101",
              "014\r0: 61 01 11 22 33 44\r1: 55 66 77 88 99 AA BB\r2: CC DD 82 EE FF 00 00");
     set_resp(f, "", "010C", "41 0C 0B B8");
     fake_start(f, p, 0);
     VT_CHECK(pump_answer(f, "2101"));
     VT_CHECK_INT(f->val[SIG_OBD_OIL_TEMP], 90);
-    VT_CHECK_INT(f->val[SIG_VEH_BASE], 0x33);
-    /* raw ISO-TP frames (first frame + consecutive frames) */
-    set_resp(f, "", "2101", "10 14 61 01 11 22 33 44");
-    set_after_fc(f, "30 02 00\r21 55 66 77 88 99 AA BB\r22 CC DD 78 EE FF 00 00");
-    VT_CHECK(pump_answer(f, "2101"));
-    sim(f, 50); /* allow request throttling plus the FC/continuation latency. */
-    VT_CHECK_INT(f->val[SIG_OBD_OIL_TEMP], 80);
-    VT_CHECK(count_cmd(f, "ATCAF0") >= 1);
-    VT_CHECK(count_cmd(f, "ATCFC0") >= 1);
-    {
-        int req = find_cmd(f, "2101", 0);
-        int fc = find_cmd(f, "300800", req + 1);
-        VT_CHECK(req >= 0 && fc > req);
-    }
-    /* The next ordinary request restores automatic framing and flow control. */
-    VT_CHECK(pump_answer(f, "010C"));
-    {
-        int req = find_cmd(f, "2101", 0);
-        int caf1 = find_cmd(f, "ATCAF1", req + 1);
-        int cfc1 = find_cmd(f, "ATCFC1", req + 1);
-        VT_CHECK(req >= 0 && caf1 > req && cfc1 > req);
-    }
-    /* compact hex single frame (spaces off) */
-    set_resp(f, "", "2101", "7E8 6101AABBCCDDEE016E02030405");
-    VT_CHECK(pump_answer(f, "2101"));
-    VT_CHECK_INT(f->val[SIG_OBD_OIL_TEMP], 70);
-    VT_CHECK_INT(f->val[SIG_VEH_BASE], 0xCC);
+    VT_CHECK(count_cmd(f, "ATCAF0") == 0);
+    VT_CHECK(count_cmd(f, "ATCFC0") == 0);
+    VT_CHECK(count_cmd(f, "022101") == 0);
+    VT_CHECK(find_cmd(f, "2101", 0) >= 0);
     fake_stop(f, p);
 }
 
@@ -2337,6 +2362,7 @@ static void golden_one(const char *cat_path, const char *golden_dir, int *n_done
     cJSON_ArrayForEach(it, reqs) {
         gq_t q;
         const cJSON *src = cJSON_GetObjectItemCaseSensitive(it, "src");
+        bool multi = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(it, "multi"));
         memset(&q, 0, sizeof(q));
         if (!cJSON_IsNumber(src) || src->valueint != 0) continue;
         snprintf(q.hdr, sizeof(q.hdr), "%s", jstr(it, "hdr"));
@@ -2348,8 +2374,13 @@ static void golden_one(const char *cat_path, const char *golden_dir, int *n_done
         }
         snprintf(q.tx, sizeof(q.tx), "%s", jstr(it, "tx"));
         snprintf(q.rx, sizeof(q.rx), "%s", jstr(it, "rx"));
-        q.raw = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(it, "raw")) ||
-                cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(it, "multi"));
+        if (multi) {
+            char wire[CMD_W];
+            snprintf(wire, sizeof(wire), "%02X%s",
+                     (unsigned)(strlen(q.tx) / 2u), q.tx);
+            snprintf(q.tx, sizeof(q.tx), "%s", wire);
+        }
+        q.raw = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(it, "raw")) || multi;
         if (!strcmp(jstr(it, "class"), "fast")) n_fast = gq_add(fast, n_fast, &q);
         else n_round = gq_add(round, n_round, &q);
     }
@@ -2720,6 +2751,7 @@ int main(void)
     RUN(test_monitor);
     RUN(test_can_line_formats);
     RUN(test_multiframe);
+    RUN(test_multiframe_elm_managed);
     RUN(test_rates);
     RUN(test_screen_demand_polling);
     RUN(test_functional_fallback);

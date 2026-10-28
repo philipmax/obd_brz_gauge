@@ -55,6 +55,7 @@ enum { VP_MON_NONE = 0, VP_MON_PROBE = 1, VP_MON_CONTINUOUS = 2 };
 #define VP_REQ_F_CEA    0x04u   /* send with ATCEA <cea>, restore ATCEA after */
 #define VP_REQ_F_FUNC   0x08u   /* hdr is a functional (broadcast) address */
 #define VP_REQ_F_RX     0x10u   /* set ATCRA <rx> before, ATCRA after */
+#define VP_REQ_F_MULTI_ELM 0x20u /* multiframe response with ELM-managed ISO-TP */
 
 /* vp_request_t.rsv: internal request identity retained from profile input. */
 #define VP_REQ_RSV_HDR_EXPLICIT 0x01u /* JSON source supplied hdr explicitly */

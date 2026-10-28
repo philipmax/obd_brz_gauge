@@ -160,6 +160,7 @@ bool vp_int_req_key(const cJSON *src, uint32_t bus_hdr, vp_request_t *k)
     const char *rx = jstr(src, "rx");
     const char *cea = jstr(src, "cea");
     const char *exp = jstr(src, "expect");
+    const char *multi_mode = jstr(src, "multiframe_mode");
     uint8_t ebuf[8];
     size_t n = 0, en = 0;
     size_t off = 0, plen = 0;
@@ -220,6 +221,7 @@ bool vp_int_req_key(const cJSON *src, uint32_t bus_hdr, vp_request_t *k)
         k->flags |= VP_REQ_F_CEA;
     }
     if (cJSON_IsTrue(jget(src, "multiframe"))) k->flags |= VP_REQ_F_MULTI;
+    if (multi_mode && !strcmp(multi_mode, "elm")) k->flags |= VP_REQ_F_MULTI_ELM;
 
     {
         const char *const keys[] = { "before", "after" };
@@ -839,7 +841,8 @@ static void check_rpn(vctx_t *c, const cJSON *src, const char *base)
 }
 
 static const char *const k_src_req_keys[] = {
-    "req", "raw", "hdr", "rx", "cea", "len", "multiframe", "byte_from_end", "hold",
+    "req", "raw", "hdr", "rx", "cea", "len", "multiframe", "multiframe_mode",
+    "byte_from_end", "hold",
     "expect", "before", "after", "valid", "fail_after", "rpn", "expr", "notes", NULL
 };
 static const char *const k_src_can_keys[] = {
@@ -1009,6 +1012,17 @@ static void check_req_source(vctx_t *c, const cJSON *src, const char *base)
 
     f_int(c, src, "len", base, 1, VP_MAX_DATA_LEN, "E_LIMIT", NULL);
     f_bool(c, src, "multiframe", base, &multi);
+    {
+        static const char *const modes[] = { "elm", NULL };
+        int mode = f_enum(c, src, "multiframe_mode", base, modes, -2);
+        if (mode >= 0 && !multi) {
+            verr(c, "E_SCHEMA", pj(p, sizeof(p), base, "multiframe_mode"),
+                 "needs \"multiframe\": true");
+        } else if (mode >= 0 && jget(src, "raw")) {
+            verr(c, "E_SCHEMA", pj(p, sizeof(p), base, "multiframe_mode"),
+                 "not supported with raw requests");
+        }
+    }
     if (f_int(c, src, "byte_from_end", base, 1, VP_MAX_DATA_LEN, "E_LIMIT", &v) == F_OK && !multi) {
         verr(c, "E_SCHEMA", pj(p, sizeof(p), base, "byte_from_end"), "needs \"multiframe\": true");
     }

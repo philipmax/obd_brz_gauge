@@ -168,6 +168,19 @@ private Mode 21 PID `01`. The response is multi-frame ISO-TP, and the
 temperature byte's position drifts between car/firmware versions — so instead
 of indexing from the front, it's addressed as the **5th byte from the end**:
 
+Keep the JSON `req` as the diagnostic payload `2101`. Since firmware handles
+ISO-TP manually for multiframe responses, it adds the single-frame length byte
+on transmission, producing `022101`; do not add `02` to the JSON.
+By default, firmware requests one frame per flow-control block with `300100`.
+Since the adapter may return one consecutive frame in each flow-control
+response, firmware consumes it and requests the next frame until ISO-TP
+reassembly is complete.
+
+To let the adapter handle ISO-TP, keep `multiframe: true` and set
+`"multiframe_mode": "elm"`. The engine then sends `2101`, leaves `CAF1/CFC1`
+automatic framing and flow control enabled, and parses ELM numbered-frame
+output. If omitted, the existing manual flow-control mode remains the default.
+
 ```json
 {
   "id": "obd.oil_temp",
@@ -177,6 +190,7 @@ of indexing from the front, it's addressed as the **5th byte from the end**:
     {
       "req": "2101",
       "multiframe": true,
+      "multiframe_mode": "elm",
       "byte_from_end": 5,
       "valid": [-10, 255],
       "hold": { "delta": 8, "max_hold": 30, "gap_ms": 3000 },

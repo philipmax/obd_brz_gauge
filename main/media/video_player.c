@@ -74,6 +74,7 @@ extern SemaphoreHandle_t lvgl_mux;   /* app_main.c */
 #define VP_THEME_RING_MAX    (2u * 1024u * 1024u)
 #define VP_THEME_RESERVE     (512u * 1024u)
 #define VP_SD_BUFFER_BYTES   (16u * 1024u)
+#define VP_SD_BUFFER_MIN     512u
 #define VP_REC_HDR           8u
 #define VP_REC_WRAP          0xFFFFFFFFu
 
@@ -366,6 +367,7 @@ static uint32_t theme_ring_budget(const obv1_info_t *info, uint32_t wanted)
 typedef struct {
     int fd;
     uint8_t *buf;
+    size_t cap;
     off_t begin;
     size_t used, pos;
 } vp_sd_stream_t;
@@ -388,7 +390,7 @@ static size_t sd_stream_read(vp_sd_stream_t *f, void *dst, size_t len)
     while (got < len) {
         if (f->pos == f->used) {
             ssize_t n;
-            do { n = read(f->fd, f->buf, VP_SD_BUFFER_BYTES); }
+            do { n = read(f->fd, f->buf, f->cap); }
             while (n < 0 && errno == EINTR);
             if (n <= 0) break;
             f->begin += (off_t)f->used;
@@ -502,10 +504,24 @@ static void reader_task(void *arg)
     if (!gate_owned || s->quit) goto done;
     if (file.fd < 0) ESP_LOGW(TAG, "cannot open %s", s->path);
     else {
-        file.buf = heap_caps_aligned_alloc(16, VP_SD_BUFFER_BYTES,
-                                           MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
-        if (!file.buf) ESP_LOGW(TAG, "cannot allocate SD read buffer for %s", s->path);
-        else index = reader_open(s, &file);
+        file.cap = VP_SD_BUFFER_BYTES;
+        while (!file.buf && file.cap >= VP_SD_BUFFER_MIN) {
+            file.buf = heap_caps_aligned_alloc(16, file.cap,
+                                               MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+            if (!file.buf && file.cap > VP_SD_BUFFER_MIN) file.cap /= 2u;
+        }
+        if (!file.buf) {
+            const uint32_t caps = MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA;
+            ESP_LOGW(TAG, "cannot allocate SD read buffer for %s (internal DMA free=%lu largest=%lu)",
+                     s->path, (unsigned long)heap_caps_get_free_size(caps),
+                     (unsigned long)heap_caps_get_largest_free_block(caps));
+        } else {
+            if (file.cap < VP_SD_BUFFER_BYTES) {
+                ESP_LOGW(TAG, "using reduced %lu-byte SD read buffer for %s",
+                         (unsigned long)file.cap, s->path);
+            }
+            index = reader_open(s, &file);
+        }
     }
 
     ok = index != NULL;
@@ -1023,7 +1039,6 @@ static void dec_run(vp_session_t *s, vp_out_t *o)
             }
             if (p.shown) {
                 s->underruns++;
-                ESP_LOGW(TAG, "underrun at frame %llu", (unsigned long long)p.pos);
             }
             p.buffering = true;
             continue;

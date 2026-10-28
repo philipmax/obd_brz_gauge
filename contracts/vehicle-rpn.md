@@ -103,6 +103,7 @@ schema 故意比设备严：未知字段在 schema 里是错误（设备只给 `
 | `after` | 当前请求完成后挂起的 0..4 条请求级 AT 命令；Car Scanner 语义是在下一次请求发生头切换时执行 |
 | `len` | 1..64，公式可寻址的数据字节数（响应不足则样本失败） |
 | `multiframe` | 响应可能是多帧（ISO-TP 重组） |
+| `multiframe_mode` | 可选 `"elm"`：保留多帧响应解析，但交由 ELM 自动处理 ISO-TP；需 `multiframe: true`，且不能用于 `raw` 请求。未设置时沿用固件手动流控 |
 | `byte_from_end` | 1..64，需 `multiframe: true`：公式只看响应**最后 n 个字节**，且只能用 `["X"]`（= 倒数第 n 个字节） |
 | `hold` | `{delta 0.001..1000, max_hold 1..255, gap_ms 0..60000}`，三项必填，见第 3 节第 4 步 |
 | `expect` | 正响应前缀，紧凑十六进制 1..8 字节，首字节必须是服务号 + 0x40；缺省由请求推出（`010C` → `410C`，`221302` → `621302`） |
@@ -322,7 +323,7 @@ profile 不能任意写 AT 命令；`bus.init` 和请求源的 `before`/`after` 
 ZN/C6 PID 的机油温度（Mode 21 多帧，倒数第 5 字节，跳变保持）：
 
 ```json
-{"id":"obd.oil_temp","valid":[-20,255],"filter":"temp_hyst","src":[{"req":"2101","multiframe":true,"byte_from_end":5,
+{"id":"obd.oil_temp","valid":[-20,255],"filter":"temp_hyst","src":[{"req":"2101","multiframe":true,"multiframe_mode":"elm","byte_from_end":5,
   "valid":[-10,255],"hold":{"delta":8,"max_hold":30,"gap_ms":3000},"expr":"X-40","rpn":[["X"],["k",40],"-"]}]}
 ```
 

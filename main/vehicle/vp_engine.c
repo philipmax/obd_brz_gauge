@@ -31,7 +31,7 @@
 #define ENG_STEPS           40
 #define ENG_CMD_CAP         20
 #define ENG_ISOTP_TIMEOUT   2500
-#define ENG_ISOTP_BLOCK_SIZE 8
+#define ENG_ISOTP_BLOCK_SIZE 1
 #if ENG_CMD_CAP < 14
 #error "state commands require prefix + 8 hex digits + NUL"
 #endif
@@ -1473,7 +1473,7 @@ static bool push_iso_flow_control(vp_engine_t *e, int r)
 
     e->iso_req = (uint16_t)r;
     e->iso_block_count = 0;
-    s = q_push_front(e, K_ISO_FC, "300800", 0);
+    s = q_push_front(e, K_ISO_FC, "300100", 0);
     if (!s) return false;
     s->req = (int16_t)r;
     s->timeout_ms = ENG_ISOTP_TIMEOUT;
@@ -2340,8 +2340,10 @@ static bool push_state_for(vp_engine_t *e, uint8_t r)
                              ((q->rsv & VP_REQ_RSV_HDR_EXPLICIT) != 0);
     uint32_t want_rx = response_filter(e, (q->flags & VP_REQ_F_RX) ? q->rx : e->base_rx);
     int16_t want_cea = (q->flags & VP_REQ_F_CEA) ? (int16_t)q->cea : (int16_t)ENG_CEA_OFF;
-    int8_t want_caf0 = (q->flags & (VP_REQ_F_RAW | VP_REQ_F_MULTI)) ? 1 : 0;
-    int8_t want_cfc0 = (q->flags & VP_REQ_F_MULTI) ? 1 : 0;
+    bool manual_multi = (q->flags & VP_REQ_F_MULTI) &&
+                        !(q->flags & VP_REQ_F_MULTI_ELM);
+    int8_t want_caf0 = ((q->flags & VP_REQ_F_RAW) || manual_multi) ? 1 : 0;
+    int8_t want_cfc0 = manual_multi ? 1 : 0;
     bool defer_same_header = e->pending_after_req >= 0 &&
                              request_header_same(&e->req[e->pending_after_req], q);
 
@@ -2366,11 +2368,11 @@ static bool push_state_for(vp_engine_t *e, uint8_t r)
         return true;
     }
     if (e->caf0 != want_caf0 &&
-        ((q->flags & (VP_REQ_F_RAW | VP_REQ_F_MULTI)) || !defer_same_header)) {
+        ((q->flags & VP_REQ_F_RAW) || manual_multi || !defer_same_header)) {
         push_state(e, ST_CAF, (uint32_t)want_caf0, r);
         return true;
     }
-    if (e->cfc0 != want_cfc0 && ((q->flags & VP_REQ_F_MULTI) || !defer_same_header)) {
+    if (e->cfc0 != want_cfc0 && (manual_multi || !defer_same_header)) {
         push_state(e, ST_CFC, (uint32_t)want_cfc0, r);
         return true;
     }
@@ -2382,13 +2384,22 @@ static void push_req(vp_engine_t *e, uint8_t r)
     const vp_request_t *q = &e->req[r];
     char c[ENG_CMD_CAP];
     eng_step_t *s;
-    uint8_t k, n = q->tx_len < 8 ? q->tx_len : 8;
+    uint8_t bytes[8];
+    uint8_t k, n = q->tx_len < sizeof(bytes) ? q->tx_len : sizeof(bytes);
 
-    // This runs on every OBD poll. Format bytes directly instead of invoking
-    // snprintf once per byte (up to eight formatter calls per request).
+    /* CAF0 sends the bytes exactly as entered, including the ISO-TP
+     * single-frame length. CAF1 adds that byte for normal ELM requests. */
+    if ((q->flags & VP_REQ_F_MULTI) &&
+        !(q->flags & (VP_REQ_F_RAW | VP_REQ_F_MULTI_ELM)) && n < 8) {
+        bytes[0] = n;
+        memcpy(bytes + 1, q->tx, n);
+        n++;
+    } else {
+        memcpy(bytes, q->tx, n);
+    }
     for (k = 0; k < n; k++) {
-        c[2u * k] = eng_hex[q->tx[k] >> 4];
-        c[2u * k + 1u] = eng_hex[q->tx[k] & 0x0Fu];
+        c[2u * k] = eng_hex[bytes[k] >> 4];
+        c[2u * k + 1u] = eng_hex[bytes[k] & 0x0Fu];
     }
     c[2u * n] = '\0';
     s = q_push(e, K_REQ, c, e->p->gap_ms);
@@ -2795,7 +2806,8 @@ static void step_done(vp_engine_t *e, uint32_t now, int how)
             if (s.req == e->chain_req) e->chain_req = -1;
             break;
         }
-        if (answered && (e->req[s.req].flags & VP_REQ_F_MULTI)) {
+        if (answered && (e->req[s.req].flags & VP_REQ_F_MULTI) &&
+            !(e->req[s.req].flags & VP_REQ_F_MULTI_ELM)) {
             bool complete = false;
             bool need_fc = false;
             bool iso = iso_consume(e, &e->req[s.req], true, &complete, &need_fc);
@@ -2804,7 +2816,8 @@ static void step_done(vp_engine_t *e, uint32_t now, int how)
                 restore_iso_state(e);
             } else if (iso && push_iso_flow_control(e, s.req)) {
                 /* The initial First Frame is retained in iso_payload; the
-                 * next step waits for Consecutive Frames after 30 08 00. */
+                 * adapter may return one Consecutive Frame per flow-control
+                 * prompt, so request another FC after each frame. */
                 (void)need_fc;
             } else {
                 req_done(e, s.req, answered, now);
@@ -2822,21 +2835,35 @@ static void step_done(vp_engine_t *e, uint32_t now, int how)
         if (s.req == e->chain_req) e->chain_req = -1;
         break;
     case K_ISO_FC:
+    {
+        const vp_request_t *q = &e->req[s.req];
+        bool complete = false;
+        bool need_fc = false;
+        bool iso = answered && iso_consume(e, q, false, &complete, &need_fc);
+
         if (!answered || strstr(e->rxbuf, "?") != NULL) {
             iso_fail(e, s.req, now);
             restore_iso_state(e);
+        } else if (iso && complete) {
+            iso_complete(e, s.req, now);
+            restore_iso_state(e);
+        } else if (iso && need_fc) {
+            if (!push_iso_flow_control(e, s.req)) {
+                iso_fail(e, s.req, now);
+                restore_iso_state(e);
+            }
         } else if (!push_iso_wait(e, s.req)) {
             iso_fail(e, s.req, now);
             restore_iso_state(e);
         }
         break;
+    }
     case K_ISO_WAIT: {
         const vp_request_t *q = &e->req[s.req];
         bool complete = false;
         bool need_fc = false;
         bool iso = answered && iso_consume(e, q, false, &complete, &need_fc);
         if (!iso) {
-            elog(e, "iso wait rejected: %s", e->rxbuf);
             iso_fail(e, s.req, now);
             restore_iso_state(e);
         } else if (complete) {

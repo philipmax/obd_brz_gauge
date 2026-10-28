@@ -5,6 +5,10 @@ English | [简体中文](CHANGELOG.md)
 Newest first. Behavior and flashing changes only; pure refactors and comment
 cleanups live in the git history.
 
+## Improve video SD read-ahead while retaining DMA allocation fallback
+
+- Prefer a 16 KiB internal DMA buffer for boot-animation and theme-video SD reads, falling back through 8, 4, 2, 1 and 0.5 KiB to balance bulk SD throughput with fragmented internal DMA heap. Report free space and the largest block if all attempts fail, and cover fallback reads with the real player host test.
+
 ## exFAT, protocol detection and multi-gauge demand sync
 
 - Enable FatFs exFAT in a build-local copy while retaining FAT32 and never formatting the SD card. Generic auto-detection now retries each candidate with a declared RPM `010C` request when `0100` has no response.

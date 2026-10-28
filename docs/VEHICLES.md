@@ -42,6 +42,12 @@
 | `jeep.generic` | `jeep` | 7 锁定 | 29 位功能 `18DB33F1` | 比值估算 | — | — | 通用占位，齿比/轮胎待按实际车型修正 |
 | `honda.integra` | `Honda Integra` | 7 锁定 | 29 位功能 `18DB33F1` | 禁用（CVT） | ✓ | — | 11 代思域平台 L15C7；非 Type R 可能无物理油温传感器 |
 
+`subaru.zc6.pid` 的油温配置仍是 Mode 21 请求 `2101`。`multiframe: true` 表示响应可能多帧；
+固件用 `ATCAF0` 手动处理响应时，会把请求封装成 ISO-TP 单帧 `02 21 01`（ELM 命令显示为
+`022101`）。JSON 不应添加这个长度字节。
+如需让 ELM 自动处理 ISO-TP，可在该源增加 `"multiframe_mode": "elm"`；请求保持
+`2101`，响应仍按完整多帧拼接后解析，且不切换到 `CAF0/CFC0`。
+
 数字以 [`vehicles/catalog/*.vehicle.json`](../vehicles/catalog/) 为准，字段定义见
 [`contracts/vehicle-rpn.md`](../contracts/vehicle-rpn.md)（`skygauge.vehicle/1` schema、
 RPN 公式操作码、服务/寻址白名单、静态校验规则）。

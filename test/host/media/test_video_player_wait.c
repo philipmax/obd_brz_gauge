@@ -22,6 +22,9 @@ static int current_task = -1;
 static unsigned fail_task_attempt;
 static void *allocations[64];
 static unsigned live_allocations;
+static size_t max_dma_alloc = SIZE_MAX;
+static size_t dma_alloc_sizes[16];
+static unsigned dma_alloc_attempts;
 static unsigned waits, signal_waits, timed_waits, sets_reader, sets_decoder;
 static unsigned decoded, presented, panel_draws, invalidations, timer_deletes, ui_steps;
 static uint8_t *block_outputs[4];
@@ -90,6 +93,11 @@ size_t heap_caps_get_free_size(unsigned caps)
     CHECK(caps == (MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
     return free_psram;
 }
+size_t heap_caps_get_largest_free_block(unsigned caps)
+{
+    CHECK(caps == (MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA));
+    return max_dma_alloc;
+}
 void *heap_caps_malloc(size_t n, unsigned caps)
 {
     (void)caps;
@@ -102,7 +110,11 @@ void *heap_caps_calloc(size_t n, size_t size, unsigned caps)
 }
 void *heap_caps_aligned_alloc(size_t alignment, size_t n, unsigned caps)
 {
-    (void)caps;
+    if (caps == (MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA)) {
+        CHECK(dma_alloc_attempts < COUNT_OF(dma_alloc_sizes));
+        dma_alloc_sizes[dma_alloc_attempts++] = n;
+        if (n > max_dma_alloc) return NULL;
+    }
     void *p = NULL;
     CHECK(posix_memalign(&p, alignment, n) == 0); remember(p); return p;
 }
@@ -526,13 +538,18 @@ static void read_header(vp_session_t *s, EventBits_t bits)
 static void test_header_real_reader(void)
 {
     make_file(); vp_session_t *s = start(VIDEO_MODE_COMPOSITE, file_path);
+    max_dma_alloc = 512; dma_alloc_attempts = 0;
     on_block = read_header; auto_ui = allow_timed = true;
     run_task(0);
     CHECK(s->hdr_ready && s->eof && s->state == VIDEO_STATE_STOPPED && decoded == 3);
+    CHECK(dma_alloc_attempts == 6);
+    CHECK(dma_alloc_sizes[0] == 16384 && dma_alloc_sizes[1] == 8192 &&
+          dma_alloc_sizes[2] == 4096 && dma_alloc_sizes[3] == 2048 &&
+          dma_alloc_sizes[4] == 1024 && dma_alloc_sizes[5] == 512);
     CHECK(signal_waits >= 1 && timed_waits == 2 && actions == 1);
     service_ui(s);
     for (unsigned i = 0; i < 3; i++) CHECK(decoded_marker[i] == i + 1 && shown_marker[i] == i + 1);
-    CHECK(presented == 3); finish();
+    CHECK(presented == 3); max_dma_alloc = SIZE_MAX; finish();
 }
 static void test_header_reader_error(void)
 {
@@ -552,7 +569,8 @@ static void publish_header(vp_session_t *s, EventBits_t bits)
 {
     CHECK(bits == EV_WAKE_DECODER && !s->hdr_ready && !s->eof);
     uint8_t buf[VP_SD_BUFFER_BYTES];
-    vp_sd_stream_t f = { .fd = open(file_path, O_RDONLY), .buf = buf }; CHECK(f.fd >= 0);
+    vp_sd_stream_t f = { .fd = open(file_path, O_RDONLY), .buf = buf,
+                         .cap = VP_SD_BUFFER_BYTES }; CHECK(f.fd >= 0);
     uint8_t *index = reader_open(s, &f);
     CHECK(index && s->hdr_ready && !s->reader_err && !s->frames_buffered);
     heap_caps_free(index); CHECK(close(f.fd) == 0);
@@ -1507,7 +1525,7 @@ static void test_sd_bulk_read_ahead(void)
     char path[] = "/tmp/obd-sd-stream-XXXXXX";
     int fd = mkstemp(path); CHECK(fd >= 0); CHECK(unlink(path) == 0);
     CHECK(write(fd, expected, len) == (ssize_t)len); CHECK(lseek(fd, 0, SEEK_SET) == 0);
-    vp_sd_stream_t f = { .fd = fd, .buf = buf };
+    vp_sd_stream_t f = { .fd = fd, .buf = buf, .cap = VP_SD_BUFFER_BYTES };
     CHECK(sd_stream_read(&f, actual, 37) == 37 && !memcmp(expected, actual, 37));
     off_t physical = lseek(fd, 0, SEEK_CUR);
     CHECK(physical == VP_SD_BUFFER_BYTES);
