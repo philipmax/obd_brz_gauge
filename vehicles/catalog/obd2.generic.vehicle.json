@@ -1,7 +1,7 @@
 {
   "schema": "skygauge.vehicle/1",
   "id": "obd2.generic",
-  "rev": 3,
+  "rev": 4,
   "name": "OBD2 Generic",
   "origin": {
     "from": "legacy 4b056c0",
@@ -121,6 +121,15 @@
         "clamp": [-100, 155]
       },
       "src": [
+        {
+          "req": "0170",
+          "len": 10,
+          "multiframe": true,
+          "multiframe_mode": "elm",
+          "valid": [-99, 155],
+          "expr": "((D*256+E)/32)-100",
+          "rpn": [["A", 3], ["k", 256], "*", ["A", 4], "+", ["k", 32], "/", ["k", 100], "-"]
+        },
         {
           "req": "010B",
           "len": 1,

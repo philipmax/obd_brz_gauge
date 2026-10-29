@@ -42,7 +42,7 @@ static void test_minimal(void)
         if (!p) continue;
         VT_CHECK(vp_profile_check(p, p->total_size));
         VT_CHECK_INT(p->n_sig, 10);
-        VT_CHECK_INT(p->n_req, 10);
+        VT_CHECK_INT(p->n_req, 11);
         VT_CHECK_INT(p->gear_count, 0);
         VT_CHECK_INT(p->proto, i == 4 ? 6 : 0);
         VT_CHECK_INT(p->hdr, 0x7E0);
@@ -78,7 +78,7 @@ static void test_override_and_disable(void)
     if (!p) return;
     VT_CHECK(vp_profile_check(p, p->total_size));
     VT_CHECK_INT(p->n_sig, 9);
-    VT_CHECK_INT(p->n_req, 9);
+    VT_CHECK_INT(p->n_req, 10);
     VT_CHECK(vp_profile_find_signal(p, "obd.coolant_temp") < 0);
     VT_CHECK_INT(vp_profile_find_signal(p, "obd.oil_temp"), 0);
     s = vp_profile_signals(p);

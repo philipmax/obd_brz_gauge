@@ -171,4 +171,4 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 GNU General Public License for more details.
 ```
 
-通用配置支持 MAP 负压估算，水温／油温显示上限为 255°C；转速、车速、涡轮压力和节气门按页面需求优先采集。旧的已安装配置需重新导入才能应用显式范围修复，详见 [车型文档](docs/VEHICLES.md)。
+通用配置优先用 `0170` 读取增压压力，并以 `010B` MAP 估算回退；水温／油温显示上限为 255°C，转速、车速、涡轮压力和节气门按页面需求优先采集。旧的已安装配置需重新导入才能应用显式范围修复，详见 [车型文档](docs/VEHICLES.md)。

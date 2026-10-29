@@ -61,7 +61,7 @@ These 10 standard signals are added:
 | `obd.oil_temp` | `015C` |
 | `obd.battery_voltage` | `0142` |
 | `obd.afr` | `0144` |
-| `obd.boost` | `010B` |
+| `obd.boost` | `0170`, fallback `010B` |
 
 An explicit signal **replaces the entire default definition** for its id. Fields are
 not merged, and a standard PID is not added as an automatic failure fallback. For
@@ -463,7 +463,7 @@ for personalized templates.
 
 ## Boost and high temperature readings
 
-Builtin Generic and profiles omitting `obd.boost` now inherit `010B`, estimating relative pressure as `MAP - 100 kPa` and preserving negative values; 35 kPa corresponds to approximately -0.65 bar, rounded to -0.7 bar on the builtin 0.1 bar display. Needle and chart ranges start at -1.0 bar. The vehicle table lists explicit boost definitions; profiles without one can inherit generic MAP. The vehicle must support the PID; missing or stale data still displays `--`. The fixed 100 kPa reference is affected by altitude, weather and sensor location. Pressure after the turbo but before the throttle is not manifold vacuum, and diesel idle does not guarantee negative pressure. Accurate gauge pressure requires the vehicle's atmospheric reference or a validated proprietary PID.
+Builtin Generic and profiles omitting `obd.boost` request standard PID `0170` first. From its 10-byte multi-frame response, the profile decodes Boost Pressure Sensor A bytes D/E as `(D*256+E)/32` kPa absolute, then subtracts a fixed `100 kPa` to produce relative pressure. Invalid or unsupported `0170` falls back to `010B` and estimates `MAP - 100 kPa`. Both paths preserve negative pressure in `kPa_rel`; the builtin display rounds to 0.1 bar, with needle and chart ranges starting at -1.0 bar. The vehicle table lists explicit boost definitions. The vehicle must support one of these PIDs; missing or stale data still displays `--`. The fixed 100 kPa reference is affected by altitude and weather; accurate gauge pressure should subtract the vehicle's measured barometric pressure.
 
 Coolant and oil signal limits and builtin gauge scales now extend to 255°C; oil hysteresis and ESP-NOW v5 receive limits are extended too. Large temperature jumps still require consecutive confirmation. Standard single-byte `0105` / `015C` with `A-40` can only represent up to 215°C; 255°C requires a capable source formula and cannot be created by raising limits. Catalog profiles are updated to rev 3 with matching import templates. Firmware does not overwrite explicit old `valid` bounds or negative-pressure clamps in installed profiles; reimport the updated profile and check custom formula limits.
 

@@ -205,4 +205,4 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 GNU General Public License for more details.
 ```
 
-Generic supports MAP vacuum estimation and coolant/oil display limits up to 255°C. RPM, speed, boost and throttle receive priority polling when demanded by the page. Reimport older installed profiles to apply explicit range fixes; see [vehicle documentation](docs/VEHICLES.en.md).
+Generic reads boost pressure from `0170` first and falls back to MAP estimation via `010B`; coolant/oil display limits extend to 255°C. RPM, speed, boost and throttle receive priority polling when demanded by the page. Reimport older installed profiles to apply explicit range fixes; see [vehicle documentation](docs/VEHICLES.en.md).

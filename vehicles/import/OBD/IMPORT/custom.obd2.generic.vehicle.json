@@ -1,12 +1,12 @@
 {
   "schema": "skygauge.vehicle/1",
   "id": "custom.obd2.generic",
-  "rev": 3,
+  "rev": 4,
   "name": "OBD2 Generic cfg",
   "origin": {
     "from": "vehicles/catalog/obd2.generic.vehicle.json",
     "profile_id": "obd2.generic",
-    "profile_rev": 3,
+    "profile_rev": 4,
     "generator": "tools/vehicles/gen_import_pack.py"
   },
   "bus": {
@@ -272,6 +272,46 @@
         ]
       },
       "src": [
+        {
+          "req": "0170",
+          "len": 10,
+          "multiframe": true,
+          "multiframe_mode": "elm",
+          "valid": [
+            -99,
+            155
+          ],
+          "expr": "((D*256+E)/32)-100",
+          "rpn": [
+            [
+              "A",
+              3
+            ],
+            [
+              "k",
+              256
+            ],
+            "*",
+            [
+              "A",
+              4
+            ],
+            "+",
+            [
+              "k",
+              32
+            ],
+            "/",
+            [
+              "k",
+              100
+            ],
+            "-"
+          ],
+          "hdr": "7DF",
+          "expect": "4170",
+          "fail_after": 5
+        },
         {
           "req": "010B",
           "len": 1,
