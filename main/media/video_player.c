@@ -63,6 +63,12 @@
 
 static const char *TAG = "video_player";
 
+/* Periodic playback statistics are useful during video tuning but are noisy
+ * during normal OBD operation. Enable with -DVP_DIAG_LOG=1 when needed. */
+#ifndef VP_DIAG_LOG
+#define VP_DIAG_LOG 0
+#endif
+
 extern SemaphoreHandle_t lvgl_mux;   /* app_main.c */
 
 #define VP_LCD_W             EXAMPLE_LCD_WIDTH
@@ -933,6 +939,7 @@ static void pace_sample(vp_session_t *s, vp_pace_t *p, uint32_t proc_us,
     p->fps_n++;
     int64_t span = now - p->fps_t;
     if (span >= VP_STATS_US) {
+#if VP_DIAG_LOG
         vp_io_stats_t io;
         uint64_t ui_gap_us, ui_gap_max_us;
         uint32_t ui_intervals;
@@ -959,6 +966,7 @@ static void pace_sample(vp_session_t *s, vp_pace_t *p, uint32_t proc_us,
             ESP_LOGI(TAG, "UI frame gap avg/max %lu/%lu us (%lu intervals)",
                      (unsigned long)(ui_intervals ? ui_gap_us / ui_intervals : 0),
                      (unsigned long)ui_gap_max_us, (unsigned long)ui_intervals);
+#endif
         p->fps_n = 0;
         p->fps_t = now;
     }
