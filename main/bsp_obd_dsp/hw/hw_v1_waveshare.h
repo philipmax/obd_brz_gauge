@@ -6,7 +6,7 @@
  *   - ST77916 round panel on QSPI at 80 MHz, v2 init sequence (0xF0=0x28)
  *   - LCD reset / touch reset go through the TCA9554 IO expander (EXIO2 / EXIO1)
  *   - ADS1115 external oil-pressure ADC is populated
- *   - CST816 touch shares the main I2C bus
+ *   - CST816 touch uses its own I2C bus
  */
 
 /* ---- board identity ---- */
@@ -28,6 +28,7 @@
 #define HW_TOUCH_I2C_SCL_IO         (3)
 #define HW_TOUCH_INT_IO             (4)
 #define HW_TOUCH_RST_IO             (-1)        /* TCA9554 EXIO1 */
+#define HW_TOUCH_I2C_SHARED         0
 
 /* ---- Shared I2C bus (I2C_Driver) ---- */
 #define HW_I2C_SDA_IO               (11)

@@ -28,6 +28,7 @@
 #define HW_TOUCH_I2C_SCL_IO         (8)
 #define HW_TOUCH_INT_IO             (-1)
 #define HW_TOUCH_RST_IO             (40)        /* direct GPIO */
+#define HW_TOUCH_I2C_SHARED         1
 
 /* ---- Shared I2C bus (I2C_Driver) ---- */
 #define HW_I2C_SDA_IO               (7)
