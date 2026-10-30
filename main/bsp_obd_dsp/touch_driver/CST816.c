@@ -161,11 +161,21 @@ static esp_err_t del(esp_lcd_touch_handle_t tp)
 
 static esp_err_t reset(esp_lcd_touch_handle_t tp)
 {
-
+#if HW_TOUCH_RST_VIA_TCA9554
+    /* V1 Waveshare: touch reset is wired to the TCA9554 IO expander (EXIO1). */
     Set_EXIO(TCA9554_EXIO1,false);
     vTaskDelay(pdMS_TO_TICKS(10));
     Set_EXIO(TCA9554_EXIO1,true);
     vTaskDelay(pdMS_TO_TICKS(50));
+#else
+    /* V2/V3: no TCA9554; touch reset is a direct GPIO. */
+    if (tp->config.rst_gpio_num != GPIO_NUM_NC) {
+        gpio_set_level(tp->config.rst_gpio_num, 0);
+        vTaskDelay(pdMS_TO_TICKS(10));
+        gpio_set_level(tp->config.rst_gpio_num, 1);
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+#endif
 
     return ESP_OK;
 }
@@ -206,29 +216,15 @@ static esp_err_t i2c_write_bytes(esp_lcd_touch_handle_t tp, uint16_t reg, uint8_
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /**
- * @brief Initialize touch I2C bus using new API
+ * @brief Initialize the touch controller.
+ * V1 has a separate touch bus (GPIO3/1); V2/V3 share the board I2C bus.
  */
+#if !HW_TOUCH_I2C_SHARED
 static i2c_master_bus_handle_t s_touch_i2c_bus = NULL;
-
-static esp_err_t Touch_I2C_Init(void)
-{
-    i2c_master_bus_config_t bus_config = {
-        .clk_source = I2C_CLK_SRC_DEFAULT,
-        .i2c_port = -1,
-        .scl_io_num = I2C_Touch_SCL_IO,
-        .sda_io_num = I2C_Touch_SDA_IO,
-        .glitch_ignore_cnt = 7,
-        .flags.enable_internal_pullup = true,
-    };
-
-    return i2c_new_master_bus(&bus_config, &s_touch_i2c_bus);
-}
+#endif
 
 void Touch_Init(void)
 {
-    ESP_ERROR_CHECK(Touch_I2C_Init());
-    ESP_LOGD(TAG, "I2C initialized successfully");
-
     esp_lcd_touch_config_t tp_cfg = {
         .x_max = EXAMPLE_LCD_WIDTH,
         .y_max = EXAMPLE_LCD_HEIGHT,
@@ -241,7 +237,20 @@ void Touch_Init(void)
         },
     };
 
-    /* Initialize touch directly via I2C master bus + device */
+    i2c_master_bus_handle_t touch_bus = I2C_GetBusHandle();
+#if !HW_TOUCH_I2C_SHARED
+    const i2c_master_bus_config_t bus_config = {
+        .clk_source = I2C_CLK_SRC_DEFAULT,
+        .i2c_port = -1,
+        .scl_io_num = HW_TOUCH_I2C_SCL_IO,
+        .sda_io_num = HW_TOUCH_I2C_SDA_IO,
+        .glitch_ignore_cnt = 7,
+        .flags.enable_internal_pullup = true,
+    };
+    ESP_ERROR_CHECK(i2c_new_master_bus(&bus_config, &s_touch_i2c_bus));
+    touch_bus = s_touch_i2c_bus;
+#endif
+
     ESP_LOGD(TAG, "Initialize touch controller CST816");
-    ESP_ERROR_CHECK(esp_lcd_touch_new_i2c_cst816(s_touch_i2c_bus, &tp_cfg, &tp));
+    ESP_ERROR_CHECK(esp_lcd_touch_new_i2c_cst816(touch_bus, &tp_cfg, &tp));
 }
