@@ -1,10 +1,12 @@
 /*
- * SD card driver for ESP32-S3 (SDMMC slot 1, 1-bit mode).
- * Hardware (V1 Waveshare 1.85): CLK=GPIO14, CMD=GPIO17, D0=GPIO16,
+ * SD card driver for ESP32-S3 (SDMMC slot 1).
+ * Hardware (V1 Waveshare 1.85): 1-bit, CLK=GPIO14, CMD=GPIO17, D0=GPIO16,
  * D3 = TCA9554 EXIO3 with a 10K pull-up (high from power-on, so SD mode is
  * selected even before EXIO_Init()).
+ * Hardware (V2/V3): 4-bit, CLK=GPIO3, CMD=GPIO4, D0..D3=GPIO2/GPIO1/GPIO6/GPIO5.
  *
  * - Mount tries 40 MHz, then 20 MHz. The card is NEVER formatted.
+ * - V2/V3 start in 4-bit and fall back to 1-bit with DAT1..DAT3 parked high.
  * - No card-detect pin: while absent/error/ejected, sd_card_poll() probes the
  *   bus every few seconds; while mounted it sends CMD13 and declares the card
  *   removed after two consecutive failures.
@@ -33,11 +35,21 @@ static const char *TAG = "sd_card";
 #include "esp_memory_utils.h"
 #include "esp_vfs_fat.h"
 #include "sdmmc_cmd.h"
+#include "driver/gpio.h"
 #include "driver/sdmmc_host.h"
+#include "bsp_obd_dsp/hw/hw_board.h"
 
-#define SD_PIN_CLK          GPIO_NUM_14
-#define SD_PIN_CMD          GPIO_NUM_17
-#define SD_PIN_D0           GPIO_NUM_16
+/* SD pins come from the selected board profile (bsp_obd_dsp/hw/hw_board.h).
+ * V1 has a 1-bit TF slot; V2/V3 are wired 4-bit. */
+#define SD_PIN_CLK          HW_SD_PIN_CLK
+#define SD_PIN_CMD          HW_SD_PIN_CMD
+#define SD_PIN_D0           HW_SD_PIN_D0
+#if HW_SD_BUS_WIDTH > 1
+#define SD_PIN_D1           HW_SD_PIN_D1
+#define SD_PIN_D2           HW_SD_PIN_D2
+#define SD_PIN_D3           HW_SD_PIN_D3
+#endif
+
 
 #define SD_MAX_FILES        6
 #define SD_ALLOC_UNIT       (32 * 1024)
@@ -51,14 +63,15 @@ static const char *TAG = "sd_card";
 
 static SemaphoreHandle_t s_lock;        /* guards mount/unmount/state changes */
 static SemaphoreHandle_t s_io_mutex;    /* guards s_io_buf */
-static StaticSemaphore_t s_lock_storage;
-static StaticSemaphore_t s_io_mutex_storage;
 static uint8_t          *s_io_buf;      /* SD_IO_BUF_SIZE, DMA | INTERNAL, never freed */
 static sdmmc_card_t     *s_card;
 static volatile sd_state_t s_state = SD_STATE_ABSENT;
 static bool              s_inited;
 static uint32_t          s_freq_khz;
 static uint32_t          s_pref_khz = SD_FREQ_FAST_KHZ;
+#if HW_SD_BUS_WIDTH > 1
+static bool              s_pref_4bit = true;  /* last width that worked; retry it first */
+#endif
 static uint8_t           s_fail_cnt;    /* CMD13 failures (mounted) / probe misses (ejected) */
 static TickType_t        s_last_probe;
 
@@ -86,28 +99,64 @@ static void quiet_logs(bool quiet, esp_log_level_t saved[QUIET_N])
 static void lock(void)   { xSemaphoreTake(s_lock, portMAX_DELAY); }
 static void unlock(void) { xSemaphoreGive(s_lock); }
 
-static void slot_config(sdmmc_slot_config_t *slot)
+#if HW_SD_BUS_WIDTH > 1
+/* sdmmc_host_deinit() resets slot pins to floating. Before a 1-bit attempt,
+ * hold DAT1..DAT3 as pulled-up inputs: DAT3 must idle high or the card selects
+ * SPI mode instead of SD and stops answering on CMD. */
+static void park_data_pins_high(void)
+{
+    const gpio_config_t cfg = {
+        .pin_bit_mask = BIT64(SD_PIN_D1) | BIT64(SD_PIN_D2) | BIT64(SD_PIN_D3),
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    gpio_config(&cfg);
+}
+#endif
+
+static void slot_config(sdmmc_slot_config_t *slot, bool four_bit)
 {
     sdmmc_slot_config_t s = SDMMC_SLOT_CONFIG_DEFAULT();
-    s.width = 1;
     s.clk = SD_PIN_CLK;
     s.cmd = SD_PIN_CMD;
     s.d0  = SD_PIN_D0;
+#if HW_SD_BUS_WIDTH > 1
+    if (four_bit) {
+        s.width = 4;
+        s.d1 = SD_PIN_D1;
+        s.d2 = SD_PIN_D2;
+        s.d3 = SD_PIN_D3;
+    } else {
+        s.width = 1;
+    }
+    s.d4 = s.d5 = s.d6 = s.d7 = GPIO_NUM_NC;
+#else
+    (void)four_bit;
+    s.width = 1;
     s.d1 = s.d2 = s.d3 = s.d4 = s.d5 = s.d6 = s.d7 = GPIO_NUM_NC;
+#endif
     s.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
     *slot = s;
 }
 
-static void host_config(sdmmc_host_t *host, uint32_t khz)
+static void host_config(sdmmc_host_t *host, uint32_t khz, bool four_bit)
 {
     sdmmc_host_t h = SDMMC_HOST_DEFAULT();
+#if HW_SD_BUS_WIDTH > 1
+    h.flags = (four_bit ? SDMMC_HOST_FLAG_4BIT : SDMMC_HOST_FLAG_1BIT) |
+              SDMMC_HOST_FLAG_DEINIT_ARG;
+#else
+    (void)four_bit;
     h.flags = SDMMC_HOST_FLAG_1BIT | SDMMC_HOST_FLAG_DEINIT_ARG;
+#endif
     h.max_freq_khz = (int)khz;
     *host = h;
 }
 
-/* Mount FAT at one frequency. ESP_FAIL = card answered but no usable FAT. */
-static esp_err_t mount_at(uint32_t khz)
+/* Mount FAT at one frequency/width. ESP_FAIL = card answered but no usable FAT. */
+static esp_err_t mount_at(uint32_t khz, bool four_bit)
 {
     esp_vfs_fat_sdmmc_mount_config_t mcfg = {
         .format_if_mount_failed = false,      /* NEVER format the user's card */
@@ -116,8 +165,11 @@ static esp_err_t mount_at(uint32_t khz)
     };
     sdmmc_host_t host;
     sdmmc_slot_config_t slot;
-    host_config(&host, khz);
-    slot_config(&slot);
+    host_config(&host, khz, four_bit);
+    slot_config(&slot, four_bit);
+#if HW_SD_BUS_WIDTH > 1
+    if (!four_bit) park_data_pins_high();
+#endif
 
     sdmmc_card_t *card = NULL;
     esp_err_t err = esp_vfs_fat_sdmmc_mount(SD_MOUNT_POINT, &host, &slot, &mcfg, &card);
@@ -128,22 +180,35 @@ static esp_err_t mount_at(uint32_t khz)
     return err;
 }
 
-/* Called with s_lock held. Tries preferred freq, then 20 MHz. */
+/* Called with s_lock held. Tries preferred freq, then 20 MHz, then 1-bit. */
 static esp_err_t do_mount_locked(bool quiet)
 {
     esp_log_level_t saved[QUIET_N];
     if (quiet) quiet_logs(true, saved);
 
-    esp_err_t err = mount_at(s_pref_khz);
+    bool four_bit = false;
+#if HW_SD_BUS_WIDTH > 1
+    four_bit = s_pref_4bit;
+#endif
+    esp_err_t err = mount_at(s_pref_khz, four_bit);
     /* No card at all answers with a timeout during identification (400 kHz);
      * a lower bus clock cannot help then, so only fall back on other errors. */
     if (err != ESP_OK && err != ESP_FAIL && s_pref_khz != SD_FREQ_SLOW_KHZ &&
         !(quiet && err == ESP_ERR_TIMEOUT)) {
         if (!quiet) ESP_LOGW(TAG, "mount at %u kHz failed (%s), retrying at %u kHz",
                              (unsigned)s_pref_khz, esp_err_to_name(err), (unsigned)SD_FREQ_SLOW_KHZ);
-        err = mount_at(SD_FREQ_SLOW_KHZ);
+        err = mount_at(SD_FREQ_SLOW_KHZ, four_bit);
         if (err == ESP_OK) s_pref_khz = SD_FREQ_SLOW_KHZ;
     }
+#if HW_SD_BUS_WIDTH > 1
+    /* 4-bit can fail on miswired DAT1..DAT3 while 1-bit still works; retry with
+     * those pins parked high (see park_data_pins_high()). */
+    if (four_bit && err != ESP_OK && err != ESP_FAIL && !(quiet && err == ESP_ERR_TIMEOUT)) {
+        if (!quiet) ESP_LOGW(TAG, "4-bit mount failed (%s), retrying 1-bit", esp_err_to_name(err));
+        err = mount_at(s_pref_khz, false);
+        if (err == ESP_OK) s_pref_4bit = false;
+    }
+#endif
 
     if (quiet) quiet_logs(false, saved);
 
@@ -180,8 +245,13 @@ static bool probe_card_present_locked(void)
 {
     sdmmc_host_t host;
     sdmmc_slot_config_t slot;
-    host_config(&host, SD_FREQ_SLOW_KHZ);
-    slot_config(&slot);
+    /* Presence probing only needs CMD, so stay in 1-bit regardless of the
+     * configured width; DAT3 parked high keeps the card in SD mode. */
+    host_config(&host, SD_FREQ_SLOW_KHZ, false);
+    slot_config(&slot, false);
+#if HW_SD_BUS_WIDTH > 1
+    park_data_pins_high();
+#endif
 
     esp_log_level_t saved[QUIET_N];
     quiet_logs(true, saved);
@@ -212,10 +282,10 @@ static uint32_t ms_since(TickType_t t)
 esp_err_t sd_card_init(void)
 {
     if (!s_lock) {
-        s_lock = xSemaphoreCreateMutexStatic(&s_lock_storage);
+        s_lock = xSemaphoreCreateMutex();
+        s_io_mutex = xSemaphoreCreateMutex();
+        if (!s_lock || !s_io_mutex) return ESP_ERR_NO_MEM;
     }
-    if (!s_io_mutex) s_io_mutex = xSemaphoreCreateMutexStatic(&s_io_mutex_storage);
-    if (!s_lock || !s_io_mutex) return ESP_ERR_NO_MEM;
     if (!s_io_buf) {
         s_io_buf = heap_caps_malloc(SD_IO_BUF_SIZE, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
         if (!s_io_buf) ESP_LOGW(TAG, "no internal DMA RAM for bounce buffer; PSRAM I/O will be slow");
@@ -571,42 +641,21 @@ esp_err_t sd_card_remove(const char *path)
     return ESP_FAIL;
 }
 
-/* FAT rename cannot replace an existing destination. Keep the old file until
- * the new rename succeeds; a failed rollback leaves the backup for recovery.
- * FAT metadata updates still do not guarantee atomic power-loss recovery. */
+/* FAT rename refuses an existing destination: drop it first. The window
+ * between unlink and rename is a few ms; .part is complete by then. */
 esp_err_t sd_card_rename(const char *src, const char *dst)
 {
     if (!src || !dst) return ESP_ERR_INVALID_ARG;
     if (!sd_card_is_mounted()) return ESP_ERR_INVALID_STATE;
     struct stat st;
-    if (stat(src, &st) != 0) return ESP_FAIL;
-    if (strcmp(src, dst) == 0) return ESP_OK;
-    if (stat(dst, &st) != 0) {
-        if (errno != ENOENT || rename(src, dst) != 0) {
-            ESP_LOGW(TAG, "rename %s -> %s: errno %d", src, dst, errno);
-            return ESP_FAIL;
-        }
-        return ESP_OK;
-    }
-    if (S_ISDIR(st.st_mode)) return ESP_ERR_INVALID_ARG;
-
-    char backup[SD_PATH_MAX];
-    int n = snprintf(backup, sizeof(backup), "%s.obd-bak", dst);
-    if (n < 0 || (size_t)n >= sizeof(backup)) return ESP_ERR_INVALID_SIZE;
-    /* Never clobber an unrelated or unrecovered backup. */
-    if (stat(backup, &st) == 0) return ESP_ERR_INVALID_STATE;
-    if (errno != ENOENT || rename(dst, backup) != 0) {
-        ESP_LOGW(TAG, "backup %s: errno %d", dst, errno);
-        return ESP_FAIL;
+    if (stat(dst, &st) == 0) {
+        if (S_ISDIR(st.st_mode)) return ESP_ERR_INVALID_ARG;
+        unlink(dst);
     }
     if (rename(src, dst) != 0) {
         ESP_LOGW(TAG, "rename %s -> %s: errno %d", src, dst, errno);
-        if (rename(backup, dst) != 0) {
-            ESP_LOGE(TAG, "restore %s failed; old file retained at %s", dst, backup);
-        }
         return ESP_FAIL;
     }
-    if (unlink(backup) != 0) ESP_LOGW(TAG, "cannot remove backup %s: errno %d", backup, errno);
     return ESP_OK;
 }
 

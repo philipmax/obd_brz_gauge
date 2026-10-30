@@ -22,8 +22,9 @@
 #include "cJSON.h"
 
 /* Waveshare BSP drivers */
+#include "bsp_obd_dsp/hw/hw_board.h"               /* selects V1 / V2 / V3 pins+features */
 #include "bsp_obd_dsp/i2c_driver/I2C_Driver.h"
-#if CONFIG_OBD_HW_VERSION_V1_WAVESHARE
+#if HW_HAS_TCA9554
 #include "bsp_obd_dsp/exio/TCA9554PWR.h"
 #endif
 #include "bsp_obd_dsp/lcd_driver/ST77916.h"       // internally includes CST816.h & TCA9554PWR.h
@@ -36,7 +37,7 @@
 #include "bsp_obd_dsp/elm327_ble_client.h"
 #include "bsp_obd_dsp/espnow_link.h"
 #include "bsp_obd_dsp/racechrono_ble_diy.h"
-#if CONFIG_OBD_HW_VERSION_V1_WAVESHARE
+#if HW_HAS_ADS1115_OIL_PRESSURE
 #include "bsp_obd_dsp/ads1115_oil_pressure.h"
 #endif
 #include "app_obd_dsp/coredump_store.h"
@@ -44,6 +45,7 @@
 #include "app_obd_dsp/bootmedia_serial.h"
 #include "app_obd_dsp/lvgl_runtime.h"
 #include "app_obd_dsp/signal_store.h"
+#include "app_tasks.h"
 #include "app_obd_dsp/app_event.h"
 #include "app_obd_dsp/perf_stats.h"
 #include "vehicle/vp_manager.h"
@@ -93,6 +95,58 @@ SemaphoreHandle_t lvgl_mux = NULL; // non-static: used by BLE scan page
 #define LVGL_TICK_PERIOD_MS         2
 #define LVGL_TASK_STACK_SIZE        (8 * 1024)
 #define LVGL_TASK_PRIORITY          4   // raised (was 2): less prone to dropping frames from preemption by BLE/OBD (priority 4) during animations
+
+/* ------------------------------------------------------------------ */
+/* task policy: every firmware task's name/stack/prio/core lives here   */
+/* ------------------------------------------------------------------ */
+
+/* Priority bands:
+ *   5 - startup-critical paths (boot video workers, USB boot media);
+ *   4 - interaction + comms trunk (LVGL, OBD poll, links, ESP-NOW, RC);
+ *   3 - theme video workers and file jobs;
+ *   1-2 - background maintenance (storage, theme library, perf, OTA helpers).
+ * Core map: the OBD poll and video reader stay on core 0 with the BT stack;
+ * LVGL and the video decoder own core 1, so
+ * needle rendering cannot delay an ELM327 round trip. */
+static const app_task_policy_t s_task_policy[APP_TASK_COUNT] = {
+    [APP_TASK_LVGL]                = { "LVGL",           LVGL_TASK_STACK_SIZE, LVGL_TASK_PRIORITY,       -1 },
+    [APP_TASK_OBD_POLL_BLE]        = { "obd_poll",       5120,                 4,                        -1 },
+    [APP_TASK_VIDEO_READER_BOOT]   = { "vid_read",       4096,                 5,                        0 },
+    [APP_TASK_VIDEO_DECODER_BOOT]  = { "vid_dec",        6144,                 5,                        1 },
+    [APP_TASK_VIDEO_READER_THEME]  = { "vid_read",       4096,                 3,                        0 },
+    [APP_TASK_VIDEO_DECODER_THEME] = { "vid_dec",        6144,                 3,                        1 },
+    [APP_TASK_ESPNOW_TX]           = { "espnow_tx",      3584,                 4,                       -1 },
+    [APP_TASK_ESPNOW_PRES]         = { "espnow_pres",    2560,                 4,                       -1 },
+    [APP_TASK_RC_STREAM]           = { "rc_stream",      4096,                 4,                       -1 },
+    [APP_TASK_OIL_PRESSURE]        = { "oil_press",      3072,                 4,                       -1 },
+    [APP_TASK_THEME_BOOT]          = { "theme_boot",     6144,                 3,                       -1 },
+    [APP_TASK_SD_JOB]              = { "ui_sd_job",      8192,                 3,                       -1 },
+    [APP_TASK_THEME_LIB]           = { "theme_lib",      4096, tskIDLE_PRIORITY + 2,                       -1 },
+    [APP_TASK_STORAGE]             = { "storage",        8192, tskIDLE_PRIORITY + 1,                       -1 },
+    [APP_TASK_PERF_STATS]          = { "perf_stats",     4096, tskIDLE_PRIORITY + 1,                       -1 },
+    [APP_TASK_OTA_VALID]           = { "ota_valid",      4096, tskIDLE_PRIORITY + 1,                       -1 },
+    [APP_TASK_OTA_TIMEOUT]         = { "ota_timeout",    3072, tskIDLE_PRIORITY + 1,                       -1 },
+    [APP_TASK_BOOTMEDIA_USB]       = { "bootmedia_usb",  8192,                 5,                       -1 },
+};
+
+const app_task_policy_t *app_task_policy(app_task_id_t id)
+{
+    if ((unsigned)id >= (unsigned)APP_TASK_COUNT) return NULL;
+    const app_task_policy_t *p = &s_task_policy[id];
+    return p->name ? p : NULL;
+}
+
+TaskHandle_t app_task_start(app_task_id_t id, TaskFunction_t fn, void *arg)
+{
+    const app_task_policy_t *p = app_task_policy(id);
+    if (!p || !fn) return NULL;
+
+    TaskHandle_t h = NULL;
+    BaseType_t ok = (p->core < 0)
+        ? xTaskCreate(fn, p->name, p->stack, arg, p->prio, &h)
+        : xTaskCreatePinnedToCore(fn, p->name, p->stack, arg, p->prio, &h, p->core);
+    return ok == pdPASS ? h : NULL;
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////// LVGL callbacks /////////////////////////////////////////////////////////////////////////////////////
@@ -218,11 +272,11 @@ void app_main(void)
     ESP_LOGI(TAG, "cfg: proto=%u theme=%u vehicle=%s",
              user_cfg.protocol, user_cfg.theme_cfg.theme, vp_manager_active_id());
 
-    /* 2. Main I2C bus init (TCA9554 and optional ADS1115); touch uses its own bus. */
+    /* 2. I2C bus init (used by the TCA9554 IO expander + CST816 touch on V1, CST816 touch only on V2/V3) */
     I2C_Init();
 
     /* 3. IO expander init (TCA9554PWR, I2C address 0x20) — V1 board only; V2/V3 have no expander */
-#if CONFIG_OBD_HW_VERSION_V1_WAVESHARE
+#if HW_HAS_TCA9554
     EXIO_Init();
 #endif
 
@@ -230,7 +284,7 @@ void app_main(void)
      *    LCD_Init() internally calls, in order:
      *      Backlight_Init() → LEDC PWM off (V1: GPIO 5; V2/V3: GPIO 15)
      *      ST77916_Init() → reset (V1: TCA9554 EXIO2; V2/V3: direct GPIO 47) → QSPI SPI bus & ST77916 panel driver
-     *      Touch_Init() → CST816 on a separate I2C bus (SCL=3, SDA=1)
+     *      Touch_Init() → reuses I2C bus CST816 touch driver (V1: SCL=10 SDA=11; V2/V3: SCL=8 SDA=7)
      *    After completion panel_handle / tp are both globally valid variables
      */
     LCD_SetFlushCallback(notify_lvgl_flush_ready, &disp_drv);
@@ -240,15 +294,14 @@ void app_main(void)
     /* 5. LVGL init */
     lv_init();
 
-    /* Allocate double buffers (DMA memory). Larger buffers -> full-screen render strips halved -> higher frame rate.
-       Only affects LVGL render chunking, not the SPI single-transfer size (still chunked by max_transfer_sz), so no screen corruption.
-       Falls back automatically to the original 20 lines when internal DMA RAM is insufficient, avoiding boot-time OOM. */
+    /* Allocate double buffers (DMA memory). Fall back to the smaller band when
+       internal DMA RAM is fragmented by board-specific peripherals. */
     size_t buf_px = LCD_H_RES * 40;
     lv_color_t *buf1 = heap_caps_malloc(buf_px * sizeof(lv_color_t), MALLOC_CAP_DMA);
     lv_color_t *buf2 = heap_caps_malloc(buf_px * sizeof(lv_color_t), MALLOC_CAP_DMA);
     if (!buf1 || !buf2) {
         heap_caps_free(buf1); heap_caps_free(buf2);
-        buf_px = LVGL_BUFF_SIZE;   // fall back to 20 lines
+        buf_px = LVGL_BUFF_SIZE;
         buf1 = heap_caps_malloc(buf_px * sizeof(lv_color_t), MALLOC_CAP_DMA);
         buf2 = heap_caps_malloc(buf_px * sizeof(lv_color_t), MALLOC_CAP_DMA);
     }
@@ -286,7 +339,7 @@ void app_main(void)
     /* 6. Start LVGL task */
     lvgl_mux = xSemaphoreCreateMutex();
     assert(lvgl_mux);
-    xTaskCreate(lvgl_runtime_task, "LVGL", LVGL_TASK_STACK_SIZE, lvgl_mux, LVGL_TASK_PRIORITY, NULL);
+    app_task_start(APP_TASK_LVGL, lvgl_runtime_task, lvgl_mux);
 
     /* 6.5 Bring up the BLE stack BEFORE the UI to claim internal RAM early. Every
      *     BLE user (ELM327, RaceChrono, gauge pairing) registers through ble_hub. */
@@ -347,31 +400,24 @@ void app_main(void)
         /* Slave: start BLE GATTS for pairing immediately after ESP-NOW receive setup */
         racechrono_ble_diy_start(user_cfg.rc_enabled);
     } else {
-        /* ---- Master / standalone: both run the full BLE OBD chain; the only difference is whether ESP-NOW (=WiFi) starts ----
-           STANDALONE: does not start WiFi/ESP-NOW; existing devices (already set to master/slave) are unaffected. */
+        /* ---- Master / standalone: both run the full BLE OBD chain. ---- */
         bool espnow_on = (dev_role == ESPNOW_ROLE_MASTER);
         ESP_LOGI(TAG, "Device role: %s (BLE/OBD%s)",
                  espnow_on ? "MASTER" : "STANDALONE",
-                 espnow_on ? " + ESP-NOW broadcast" : ", no WiFi/ESP-NOW");
+                 espnow_on ? " + ESP-NOW broadcast" : ", standalone");
 
-        /* 8.1 Start BLE OBD - auto-connect only when a MAC is already bound in NVS (exact MAC match only, no fuzzy name matching);
-               legacy configs with a name but no MAC no longer auto-connect; the user must re-select on the scan page to bind the MAC.
-               MASTER starts the Bluetooth stack even without a configured OBD device, so it can broadcast the SkyGauge pairing signal. */
+        /* 8.1 Start BLE OBD - auto-connect only when a MAC is already bound in NVS
+               (exact MAC match; legacy name-only configs must reselect the adapter). */
         bool has_obd_mac = (user_cfg.ble_obd_mac[0] | user_cfg.ble_obd_mac[1] |
                             user_cfg.ble_obd_mac[2] | user_cfg.ble_obd_mac[3] |
                             user_cfg.ble_obd_mac[4] | user_cfg.ble_obd_mac[5]) != 0;
         if (has_obd_mac) {
-            ESP_LOGD(TAG, "BLE target device: %s (mac=%02x:%02x:%02x:%02x:%02x:%02x, MAC-only match)",
-                     user_cfg.ble_device_name,
-                     user_cfg.ble_obd_mac[0], user_cfg.ble_obd_mac[1], user_cfg.ble_obd_mac[2],
-                     user_cfg.ble_obd_mac[3], user_cfg.ble_obd_mac[4], user_cfg.ble_obd_mac[5]);
+            ESP_LOGD(TAG, "BLE target device: %s (MAC-bound)", user_cfg.ble_device_name);
             elm327_ble_start_default(user_cfg.ble_device_name, user_cfg.ble_obd_mac);
         } else if (user_cfg.ble_device_name[0] != '\0') {
-            ESP_LOGD(TAG, "Saved device '%s' has no bound MAC, auto-connect disabled; re-select it on BLE SCAN page to bind MAC",
-                     user_cfg.ble_device_name);
-            elm327_ble_ensure_stack_init();   // the stack must still be started for RaceChrono/the scan page
+            ESP_LOGD(TAG, "Saved BLE device has no bound MAC; select it again on the scan page");
+            elm327_ble_ensure_stack_init();
         } else if (espnow_on) {
-            ESP_LOGD(TAG, "No saved BLE device, but MASTER needs BLE stack for SkyGauge pairing broadcast");
             elm327_ble_ensure_stack_init();
         } else {
             ESP_LOGD(TAG, "No saved BLE device, waiting for user selection");
@@ -380,20 +426,19 @@ void app_main(void)
         /* 8.2 External ADS1115 oil pressure (V1 board only). Skipped when the active
                profile reads oil pressure over OBD, so the ADC never overwrites OBD data.
                The slot is marked local: valid without an OBD link, kept on link loss. */
-#if CONFIG_OBD_HW_VERSION_V1_WAVESHARE
+#if HW_HAS_ADS1115_OIL_PRESSURE
         if (!vp_manager_has_signal(SIG_OBD_OIL_PRESSURE)) {
             signal_store_set_local(SIG_OBD_OIL_PRESSURE, true);
             oil_pressure_start();
         }
 #endif
 
-        /* 8.3 Start ESP-NOW broadcast (sends this unit's OBD data cache to the slave) -- MASTER only;
-               STANDALONE skips it; WiFi is never initialized (saves RF/power and does not interfere with BLE). */
+        /* 8.3 Start ESP-NOW broadcast (sends this unit's OBD data cache to the slave) -- MASTER only. */
         if (espnow_on) {
             espnow_link_start_master();
         }
 
-        /* 8.4 Start RaceChrono BLE GATTS immediately after ESP-NOW (Master/Standalone) to claim memory before theme loads */
+        /* 8.4 Start RaceChrono BLE GATTS immediately after ESP-NOW (Master/Standalone). */
         racechrono_ble_diy_start(user_cfg.rc_enabled);
     }
 
@@ -405,8 +450,7 @@ void app_main(void)
         ESP_LOGW(TAG, "Failed to start USB boot-media receiver");
     }
 
-    BaseType_t valid_task_started = xTaskCreate(mark_app_valid_task, "ota_valid", 4096, NULL, tskIDLE_PRIORITY + 1, NULL);
-    if (valid_task_started != pdPASS) {
+    if (!app_task_start(APP_TASK_OTA_VALID, mark_app_valid_task, NULL)) {
         ESP_LOGW(TAG, "Failed to create OTA validity task");
     }
 }

@@ -29,8 +29,10 @@ menu "OBD DSP Configuration"
         default OBD_SD_SLOT_NONE
         help
             V1 (Waveshare 1.85) has a TF slot wired to SDMMC 1-bit
-            (CLK GPIO14, CMD GPIO17, D0 GPIO16). Boards without a slot
-            select NONE; every SD feature then reports "no card".
+            (CLK GPIO14, CMD GPIO17, D0 GPIO16). V2/V3 use SDMMC 4-bit
+            (CLK GPIO3, CMD GPIO4, D0..D3 GPIO2/GPIO1/GPIO6/GPIO5).
+            Boards without a slot select NONE; every SD feature then
+            reports "no card".
 
         config OBD_SD_SLOT_SDMMC_1BIT
             bool "SDMMC 1-bit"

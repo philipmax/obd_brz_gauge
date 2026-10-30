@@ -16,6 +16,7 @@
 #include "esp_log.h"
 #include "esp_check.h"
 #include "esp_lcd_touch.h"
+#include "sdkconfig.h"
 
 /**
  * @brief Create a new CST816S touch driver
@@ -36,11 +37,19 @@ esp_err_t esp_lcd_touch_new_i2c_cst816(i2c_master_bus_handle_t i2c_bus, const es
  */
 #define ESP_LCD_TOUCH_IO_I2C_CST816S_ADDRESS    (0x15)
 
-// I2C settings
-#define I2C_Touch_SDA_IO            1               /*!< GPIO number used for I2C master data  */
-#define I2C_Touch_SCL_IO            3               /*!< GPIO number used for I2C master clock */
-#define I2C_Touch_INT_IO            4               /*!< GPIO number used for I2C master data  */
-#define I2C_Touch_RST_IO            -1              /*!< GPIO number used for I2C master clock */
+// // I2C settings
+// #define I2C_Touch_SDA_IO            1               /*!< GPIO number used for I2C master data  */
+// #define I2C_Touch_SCL_IO            3               /*!< GPIO number used for I2C master clock */
+// #define I2C_Touch_INT_IO            4               /*!< GPIO number used for I2C master data  */
+// #define I2C_Touch_RST_IO            -1              /*!< GPIO number used for I2C master clock */
+// #define I2C_Touch_MASTER_FREQ_HZ    400000          /*!< I2C master clock frequency */
+
+// I2C settings (pins come from the selected board profile, bsp_obd_dsp/hw/hw_board.h)
+#include "bsp_obd_dsp/hw/hw_board.h"
+#define I2C_Touch_SDA_IO            HW_TOUCH_I2C_SDA_IO
+#define I2C_Touch_SCL_IO            HW_TOUCH_I2C_SCL_IO
+#define I2C_Touch_INT_IO            HW_TOUCH_INT_IO
+#define I2C_Touch_RST_IO            HW_TOUCH_RST_IO
 #define I2C_Touch_MASTER_FREQ_HZ    400000          /*!< I2C master clock frequency */
 
 extern esp_lcd_touch_handle_t tp;
