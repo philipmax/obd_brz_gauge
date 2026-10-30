@@ -1,6 +1,8 @@
 #include "bsp_obd_dsp/i2c_driver/I2C_Driver.h"
 #include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
+#include <assert.h>
+#include <stdbool.h>
+#include "freertos/semphr.h"
 
 static const char *I2C_TAG = "I2C";
 static i2c_master_bus_handle_t s_i2c_bus = NULL;
@@ -13,13 +15,23 @@ typedef struct {
 } i2c_dev_entry_t;
 static i2c_dev_entry_t s_dev_cache[MAX_I2C_DEVICES];
 static int s_dev_count = 0;
+static StaticSemaphore_t s_cache_lock_storage;
+static SemaphoreHandle_t s_cache_lock;
 
-static i2c_master_dev_handle_t get_device(uint8_t addr)
+/* Caller holds s_cache_lock. */
+static esp_err_t get_device(uint8_t addr, i2c_master_dev_handle_t *out)
 {
+    if (!out || addr > 0x7f) return ESP_ERR_INVALID_ARG;
+    if (!s_i2c_bus || !s_cache_lock) return ESP_ERR_INVALID_STATE;
     for (int i = 0; i < s_dev_count; i++) {
         if (s_dev_cache[i].addr == addr) {
-            return s_dev_cache[i].handle;
+            *out = s_dev_cache[i].handle;
+            return ESP_OK;
         }
+    }
+    if (s_dev_count >= MAX_I2C_DEVICES) {
+        ESP_LOGW(I2C_TAG, "I2C device cache full (%d)", MAX_I2C_DEVICES);
+        return ESP_ERR_NO_MEM;
     }
 
     i2c_device_config_t dev_cfg = {
@@ -27,20 +39,16 @@ static i2c_master_dev_handle_t get_device(uint8_t addr)
         .device_address = addr,
         .scl_speed_hz = I2C_MASTER_FREQ_HZ,
     };
-    i2c_master_dev_handle_t dev_handle;
-    ESP_ERROR_CHECK(i2c_master_bus_add_device(s_i2c_bus, &dev_cfg, &dev_handle));
+    i2c_master_dev_handle_t dev_handle = NULL;
+    esp_err_t err = i2c_master_bus_add_device(s_i2c_bus, &dev_cfg, &dev_handle);
+    if (err != ESP_OK) return err;
 
     // Only increment the count when actually stored in the cache; otherwise s_dev_count would
     // exceed the array size, the loop above would read out of bounds, and once the cache is full
     // the same address would re-add_device every time and abort at the next ESP_ERROR_CHECK.
-    if (s_dev_count < MAX_I2C_DEVICES) {
-        s_dev_cache[s_dev_count].addr = addr;
-        s_dev_cache[s_dev_count].handle = dev_handle;
-        s_dev_count++;
-    } else {
-        ESP_LOGW(I2C_TAG, "I2C device cache full (%d), addr 0x%02X not cached", MAX_I2C_DEVICES, addr);
-    }
-    return dev_handle;
+    s_dev_cache[s_dev_count++] = (i2c_dev_entry_t){ .addr = addr, .handle = dev_handle };
+    *out = dev_handle;
+    return ESP_OK;
 }
 
 /**
@@ -62,6 +70,8 @@ static esp_err_t i2c_master_init(void)
 void I2C_Init(void)
 {
     /********************* I2C *********************/
+    s_cache_lock = xSemaphoreCreateMutexStatic(&s_cache_lock_storage);
+    assert(s_cache_lock);
     ESP_ERROR_CHECK(i2c_master_init());
     ESP_LOGD(I2C_TAG, "I2C initialized successfully");
 }
@@ -73,15 +83,32 @@ i2c_master_bus_handle_t I2C_GetBusHandle(void)
 
 esp_err_t I2C_Write(uint8_t Driver_addr, uint8_t Reg_addr, const uint8_t *Reg_data, uint32_t Length)
 {
-    uint8_t buf[Length + 1];
-    buf[0] = Reg_addr;
-    memcpy(&buf[1], Reg_data, Length);
-    i2c_master_dev_handle_t dev = get_device(Driver_addr);
-    return i2c_master_transmit(dev, buf, Length + 1, (int)I2C_MASTER_TIMEOUT_MS);
+    if (Length && !Reg_data) return ESP_ERR_INVALID_ARG;
+    if (xSemaphoreTake(s_cache_lock, portMAX_DELAY) != pdTRUE) return ESP_ERR_TIMEOUT;
+    i2c_master_dev_handle_t dev = NULL;
+    esp_err_t err = get_device(Driver_addr, &dev);
+    if (err == ESP_OK) {
+        i2c_master_transmit_multi_buffer_info_t buffers[] = {
+            { .write_buffer = &Reg_addr, .buffer_size = 1 },
+            { .write_buffer = Reg_data, .buffer_size = Length },
+        };
+        err = i2c_master_multi_buffer_transmit(dev, buffers, 2,
+                                               (int)I2C_MASTER_TIMEOUT_MS);
+    }
+    xSemaphoreGive(s_cache_lock);
+    return err;
 }
 
 esp_err_t I2C_Read(uint8_t Driver_addr, uint8_t Reg_addr, uint8_t *Reg_data, uint32_t Length)
 {
-    i2c_master_dev_handle_t dev = get_device(Driver_addr);
-    return i2c_master_transmit_receive(dev, &Reg_addr, 1, Reg_data, Length, (int)I2C_MASTER_TIMEOUT_MS);
+    if (!Reg_data || !Length) return ESP_ERR_INVALID_ARG;
+    if (xSemaphoreTake(s_cache_lock, portMAX_DELAY) != pdTRUE) return ESP_ERR_TIMEOUT;
+    i2c_master_dev_handle_t dev = NULL;
+    esp_err_t err = get_device(Driver_addr, &dev);
+    if (err == ESP_OK) {
+        err = i2c_master_transmit_receive(dev, &Reg_addr, 1, Reg_data, Length,
+                                           (int)I2C_MASTER_TIMEOUT_MS);
+    }
+    xSemaphoreGive(s_cache_lock);
+    return err;
 }
