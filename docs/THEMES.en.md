@@ -410,6 +410,8 @@ visible, but later page/asset reads fail; immediate whole-UI fallback is not gua
 
 ### Theme video
 
+Master and slave roles use two 20-line LCD DMA buffers, saving 28,800 bytes of internal RAM compared with standalone mode's 40-line buffers to leave room for ESP-NOW and on-demand video tasks. Standalone mode still prefers 40-line buffers. Video task stacks remain in internal RAM; task-creation failures report the requested stack size, free internal RAM and largest contiguous block.
+
 A theme image element whose id starts with `vid_` or `video_` is treated as a
 video element: the image itself is the poster, and the key is the id with
 that prefix stripped. Lookup order is

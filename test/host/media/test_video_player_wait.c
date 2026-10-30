@@ -90,11 +90,13 @@ static void remember(void *p)
 static size_t free_psram = 8u * 1024u * 1024u;
 size_t heap_caps_get_free_size(unsigned caps)
 {
+    if (caps == (MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)) return 2048;
     CHECK(caps == (MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
     return free_psram;
 }
 size_t heap_caps_get_largest_free_block(unsigned caps)
 {
+    if (caps == (MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)) return 1024;
     CHECK(caps == (MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA));
     return max_dma_alloc;
 }

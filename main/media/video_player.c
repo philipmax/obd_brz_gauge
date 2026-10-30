@@ -933,6 +933,7 @@ static bool watermark_reached(vp_session_t *s, uint32_t frames)
 static void pace_sample(vp_session_t *s, vp_pace_t *p, uint32_t proc_us,
                         uint32_t ui_wait_us, int64_t now)
 {
+    (void)s; /* Used only when periodic diagnostics are enabled. */
     p->ema = p->samples ? (uint32_t)(((uint64_t)p->ema * 7u + proc_us) / 8u) : proc_us;
     p->ui_ema = p->samples ? (uint32_t)(((uint64_t)p->ui_ema * 7u + ui_wait_us) / 8u) : ui_wait_us;
     p->samples++;
@@ -1320,7 +1321,10 @@ static bool spawn(vp_session_t *s, TaskFunction_t fn, const char *name, uint32_t
     session_ref(s);
     if (xTaskCreatePinnedToCore(fn, name, stack, s, prio, NULL, core) == pdPASS) return true;
     session_unref(s);
-    ESP_LOGE(TAG, "cannot create %s", name);
+    const uint32_t caps = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
+    ESP_LOGE(TAG, "cannot create %s (stack=%lu, internal free=%lu largest=%lu)", name,
+             (unsigned long)stack, (unsigned long)heap_caps_get_free_size(caps),
+             (unsigned long)heap_caps_get_largest_free_block(caps));
     return false;
 }
 
